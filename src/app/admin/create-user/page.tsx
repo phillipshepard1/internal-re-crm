@@ -3,8 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { UserPlus, ArrowLeft, Eye, EyeOff } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
-import { createUser } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,7 +15,7 @@ import Link from 'next/link'
 
 export default function CreateUserPage() {
   const router = useRouter()
-  const { user, userRole } = useAuth()
+  const { userRole } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -93,9 +91,9 @@ export default function CreateUserPage() {
       // Auto-hide success message after 5 seconds
       setTimeout(() => setSuccess(''), 5000)
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating user:', err)
-      setError(err.message || 'Failed to create user')
+      setError(err instanceof Error ? err.message : 'Failed to create user')
     } finally {
       setLoading(false)
     }

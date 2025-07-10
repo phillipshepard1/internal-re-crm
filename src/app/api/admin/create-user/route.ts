@@ -1,101 +1,155 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Use service role key for admin operations
-const supabaseAdmin = createClient(
+// Initialize Supabase client with service role key for admin operations
+const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Use service role key for admin operations
 )
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email, password, role, inRoundRobin, firstName, lastName } = body
 
-    // Validate input
+    // Validate required fields
     if (!email || !password) {
-      return NextResponse.json({ 
-        error: 'Email and password are required' 
-      }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Email and password are required' },
+        { status: 400 }
+      )
     }
 
-    // Step 1: Create user in Supabase Auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      )
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return NextResponse.json(
+        { error: 'Password must be at least 6 characters long' },
+        { status: 400 }
+      )
+    }
+
+    // Validate role
+    if (!['agent', 'admin'].includes(role)) {
+      return NextResponse.json(
+        { error: 'Invalid role. Must be "agent" or "admin"' },
+        { status: 400 }
+      )
+    }
+
+    // Check if user already exists
+    const { data: existingUser } = await supabase.auth.admin.listUsers()
+    const userExists = existingUser.users?.some(user => user.email === email)
+    if (userExists) {
+      return NextResponse.json(
+        { error: 'User with this email already exists' },
+        { status: 409 }
+      )
+    }
+
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true, // Auto-confirm email
       user_metadata: {
-        first_name: firstName,
-        last_name: lastName
+        firstName: firstName || '',
+        lastName: lastName || '',
+        role: role
       }
     })
 
     if (authError) {
-      console.error('Auth error:', authError)
-      return NextResponse.json({ 
-        error: `Auth error: ${authError.message}` 
-      }, { status: 400 })
+      console.error('Auth creation error:', authError)
+      return NextResponse.json(
+        { error: 'Failed to create user account' },
+        { status: 500 }
+      )
     }
 
     if (!authData.user) {
-      return NextResponse.json({ 
-        error: 'Failed to create user in auth' 
-      }, { status: 500 })
+      return NextResponse.json(
+        { error: 'Failed to create user account' },
+        { status: 500 }
+      )
     }
 
-    // Step 2: Create user record in our users table
-    const { data: userRecord, error: userError } = await supabaseAdmin
+    // Insert user record into users table
+    const { error: userError } = await supabase
       .from('users')
-      .insert([{
+      .insert({
         id: authData.user.id,
         email: email,
-        role: role || 'agent',
-        in_round_robin: inRoundRobin || false
-      }])
-      .select()
-      .single()
+        role: role,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        created_at: new Date().toISOString()
+      })
 
     if (userError) {
-      console.error('User record error:', userError)
-      // Try to clean up the auth user if user record creation fails
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
-      return NextResponse.json({ 
-        error: `User record error: ${userError.message}` 
-      }, { status: 500 })
+      console.error('User table insert error:', userError)
+      // Try to clean up the auth user if table insert fails
+      await supabase.auth.admin.deleteUser(authData.user.id)
+      return NextResponse.json(
+        { error: 'Failed to create user profile' },
+        { status: 500 }
+      )
     }
 
-    // Step 3: Add to Round Robin if enabled
-    if (inRoundRobin) {
-      const { error: roundRobinError } = await supabaseAdmin
-        .from('round_robin_config')
-        .insert([{ 
-          user_id: authData.user.id, 
-          is_active: true, 
-          priority: 0 
-        }])
+    // Add to Round Robin if requested
+    if (inRoundRobin && role === 'agent') {
+      try {
+        // Get current max priority
+        const { data: maxPriorityResult } = await supabase
+          .from('round_robin_config')
+          .select('priority')
+          .order('priority', { ascending: false })
+          .limit(1)
 
-      if (roundRobinError) {
-        console.error('Round Robin error:', roundRobinError)
-        // Don't fail the whole operation for Round Robin errors
+        const nextPriority = maxPriorityResult && maxPriorityResult.length > 0 
+          ? maxPriorityResult[0].priority + 1 
+          : 1
+
+        const { error: roundRobinError } = await supabase
+          .from('round_robin_config')
+          .insert({
+            user_id: authData.user.id,
+            is_active: true,
+            priority: nextPriority,
+            created_at: new Date().toISOString()
+          })
+
+        if (roundRobinError) {
+          console.error('Round Robin insert error:', roundRobinError)
+          // Don't fail the whole operation if Round Robin fails
+        }
+      } catch (err: unknown) {
+        console.error('Round Robin setup error:', err)
+        // Don't fail the whole operation if Round Robin fails
       }
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      user: {
-        id: authData.user.id,
-        email: email,
-        role: role || 'agent',
-        in_round_robin: inRoundRobin || false
-      },
+      userId: authData.user.id,
+      email: email,
+      role: role,
       message: 'User created successfully'
     })
 
-  } catch (error: any) {
-    console.error('Error creating user:', error)
-    return NextResponse.json({ 
-      error: 'Failed to create user',
-      details: error.message 
-    }, { status: 500 })
+  } catch (err: unknown) {
+    console.error('Create user error:', err)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 } 

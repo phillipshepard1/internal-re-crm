@@ -1,195 +1,189 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
-export default function TestDBPage() {
-  const [status, setStatus] = useState('')
-  const [error, setError] = useState('')
-  const [users, setUsers] = useState<any[]>([])
-  const [roundRobinUsers, setRoundRobinUsers] = useState<any[]>([])
+export default function TestDbPage() {
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<string>('')
+  const [error, setError] = useState<string>('')
 
-  const testConnection = async () => {
+  const testDatabaseConnection = async () => {
     try {
-      setStatus('Testing connection...')
+      setLoading(true)
       setError('')
-      
-      // Test basic connection
-      const { data, error: connError } = await supabase
-        .from('round_robin_config')
-        .select('count')
-        .limit(1)
-      
-      if (connError) {
-        setError(`Connection error: ${connError.message}`)
-        setStatus('Failed')
-        return
-      }
-      
-      setStatus('Connection successful!')
-      
-      // Test table structure
-      const { data: tableData, error: tableError } = await supabase
-        .from('round_robin_config')
-        .select('*')
-        .limit(5)
-      
-      if (tableError) {
-        setError(`Table error: ${tableError.message}`)
+      setResult('')
+
+      const response = await fetch('/api/setup-db', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setResult(JSON.stringify(data, null, 2))
       } else {
-        setStatus(`Connection successful! Found ${tableData?.length || 0} records in round_robin_config`)
-        setRoundRobinUsers(tableData || [])
+        setError(data.error || 'Database test failed')
       }
-      
-    } catch (err: any) {
-      setError(`Unexpected error: ${err.message}`)
-      setStatus('Failed')
+    } catch (err: unknown) {
+      console.error('Database test error:', err)
+      setError(err instanceof Error ? err.message : 'Database test failed')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const loadUsers = async () => {
+  const testMigration = async () => {
     try {
-      setStatus('Loading users...')
-      
-      // Try to get current user first
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      
-      if (userError) {
-        setError(`Error getting current user: ${userError.message}`)
-        return
+      setLoading(true)
+      setError('')
+      setResult('')
+
+      const response = await fetch('/api/run-migration', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          migrationName: 'add-followup-fields'
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setResult(JSON.stringify(data, null, 2))
+      } else {
+        setError(data.error || 'Migration test failed')
       }
-      
-      if (!user) {
-        setError('No authenticated user found')
-        return
-      }
-      
-      // For now, let's just show the current user and allow manual entry
-      setUsers([user])
-      setStatus(`Found current user: ${user.email}`)
-      
-    } catch (err: any) {
-      setError(`Error loading users: ${err.message}`)
+    } catch (err: unknown) {
+      console.error('Migration test error:', err)
+      setError(err instanceof Error ? err.message : 'Migration test failed')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const addUserToRoundRobin = async (userId: string) => {
+  const testRoundRobin = async () => {
     try {
-      const { error } = await supabase
-        .from('round_robin_config')
-        .insert([{ user_id: userId, is_active: true, priority: 0 }])
-      
-      if (error) {
-        setError(`Error adding user: ${error.message}`)
-        return
-      }
-      
-      setStatus('User added to Round Robin successfully!')
-      testConnection() // Refresh the list
-    } catch (err: any) {
-      setError(`Error adding user: ${err.message}`)
-    }
-  }
+      setLoading(true)
+      setError('')
+      setResult('')
 
-  const addManualUser = async () => {
-    const userId = prompt('Enter user ID to add to Round Robin:')
-    if (userId && userId.trim()) {
-      await addUserToRoundRobin(userId.trim())
+      const response = await fetch('/api/run-migration', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          migrationName: 'create-round-robin-table'
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setResult(JSON.stringify(data, null, 2))
+      } else {
+        setError(data.error || 'Round Robin setup failed')
+      }
+    } catch (err: unknown) {
+      console.error('Round Robin test error:', err)
+      setError(err instanceof Error ? err.message : 'Round Robin setup failed')
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Database Connection Test</h1>
-      
-      <div className="space-y-4 mb-6">
-        <Button onClick={testConnection} className="mr-4">
-          Test Database Connection
-        </Button>
-        
-        <Button onClick={loadUsers} variant="outline" className="mr-4">
-          Load Current User
-        </Button>
-        
-        <Button onClick={addManualUser} variant="outline">
-          Add User Manually
-        </Button>
+    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Database Test</h2>
       </div>
-      
-      {status && (
-        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
-          <strong>Status:</strong> {status}
-        </div>
-      )}
-      
+
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded text-red-600">
-          <strong>Error:</strong> {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
-      
-      {users.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-2">Available Users</h2>
-          <div className="space-y-2">
-            {users.map((user) => (
-              <div key={user.id} className="flex items-center justify-between p-3 border rounded">
-                <div>
-                  <strong>{user.email}</strong>
-                  <div className="text-sm text-gray-600">ID: {user.id}</div>
-                </div>
-                <Button 
-                  onClick={() => addUserToRoundRobin(user.id)}
-                  size="sm"
-                >
-                  Add to Round Robin
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {roundRobinUsers.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-2">Round Robin Users</h2>
-          <div className="space-y-2">
-            {roundRobinUsers.map((config) => (
-              <div key={config.id} className="p-3 border rounded">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <strong>User ID:</strong> {config.user_id}
-                    <div className="text-sm text-gray-600">
-                      Active: {config.is_active ? 'Yes' : 'No'} | Priority: {config.priority}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      <div className="mt-8">
-        <h2 className="text-xl font-semibold mb-2">Instructions:</h2>
-        <ol className="list-decimal list-inside space-y-2">
-          <li>Test the database connection first</li>
-          <li>Load your current user or add users manually</li>
-          <li>Add users to the Round Robin configuration</li>
-          <li>Test lead ingestion in the admin panel</li>
-        </ol>
-        
-        <h3 className="text-lg font-semibold mt-4 mb-2">To add other users:</h3>
-        <p className="text-sm text-gray-600">
-          Since we can't list all users due to permissions, you can:
-        </p>
-        <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-          <li>Use "Add User Manually" and enter the user ID</li>
-          <li>Get user IDs from your Supabase dashboard</li>
-          <li>Or create a simple admin function to list users</li>
-        </ul>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>Test Database Connection</CardTitle>
+            <CardDescription>
+              Test if the database connection is working
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={testDatabaseConnection} disabled={loading}>
+              {loading ? 'Testing...' : 'Test Connection'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Test Migration</CardTitle>
+            <CardDescription>
+              Test database migration functionality
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={testMigration} disabled={loading}>
+              {loading ? 'Testing...' : 'Test Migration'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Setup Round Robin</CardTitle>
+            <CardDescription>
+              Create Round Robin table for lead distribution
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={testRoundRobin} disabled={loading}>
+              {loading ? 'Setting up...' : 'Setup Round Robin'}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      {result && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Test Results</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="bg-muted p-4 rounded-md overflow-auto text-sm">
+              {result}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Database Information</CardTitle>
+          <CardDescription>
+            Current database status and configuration
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2 text-sm">
+            <p><strong>Database URL:</strong> {process.env.NEXT_PUBLIC_SUPABASE_URL || 'Not configured'}</p>
+            <p><strong>Service Role Key:</strong> {process.env.SUPABASE_SERVICE_ROLE_KEY ? 'Configured' : 'Not configured'}</p>
+            <p><strong>Environment:</strong> {process.env.NODE_ENV}</p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 } 

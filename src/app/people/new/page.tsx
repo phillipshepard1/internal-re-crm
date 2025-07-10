@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Upload, Calendar, User, MapPin, Phone, Mail, MessageSquare } from 'lucide-react'
+import { ArrowLeft, Plus, User, MapPin, Phone, MessageSquare } from 'lucide-react'
 import { createPerson } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

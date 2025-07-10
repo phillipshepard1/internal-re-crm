@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus } from 'lucide-react'
-import { getPeople, getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus } from '@/lib/database'
+import { getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,33 +16,15 @@ import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
 export default function AdminPage() {
-  const { user, userRole } = useAuth()
-  const [people, setPeople] = useState<any[]>([])
+  const { userRole } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [roundRobinConfig, setRoundRobinConfig] = useState<RoundRobinConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    if (userRole !== 'admin') {
-      setError('Access denied. Admin privileges required.')
-      setLoading(false)
-      return
-    }
-    loadData()
-  }, [user, userRole])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      
-      // Load people data
-      let peopleData = []
-      try {
-        peopleData = await getPeople(user?.id, userRole || undefined)
-      } catch (err) {
-        console.error('Error loading people:', err)
-      }
       
       // Load users data
       let usersData = []
@@ -62,7 +44,6 @@ export default function AdminPage() {
         setError('Round Robin configuration is not available. The database table may need to be set up.')
       }
       
-      setPeople(peopleData)
       setUsers(usersData)
       setRoundRobinConfig(roundRobinData)
     } catch (err) {
@@ -71,7 +52,16 @@ export default function AdminPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (userRole !== 'admin') {
+      setError('Access denied. Admin privileges required.')
+      setLoading(false)
+      return
+    }
+    loadData()
+  }, [userRole, loadData])
 
   const handleAddToRoundRobin = async (userId: string) => {
     try {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Calendar, Edit } from 'lucide-react'
 import { getTasks, createTask, updateTask } from '@/lib/database'
 import type { Task } from '@/lib/supabase'
@@ -35,11 +35,7 @@ export default function TasksPage() {
   const [taskStatus, setTaskStatus] = useState('pending')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadTasks()
-  }, [user, userRole])
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     try {
       setLoading(true)
       const data = await getTasks(undefined, user?.id, userRole || undefined)
@@ -50,7 +46,11 @@ export default function TasksPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, userRole])
+
+  useEffect(() => {
+    loadTasks()
+  }, [loadTasks])
 
   const handleCreateTask = () => {
     setEditingTask(null)

@@ -1,4 +1,3 @@
-import { supabase } from './supabase'
 import { createPerson } from './database'
 import type { Person } from './supabase'
 
@@ -18,27 +17,29 @@ export class EmailLeadProcessor {
   /**
    * Process incoming email and extract lead information
    */
-  static async processEmail(emailData: any): Promise<EmailLead | null> {
+  static async processEmail(emailData: Record<string, unknown>): Promise<EmailLead | null> {
     try {
-      const { subject, body, from, to } = emailData
-      
+      const subject = emailData.subject as string
+      const body = emailData.body as string
       // Try to identify the source based on email patterns
-      const source = this.identifySource(subject, from, body)
-      
+      const source = this.identifySource(subject, emailData.from as string, body)
       // Extract lead data based on source
-      const leadData = await this.extractLeadData(source, subject, body, from)
-      
+      const leadData = await this.extractLeadData(source, subject, body)
       if (!leadData) {
         console.log('No lead data found in email:', subject)
         return null
       }
-      
       return {
-        ...leadData,
+        firstName: leadData.firstName || '',
+        lastName: leadData.lastName || '',
+        email: leadData.email || [],
+        phone: leadData.phone || [],
+        message: leadData.message,
+        listingAddress: leadData.listingAddress,
+        propertyDetails: leadData.propertyDetails,
         source,
         timestamp: new Date()
       }
-      
     } catch (error) {
       console.error('Error processing email:', error)
       return null
@@ -85,8 +86,7 @@ export class EmailLeadProcessor {
   private static async extractLeadData(
     source: EmailLead['source'], 
     subject: string, 
-    body: string, 
-    from: string
+    body: string
   ): Promise<Partial<EmailLead> | null> {
     
     switch (source) {

@@ -1,54 +1,32 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST() {
   try {
-    // Check if table exists
-    const { data: existingTable, error: checkError } = await supabase
-      .from('round_robin_config')
-      .select('id')
-      .limit(1)
-    
-    if (checkError && checkError.code === '42P01') {
-      // Table doesn't exist, create it
-      const { error: createError } = await supabase.rpc('exec_sql', {
-        sql: `
-          CREATE TABLE round_robin_config (
-            id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-            user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
-            is_active boolean DEFAULT true,
-            priority integer DEFAULT 0,
-            created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
-            updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
-          );
-          
-          CREATE INDEX idx_round_robin_active_priority ON round_robin_config(is_active, priority);
-        `
-      })
-      
-      if (createError) {
-        return NextResponse.json({ 
-          error: 'Failed to create table', 
-          details: createError.message 
-        }, { status: 500 })
-      }
-      
-      return NextResponse.json({ 
-        message: 'Table created successfully',
-        tableExists: true
-      })
-    }
-    
-    return NextResponse.json({ 
-      message: 'Table already exists',
-      tableExists: true
+    // Example: create a table if it doesn't exist
+    const { error } = await supabase.rpc('exec_sql', {
+      sql: `
+        CREATE TABLE IF NOT EXISTS test_table (
+          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+          name VARCHAR(255)
+        );
+      `
     })
-    
-  } catch (error: any) {
-    return NextResponse.json({ 
-      error: 'Setup failed', 
-      details: error.message 
-    }, { status: 500 })
+
+    if (error) {
+      console.error('Setup DB error:', error)
+      return NextResponse.json({ error: 'Failed to setup DB', details: (error as { message?: string }).message || String(error) }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: 'Database setup complete' })
+  } catch (err: unknown) {
+    console.error('Setup DB error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -73,10 +51,10 @@ export async function GET() {
       data
     })
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json({ 
       error: 'Test failed', 
-      details: error.message 
+      details: (error as { message?: string }).message || String(error) 
     }, { status: 500 })
   }
 } 

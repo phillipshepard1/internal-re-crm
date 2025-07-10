@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Mail, Home, RefreshCw, Play, Square, Settings, AlertCircle } from 'lucide-react'
+import { Mail, Home, RefreshCw, Settings, AlertCircle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,8 +54,8 @@ export default function IntegrationsPage() {
       if (savedHomeStack) {
         setHomeStackConfig(JSON.parse(savedHomeStack))
       }
-    } catch (error) {
-      console.error('Error loading configurations:', error)
+    } catch {
+      console.error('Error loading configurations:')
     }
   }
 
@@ -69,7 +69,7 @@ export default function IntegrationsPage() {
       
       setSuccess('Gmail configuration saved successfully')
       setTimeout(() => setSuccess(''), 3000)
-    } catch (error) {
+    } catch {
       setError('Failed to save Gmail configuration')
     } finally {
       setProcessing(false)
@@ -86,7 +86,7 @@ export default function IntegrationsPage() {
       
       setSuccess('HomeStack configuration saved successfully')
       setTimeout(() => setSuccess(''), 3000)
-    } catch (error) {
+    } catch {
       setError('Failed to save HomeStack configuration')
     } finally {
       setProcessing(false)
@@ -116,7 +116,7 @@ export default function IntegrationsPage() {
       } else {
         setError(result.error || 'Failed to process Gmail leads')
       }
-    } catch (error) {
+    } catch {
       setError('Failed to process Gmail leads')
     } finally {
       setProcessing(false)
@@ -146,7 +146,7 @@ export default function IntegrationsPage() {
       } else {
         setError(result.error || 'Failed to process HomeStack leads')
       }
-    } catch (error) {
+    } catch {
       setError('Failed to process HomeStack leads')
     } finally {
       setProcessing(false)

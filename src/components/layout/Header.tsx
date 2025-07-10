@@ -19,7 +19,7 @@ interface HeaderProps {
 }
 
 export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
-  const { user, signOut, userRole } = useAuth()
+  const { signOut, userRole } = useAuth()
 
   const handleLogout = async () => {
     try {

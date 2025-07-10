@@ -254,7 +254,7 @@ export async function getUsers() {
   return data || []
 }
 
-export async function createUser(userData: any) {
+export async function createUser(userData: Record<string, unknown>) {
   const { data, error } = await supabase
     .from('users')
     .insert([userData])
@@ -265,7 +265,7 @@ export async function createUser(userData: any) {
   return data
 }
 
-export async function updateUser(id: string, updates: any) {
+export async function updateUser(id: string, updates: Record<string, unknown>) {
   const { data, error } = await supabase
     .from('users')
     .update(updates)
@@ -289,7 +289,7 @@ export async function getProperties(personId: string) {
   return data || []
 }
 
-export async function createProperty(propertyData: any) {
+export async function createProperty(propertyData: Record<string, unknown>) {
   const { data, error } = await supabase
     .from('properties')
     .insert([propertyData])
@@ -371,4 +371,106 @@ export async function assignLeadToUser(leadData: Partial<Person>, userId: string
   
   if (error) throw error
   return data
+} 
+
+// Test lead creation for admin testing
+export async function createTestLead(leadData: {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  source: string
+  notes: string
+}) {
+  try {
+    // Get next user in Round Robin
+    const assignedUserId = await getNextRoundRobinUser()
+    
+    const personData: Partial<Person> = {
+      first_name: leadData.firstName,
+      last_name: leadData.lastName,
+      email: [leadData.email],
+      phone: [leadData.phone],
+      client_type: 'lead',
+      lead_source: leadData.source,
+      assigned_to: assignedUserId,
+      notes: leadData.notes,
+      // Set default values
+      profile_picture: null,
+      birthday: null,
+      mailing_address: null,
+      relationship_id: null,
+      last_interaction: new Date().toISOString(),
+      next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
+      best_to_reach_by: null,
+      lists: [],
+      company: undefined,
+      position: undefined,
+      address: undefined,
+      city: undefined,
+      state: undefined,
+      zip_code: undefined,
+      country: undefined,
+      looking_for: undefined,
+      selling: undefined,
+      closed: undefined,
+    }
+    
+    const newPerson = await createPerson(personData)
+    
+    // Create an activity log entry
+    await createActivity({
+      person_id: newPerson.id,
+      type: 'created',
+      description: `Test lead created from admin panel`,
+      created_by: assignedUserId || '00000000-0000-0000-0000-000000000000',
+    })
+    
+    return {
+      success: true,
+      leadId: newPerson.id,
+      assignedTo: assignedUserId
+    }
+    
+  } catch (error) {
+    console.error('Error creating test lead:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create test lead'
+    }
+  }
+}
+
+// Dashboard statistics
+export async function getDashboardStats(): Promise<{
+  totalPeople: number
+  totalLeads: number
+  totalFollowUps: number
+  totalTasks: number
+}> {
+  try {
+    // Get counts for different entities
+    const [people, followUps, tasks] = await Promise.all([
+      getPeople(),
+      getFollowUps(),
+      getTasks()
+    ])
+    
+    const totalLeads = people.filter(p => p.client_type === 'lead').length
+    
+    return {
+      totalPeople: people.length,
+      totalLeads,
+      totalFollowUps: followUps.length,
+      totalTasks: tasks.length
+    }
+  } catch (error) {
+    console.error('Error getting dashboard stats:', error)
+    return {
+      totalPeople: 0,
+      totalLeads: 0,
+      totalFollowUps: 0,
+      totalTasks: 0
+    }
+  }
 } 

@@ -7,9 +7,21 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
+interface LeadResult {
+  success: boolean
+  message: string
+  assignedLeads?: Array<{
+    name: string
+    email: string
+    phone: string
+    source: string
+  }>
+  failedCount?: number
+}
+
 export default function TestLeadPage() {
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<LeadResult | null>(null)
   const [error, setError] = useState('')
   
   const [leadData, setLeadData] = useState({
@@ -27,13 +39,21 @@ export default function TestLeadPage() {
       setError('')
       setResult(null)
 
-      const response = await fetch('/api/leads/ingest', {
+      const response = await fetch('/api/leads', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': 'test-api-key-123' // Using the test API key
+          'x-api-key': 'test-api-key-123' // Using the test API key
         },
-        body: JSON.stringify(leadData)
+        body: JSON.stringify({
+          first_name: leadData.name.split(' ')[0],
+          last_name: leadData.name.split(' ').slice(1).join(' ') || 'Unknown',
+          email: [leadData.email],
+          phone: [leadData.phone],
+          company: leadData.company,
+          client_type: 'lead',
+          lead_source: leadData.source
+        })
       })
 
       const data = await response.json()
@@ -42,9 +62,10 @@ export default function TestLeadPage() {
         throw new Error(data.error || 'Failed to ingest lead')
       }
 
-      setResult(data)
-    } catch (err: any) {
-      setError(err.message)
+      setResult(data as LeadResult)
+    } catch (err: unknown) {
+      console.error('Error creating test lead:', err)
+      setError(err instanceof Error ? err.message : 'Failed to create test lead')
     } finally {
       setLoading(false)
     }
@@ -148,7 +169,7 @@ export default function TestLeadPage() {
           </CardHeader>
           <CardContent>
             <pre className="bg-gray-100 p-4 rounded text-sm overflow-auto">
-              {JSON.stringify(result, null, 2)}
+              {JSON.stringify(result, null, 2) as string}
             </pre>
           </CardContent>
         </Card>

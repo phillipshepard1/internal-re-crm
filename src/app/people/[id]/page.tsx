@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload } from 'lucide-react'
 import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask } from '@/lib/database'
@@ -60,44 +60,23 @@ export default function PersonDetailPage() {
     notes: '',
   })
 
-  useEffect(() => {
-    if (params.id) {
-      loadPerson(params.id as string)
-    }
-  }, [params.id])
-
-  // UUID validation function
-  const isValidUUID = (uuid: string) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    return uuidRegex.test(uuid)
-  }
-
-  const loadPerson = async (id: string) => {
-    if (!isValidUUID(id)) {
-      setError('Invalid person ID')
-      setLoading(false)
-      return
-    }
+  const loadPerson = useCallback(async () => {
+    if (!params.id) return
 
     try {
       setLoading(true)
-      const personData = await getPersonById(id, user?.id, userRole || undefined)
-      setPerson(personData)
+      const personId = params.id as string
+      const [personData, notesData, tasksData] = await Promise.all([
+        getPersonById(personId, user?.id, userRole || undefined),
+        getNotes(personId),
+        getTasks(personId, user?.id, userRole || undefined),
+      ])
       
-      // Load notes and tasks for this person
-      try {
-        const notesData = await getNotes(id)
-        setNotes(notesData)
-      } catch (err) {
-        console.error('Error loading notes:', err)
-      }
-
-      try {
-        const tasksData = await getTasks(id, user?.id, userRole || undefined)
-        setTasks(tasksData)
-      } catch (err) {
-        console.error('Error loading tasks:', err)
-      }
+      setPerson(personData)
+      setNotes(notesData)
+      setTasks(tasksData)
+      // setFollowUps(followUpsData.filter(f => f.person_id === personId)) // This line was removed from original, so it's removed here.
+      // setActivities(activitiesData) // This line was removed from original, so it's removed here.
 
       // Initialize form data
       setFormData({
@@ -121,7 +100,11 @@ export default function PersonDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id, user?.id, userRole])
+
+  useEffect(() => {
+    loadPerson()
+  }, [loadPerson])
 
   const handleSave = async () => {
     if (!person || !formData.first_name.trim()) return

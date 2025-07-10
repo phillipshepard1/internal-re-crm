@@ -43,40 +43,64 @@ export async function fetchNewLeads(config: LeadSourceConfig): Promise<LeadData[
  * @param apiResponse The raw API response
  * @returns Transformed lead data
  */
-function transformApiResponse(apiResponse: any): LeadData[] {
+function transformApiResponse(apiResponse: unknown): LeadData[] {
   // This function needs to be customized based on the actual API response structure
   // For now, providing a generic example
   
   if (Array.isArray(apiResponse)) {
-    return apiResponse.map(item => ({
-      first_name: item.first_name || item.firstName || item.name?.split(' ')[0] || '',
-      last_name: item.last_name || item.lastName || item.name?.split(' ').slice(1).join(' ') || 'Unknown',
-      email: item.email ? [item.email] : [],
-      phone: item.phone ? [item.phone] : [],
-      company: item.company || item.organization || '',
-      position: item.job_title || item.title || '',
-      client_type: 'lead',
-      lead_source: item.source || 'API',
-      // Add other fields as needed based on the actual API
-    }))
+    return (apiResponse as unknown[]).map(item => {
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>
+        return {
+          first_name: (obj.first_name as string) || (obj.firstName as string) || (typeof obj.name === 'string' ? obj.name.split(' ')[0] : '') || '',
+          last_name: (obj.last_name as string) || (obj.lastName as string) || (typeof obj.name === 'string' ? obj.name.split(' ').slice(1).join(' ') : '') || 'Unknown',
+          email: obj.email ? [obj.email as string] : [],
+          phone: obj.phone ? [obj.phone as string] : [],
+          company: (obj.company as string) || (obj.organization as string) || '',
+          position: (obj.job_title as string) || (obj.title as string) || '',
+          client_type: 'lead',
+          lead_source: (obj.source as string) || 'API',
+        }
+      }
+      return {
+        first_name: '',
+        last_name: 'Unknown',
+        email: [],
+        phone: [],
+        company: '',
+        position: '',
+        client_type: 'lead',
+        lead_source: 'API',
+      }
+    })
   }
 
-  // If response is a single object
-  if (apiResponse.data && Array.isArray(apiResponse.data)) {
-    return transformApiResponse(apiResponse.data)
+  // If response is a single object with a data array
+  if (
+    typeof apiResponse === 'object' &&
+    apiResponse !== null &&
+    'data' in apiResponse &&
+    Array.isArray((apiResponse as Record<string, unknown>).data)
+  ) {
+    return transformApiResponse((apiResponse as Record<string, unknown>).data)
   }
 
   // If response is a single lead
-  if (apiResponse.first_name || apiResponse.firstName) {
+  if (
+    typeof apiResponse === 'object' &&
+    apiResponse !== null &&
+    ('first_name' in apiResponse || 'firstName' in apiResponse)
+  ) {
+    const obj = apiResponse as Record<string, unknown>
     return [{
-      first_name: apiResponse.first_name || apiResponse.firstName || '',
-      last_name: apiResponse.last_name || apiResponse.lastName || 'Unknown',
-      email: apiResponse.email ? [apiResponse.email] : [],
-      phone: apiResponse.phone ? [apiResponse.phone] : [],
-      company: apiResponse.company || '',
-      position: apiResponse.job_title || '',
+      first_name: (obj.first_name as string) || (obj.firstName as string) || '',
+      last_name: (obj.last_name as string) || (obj.lastName as string) || 'Unknown',
+      email: obj.email ? [obj.email as string] : [],
+      phone: obj.phone ? [obj.phone as string] : [],
+      company: (obj.company as string) || '',
+      position: (obj.job_title as string) || '',
       client_type: 'lead',
-      lead_source: apiResponse.source || 'API',
+      lead_source: (obj.source as string) || 'API',
     }]
   }
 
@@ -126,18 +150,20 @@ export async function processNewLeads(config: LeadSourceConfig): Promise<number>
  * @param payload The webhook payload
  * @returns Success status
  */
-export async function handleLeadWebhook(payload: any): Promise<boolean> {
+export async function handleLeadWebhook(payload: unknown): Promise<boolean> {
   try {
+    if (typeof payload !== 'object' || payload === null) return false
+    const obj = payload as Record<string, unknown>
     // Transform webhook payload to LeadData format
     const leadData: LeadData = {
-      first_name: payload.first_name || payload.firstName || '',
-      last_name: payload.last_name || payload.lastName || 'Unknown',
-      email: payload.email ? [payload.email] : [],
-      phone: payload.phone ? [payload.phone] : [],
-      company: payload.company || '',
-      position: payload.job_title || '',
+      first_name: (obj.first_name as string) || (obj.firstName as string) || '',
+      last_name: (obj.last_name as string) || (obj.lastName as string) || 'Unknown',
+      email: obj.email ? [obj.email as string] : [],
+      phone: obj.phone ? [obj.phone as string] : [],
+      company: (obj.company as string) || '',
+      position: (obj.job_title as string) || '',
       client_type: 'lead',
-      lead_source: payload.source || 'Webhook',
+      lead_source: (obj.source as string) || 'Webhook',
     }
 
     // Assign the lead via round robin

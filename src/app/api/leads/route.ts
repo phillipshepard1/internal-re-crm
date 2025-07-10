@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { RoundRobinService } from '@/lib/roundRobin'
+import { assignLeadToRoundRobin } from '@/lib/roundRobin'
 import type { LeadData } from '@/lib/roundRobin'
 
 export async function POST(request: NextRequest) {
@@ -20,27 +20,35 @@ export async function POST(request: NextRequest) {
     
     // Validate all leads
     for (const lead of leads) {
-      try {
-        RoundRobinService.validateLeadData(lead)
-      } catch (error) {
+      if (!lead.first_name || !lead.last_name) {
         return NextResponse.json(
-          { error: `Invalid lead data: ${error}` },
+          { error: 'Invalid lead data: first_name and last_name are required' },
           { status: 400 }
         )
       }
     }
     
     // Assign leads via Round Robin
-    const assignedLeads = await RoundRobinService.assignLeadsBatch(leads)
+    const results = await Promise.all(
+      leads.map(async (lead) => {
+        const success = await assignLeadToRoundRobin(lead)
+        return { success, lead }
+      })
+    )
+    
+    const successfulAssignments = results.filter(result => result.success)
+    const failedAssignments = results.filter(result => !result.success)
     
     return NextResponse.json({
       success: true,
-      message: `Successfully assigned ${assignedLeads.length} leads`,
-      assignedLeads: assignedLeads.map(lead => ({
-        id: lead.id,
-        name: `${lead.first_name} ${lead.last_name}`,
-        assigned_to: lead.assigned_to
-      }))
+      message: `Successfully assigned ${successfulAssignments.length} out of ${leads.length} leads`,
+      assignedLeads: successfulAssignments.map(result => ({
+        name: `${result.lead.first_name} ${result.lead.last_name}`,
+        email: result.lead.email?.[0] || '',
+        phone: result.lead.phone?.[0] || '',
+        source: result.lead.lead_source
+      })),
+      failedCount: failedAssignments.length
     })
     
   } catch (error) {

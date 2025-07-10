@@ -1,26 +1,33 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { HomeStackIntegration } from '@/lib/homeStackIntegration'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { limit = 50 } = body
-    
+
+    if (typeof limit !== 'number' || limit < 1 || limit > 200) {
+      return NextResponse.json(
+        { error: 'limit must be a number between 1 and 200' },
+        { status: 400 }
+      )
+    }
+
     // Get HomeStack configuration from environment variables
     const homeStackConfig = {
       apiKey: process.env.HOMESTACK_API_KEY!,
-      baseUrl: process.env.HOMESTACK_BASE_URL!,
+      baseUrl: process.env.HOMESTACK_BASE_URL || 'https://api.homestack.com',
       webhookSecret: process.env.HOMESTACK_WEBHOOK_SECRET,
     }
     
     // Validate configuration
-    if (!homeStackConfig.apiKey || !homeStackConfig.baseUrl) {
+    if (!homeStackConfig.apiKey) {
       return NextResponse.json({ 
-        error: 'HomeStack configuration missing',
-        required: ['HOMESTACK_API_KEY', 'HOMESTACK_BASE_URL']
+        error: 'HomeStack API key missing',
+        required: ['HOMESTACK_API_KEY']
       }, { status: 400 })
     }
-    
+
     // Initialize HomeStack integration
     const homeStack = new HomeStackIntegration(homeStackConfig)
     
@@ -31,15 +38,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       success: true,
       processedCount,
-      totalLeads: leads.length,
       message: `Processed ${processedCount} leads from HomeStack`
     })
     
-  } catch (error: any) {
-    console.error('Error processing HomeStack leads:', error)
-    return NextResponse.json({ 
-      error: 'Failed to process HomeStack leads',
-      details: error.message 
-    }, { status: 500 })
+  } catch (err: unknown) {
+    console.error('HomeStack processing error:', err)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 } 

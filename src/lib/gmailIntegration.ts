@@ -91,7 +91,7 @@ export class GmailIntegration {
   /**
    * Get recent emails from Gmail
    */
-  private async getRecentEmails(maxResults: number): Promise<any[]> {
+  private async getRecentEmails(maxResults: number): Promise<Record<string, unknown>[]> {
     const response = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
       {
@@ -106,7 +106,7 @@ export class GmailIntegration {
     }
     
     const data = await response.json()
-    const emails = []
+    const emails: Record<string, unknown>[] = []
     
     for (const message of data.messages || []) {
       const emailData = await this.getEmailDetails(message.id)
@@ -121,7 +121,7 @@ export class GmailIntegration {
   /**
    * Get detailed email information
    */
-  private async getEmailDetails(messageId: string): Promise<any | null> {
+  private async getEmailDetails(messageId: string): Promise<Record<string, unknown> | null> {
     try {
       const response = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`,
@@ -140,9 +140,9 @@ export class GmailIntegration {
       
       // Extract email details from Gmail API response
       const headers = data.payload?.headers || []
-      const subject = headers.find((h: any) => h.name === 'Subject')?.value || ''
-      const from = headers.find((h: any) => h.name === 'From')?.value || ''
-      const to = headers.find((h: any) => h.name === 'To')?.value || ''
+      const subject = headers.find((h: Record<string, unknown>) => h.name === 'Subject')?.value || ''
+      const from = headers.find((h: Record<string, unknown>) => h.name === 'From')?.value || ''
+      const to = headers.find((h: Record<string, unknown>) => h.name === 'To')?.value || ''
       
       // Get email body
       const body = this.extractEmailBody(data.payload)
@@ -165,25 +165,27 @@ export class GmailIntegration {
   /**
    * Extract email body from Gmail API response
    */
-  private extractEmailBody(payload: any): string {
+  private extractEmailBody(payload: Record<string, unknown> | null): string {
     if (!payload) return ''
     
     // Handle multipart messages
-    if (payload.parts) {
-      for (const part of payload.parts) {
+    if (payload.parts && Array.isArray(payload.parts)) {
+      for (const part of payload.parts as Record<string, unknown>[]) {
         if (part.mimeType === 'text/plain') {
-          return this.decodeBody(part.body?.data || '')
+          const body = part.body as Record<string, unknown> | undefined
+          return this.decodeBody((body?.data as string) || '')
         }
         if (part.mimeType === 'text/html') {
           // Fallback to HTML if plain text not available
-          return this.decodeBody(part.body?.data || '')
+          const body = part.body as Record<string, unknown> | undefined
+          return this.decodeBody((body?.data as string) || '')
         }
       }
     }
     
     // Handle single part messages
-    if (payload.body?.data) {
-      return this.decodeBody(payload.body.data)
+    if (payload.body && typeof payload.body === 'object' && 'data' in payload.body) {
+      return this.decodeBody((payload.body as Record<string, unknown>).data as string)
     }
     
     return ''

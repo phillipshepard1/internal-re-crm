@@ -1,64 +1,79 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-export async function POST() {
+// Initialize Supabase client with service role key
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+export async function POST(request: NextRequest) {
   try {
-    // Since we can't use exec_sql, let's try to add the fields one by one
-    // We'll use a simple approach: try to insert a test record with the new fields
-    // If it fails, the fields don't exist and we need to add them manually
-    
-    const testData = {
-      first_name: 'Test',
-      last_name: 'User',
-      email: ['test@example.com'],
-      phone: ['123-456-7890'],
-      company: 'Test Company',
-      position: 'Test Position',
-      address: '123 Test St',
-      city: 'Test City',
-      state: 'TS',
-      zip_code: '12345',
-      country: 'Test Country',
-      lead_source: 'test',
-      looking_for: 'Test Property',
-      selling: 'Test Property',
-      closed: 'Test Property',
-      assigned_to: '00000000-0000-0000-0000-000000000000' // Dummy UUID
+    const body = await request.json()
+    const { migrationName } = body
+
+    if (!migrationName) {
+      return NextResponse.json(
+        { error: 'Migration name is required' },
+        { status: 400 }
+      )
     }
-    
-    // Try to insert the test data
-    const { data, error } = await supabase
-      .from('people')
-      .insert([testData])
-      .select()
-    
+
+    // Define available migrations
+    const migrations: Record<string, string> = {
+      'add-followup-fields': `
+        ALTER TABLE follow_ups 
+        ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'call',
+        ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP WITH TIME ZONE;
+      `,
+      'add-user-fields': `
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS first_name VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS last_name VARCHAR(255);
+      `,
+      'create-round-robin-table': `
+        CREATE TABLE IF NOT EXISTS round_robin_config (
+          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+          user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+          is_active BOOLEAN DEFAULT true,
+          priority INTEGER DEFAULT 0,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_round_robin_active ON round_robin_config(is_active, priority);
+      `
+    }
+
+    const migrationSQL = migrations[migrationName]
+    if (!migrationSQL) {
+      return NextResponse.json(
+        { error: `Unknown migration: ${migrationName}` },
+        { status: 400 }
+      )
+    }
+
+    // Execute the migration
+    const { error } = await supabase.rpc('exec_sql', { sql: migrationSQL })
+
     if (error) {
-      console.error('Migration test failed:', error)
-      return NextResponse.json({ 
-        error: 'Database schema needs to be updated manually', 
-        details: error.message,
-        action: 'Please add the missing fields to the people table in your Supabase dashboard'
-      }, { status: 500 })
+      console.error('Migration error:', error)
+      return NextResponse.json(
+        { error: 'Migration failed', details: error.message },
+        { status: 500 }
+      )
     }
-    
-    // If successful, delete the test record
-    if (data && data[0]) {
-      await supabase
-        .from('people')
-        .delete()
-        .eq('id', data[0].id)
-    }
-    
-    return NextResponse.json({ 
-      message: 'Database schema is up to date',
-      fieldsAvailable: true
+
+    return NextResponse.json({
+      success: true,
+      message: `Migration '${migrationName}' executed successfully`
     })
-    
-  } catch (error: any) {
-    console.error('Migration check failed:', error)
-    return NextResponse.json({ 
-      error: 'Migration check failed', 
-      details: error.message 
-    }, { status: 500 })
+
+  } catch (err: unknown) {
+    console.error('Migration execution error:', err)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 } 

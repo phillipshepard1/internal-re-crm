@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Search, Calendar, Phone, Mail, Clock, Eye } from 'lucide-react'
 import Link from 'next/link'
 import { getPeople } from '@/lib/database'
@@ -21,22 +21,22 @@ export default function PeoplePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    loadPeople()
-  }, [user, userRole])
-
-  const loadPeople = async () => {
+  const loadPeople = useCallback(async () => {
     try {
       setLoading(true)
       const data = await getPeople(user?.id, userRole || undefined)
       setPeople(data)
     } catch (err) {
-      setError('Failed to load people')
       console.error('Error loading people:', err)
+      setError('Failed to load people')
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, userRole])
+
+  useEffect(() => {
+    loadPeople()
+  }, [loadPeople])
 
   const filteredPeople = people.filter(person =>
     `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -57,20 +57,28 @@ export class HomeStackIntegration {
   /**
    * Transform HomeStack API response to our lead format
    */
-  private transformLeads(apiLeads: any[]): HomeStackLead[] {
-    return apiLeads.map(lead => ({
-      id: lead.id,
-      firstName: lead.first_name || lead.firstName || '',
-      lastName: lead.last_name || lead.lastName || '',
-      email: Array.isArray(lead.email) ? lead.email : [lead.email || ''],
-      phone: Array.isArray(lead.phone) ? lead.phone : [lead.phone || ''],
-      message: lead.message || lead.notes || lead.comments,
-      propertyAddress: lead.property_address || lead.address,
-      propertyDetails: lead.property_details || lead.listing_details,
-      source: 'homestack' as const,
-      createdAt: new Date(lead.created_at || lead.createdAt || Date.now()),
-      status: lead.status || 'new'
-    }))
+  private transformLeads(apiLeads: Record<string, unknown>[]): HomeStackLead[] {
+    return apiLeads.map(lead => {
+      const status = (lead.status as string) || 'new'
+      const validStatus = ['new', 'contacted', 'qualified', 'converted'].includes(status) 
+        ? status as 'new' | 'contacted' | 'qualified' | 'converted'
+        : 'new'
+      
+      return {
+        id: lead.id as string,
+        firstName: (lead.first_name as string) || (lead.firstName as string) || '',
+        lastName: (lead.last_name as string) || (lead.lastName as string) || '',
+        email: Array.isArray(lead.email) ? lead.email as string[] : [lead.email as string || ''],
+        phone: Array.isArray(lead.phone) ? lead.phone as string[] : [lead.phone as string || ''],
+        message: (lead.message as string) || (lead.notes as string) || (lead.comments as string),
+        propertyAddress: (lead.property_address as string) || (lead.address as string),
+        propertyDetails: (lead.property_details as string) || (lead.listing_details as string),
+        source: 'homestack' as const,
+        createdAt: new Date(lead.created_at as string || lead.createdAt as string || Date.now()),
+        status: validStatus
+      }
+    })
+    
   }
   
   /**
@@ -159,11 +167,11 @@ export class HomeStackIntegration {
   /**
    * Handle webhook from HomeStack (for real-time lead capture)
    */
-  async handleWebhook(payload: any, signature?: string): Promise<boolean> {
+  async handleWebhook(payload: Record<string, unknown>, signature?: string): Promise<boolean> {
     try {
       // Verify webhook signature if secret is provided
       if (this.config.webhookSecret && signature) {
-        const isValid = this.verifyWebhookSignature(payload, signature)
+        const isValid = this.verifyWebhookSignature()
         if (!isValid) {
           console.error('Invalid webhook signature')
           return false
@@ -172,7 +180,7 @@ export class HomeStackIntegration {
       
       // Process the webhook payload
       if (payload.type === 'lead.created' || payload.type === 'lead.updated') {
-        const lead = this.transformLeads([payload.data])[0]
+        const lead = this.transformLeads([payload.data as Record<string, unknown>])[0]
         const person = await this.createPersonFromLead(lead)
         return !!person
       }
@@ -188,7 +196,7 @@ export class HomeStackIntegration {
   /**
    * Verify webhook signature
    */
-  private verifyWebhookSignature(payload: any, signature: string): boolean {
+  private verifyWebhookSignature(): boolean {
     // Implement signature verification based on HomeStack's webhook security
     // This is a placeholder - implement based on HomeStack's documentation
     return true
