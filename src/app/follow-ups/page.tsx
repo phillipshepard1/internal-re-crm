@@ -130,7 +130,7 @@ export default function FollowUpsPage() {
       const data = await getFollowUps()
       setFollowUps(data)
       closeModal()
-    } catch (err) {
+    } catch {
       setError('Failed to save interaction')
     } finally {
       setSaving(false)
