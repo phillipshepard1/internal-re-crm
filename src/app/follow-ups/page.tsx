@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectItem } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
+import type { FollowUp, Person } from '@/lib/supabase';
+type FollowUpWithPerson = FollowUp & { people?: Person };
 
 const NEXT_FOLLOWUP_OPTIONS = [
   { label: '3 Days', value: 3 },
@@ -27,24 +29,24 @@ const FOLLOWUP_TYPE_OPTIONS = [
   { label: 'Other', value: 'other' },
 ]
 
-function isOverdue(fu: any) {
+function isOverdue(fu: FollowUpWithPerson) {
   return fu.status !== 'completed' && new Date(fu.scheduled_date) < new Date()
 }
 
 export default function FollowUpsPage() {
   const { user } = useAuth()
-  const [followUps, setFollowUps] = useState<any[]>([])
+  const [followUps, setFollowUps] = useState<FollowUpWithPerson[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<'upcoming' | 'overdue'>('upcoming')
   const [modalOpen, setModalOpen] = useState(false)
-  const [activeFollowUp, setActiveFollowUp] = useState<any>(null)
+  const [activeFollowUp, setActiveFollowUp] = useState<FollowUpWithPerson | null>(null)
   const [interactionNote, setInteractionNote] = useState('')
   const [nextFollowUpDays, setNextFollowUpDays] = useState(7)
   const [saving, setSaving] = useState(false)
   // New state for scheduling follow-up
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
-  const [peopleOptions, setPeopleOptions] = useState<any[]>([])
+  const [peopleOptions, setPeopleOptions] = useState<Person[]>([])
   const [selectedPersonId, setSelectedPersonId] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [followUpType, setFollowUpType] = useState<'call' | 'email' | 'meeting' | 'task' | 'other'>('call')
@@ -58,7 +60,7 @@ export default function FollowUpsPage() {
         setError('')
         const data = await getFollowUps()
         setFollowUps(data)
-      } catch (err: any) {
+      } catch {
         setError('Failed to load follow-ups')
       } finally {
         setLoading(false)
@@ -78,7 +80,7 @@ export default function FollowUpsPage() {
     if (scheduleModalOpen) loadPeople()
   }, [scheduleModalOpen])
 
-  const openInteractionModal = (fu: any) => {
+  const openInteractionModal = (fu: FollowUpWithPerson) => {
     setActiveFollowUp(fu)
     setInteractionNote('')
     setNextFollowUpDays(7)
@@ -212,7 +214,7 @@ export default function FollowUpsPage() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredFollowUps.map((fu: any) => (
+              {filteredFollowUps.map((fu: FollowUpWithPerson) => (
                 <Card key={fu.id} className={`border ${isOverdue(fu) ? 'border-destructive' : ''}`}>
                   <CardHeader>
                     <CardTitle>
@@ -277,7 +279,7 @@ export default function FollowUpsPage() {
                 onChange={e => setSelectedPersonId(e.target.value)}
               >
                 <option value="">Select a person</option>
-                {peopleOptions.map((p: any) => (
+                {peopleOptions.map((p: Person) => (
                   <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
                 ))}
               </select>
