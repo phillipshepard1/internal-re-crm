@@ -10,6 +10,7 @@ interface AuthContextType {
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  roleError: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -18,52 +19,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'agent' | null>(null)
   const [loading, setLoading] = useState(true)
+  const [roleError, setRoleError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Get initial session
+    let isMounted = true;
+
+    // Initial session check
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      
+      if (!isMounted) return;
+      setUser(session?.user ?? null);
       if (session?.user) {
-        // Fetch user role from database
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', session.user.id)
-          .single()
-        
-        setUserRole(userData?.role || 'agent')
+        try {
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+          if (error || !userData?.role) {
+            console.error('User role fetch error:', error);
+            if (userRole === 'admin') {
+              setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
+              setUserRole(null);
+            } else {
+              setUserRole('agent');
+              setRoleError(null);
+            }
+          } else {
+            setUserRole(userData.role);
+            setRoleError(null);
+          }
+        } catch (err) {
+          console.error('User role fetch exception:', err);
+          if (userRole === 'admin') {
+            setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
+            setUserRole(null);
+          } else {
+            setUserRole('agent');
+            setRoleError(null);
+          }
+        }
       } else {
-        setUserRole(null)
+        setUserRole(null);
+        setRoleError(null);
       }
-      
-      setLoading(false)
-    })
+      setLoading(false); // Always set loading to false
+    });
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null)
-      
+    // Listen for auth changes (sign in/out)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setUser(session?.user ?? null);
       if (session?.user) {
-        // Fetch user role from database
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', session.user.id)
-          .single()
-        
-        setUserRole(userData?.role || 'agent')
+        try {
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+          if (error || !userData?.role) {
+            console.error('User role fetch error:', error);
+            if (userRole === 'admin') {
+              setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
+              setUserRole(null);
+            } else {
+              setUserRole('agent');
+              setRoleError(null);
+            }
+          } else {
+            setUserRole(userData.role);
+            setRoleError(null);
+          }
+        } catch (err) {
+          console.error('User role fetch exception:', err);
+          if (userRole === 'admin') {
+            setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
+            setUserRole(null);
+          } else {
+            setUserRole('agent');
+            setRoleError(null);
+          }
+        }
       } else {
-        setUserRole(null)
+        setUserRole(null);
+        setRoleError(null);
       }
-      
-      setLoading(false)
-    })
+    });
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -84,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     signIn,
     signOut,
+    roleError,
   }
 
   return (

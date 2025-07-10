@@ -315,14 +315,7 @@ export async function getLists() {
 export async function getRoundRobinConfig() {
   const { data, error } = await supabase
     .from('round_robin_config')
-    .select(`
-      *,
-      users (
-        id,
-        email,
-        role
-      )
-    `)
+    .select('*')
     .order('priority', { ascending: true })
   
   if (error) throw error

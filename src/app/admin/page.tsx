@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus } from 'lucide-react'
-import { getPeople, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus } from '@/lib/database'
+import { getPeople, getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,12 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
-import type { RoundRobinConfig } from '@/lib/supabase'
+import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
 export default function AdminPage() {
   const { user, userRole } = useAuth()
   const [people, setPeople] = useState<any[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [roundRobinConfig, setRoundRobinConfig] = useState<RoundRobinConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -43,6 +44,14 @@ export default function AdminPage() {
         console.error('Error loading people:', err)
       }
       
+      // Load users data
+      let usersData = []
+      try {
+        usersData = await getUsers()
+      } catch (err) {
+        console.error('Error loading users:', err)
+      }
+      
       // Load round robin config data
       let roundRobinData = []
       try {
@@ -54,6 +63,7 @@ export default function AdminPage() {
       }
       
       setPeople(peopleData)
+      setUsers(usersData)
       setRoundRobinConfig(roundRobinData)
     } catch (err) {
       setError('Failed to load admin data')
@@ -149,6 +159,19 @@ export default function AdminPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" asChild>
+                  <Link href="/admin/create-user">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Create User
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Create new user accounts</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" asChild>
                   <Link href="/admin/test-leads">
                     <Users className="mr-2 h-4 w-4" />
                     Test Leads
@@ -161,13 +184,15 @@ export default function AdminPage() {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline">
-                  <Settings className="mr-2 h-4 w-4" />
-                  System Settings
+                <Button variant="outline" asChild>
+                  <Link href="/admin/integrations">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Integrations
+                  </Link>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Configure system-wide settings</p>
+                <p>Manage lead integrations</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -181,7 +206,7 @@ export default function AdminPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{people.length}</div>
+              <div className="text-2xl font-bold">{users.length}</div>
               <p className="text-xs text-muted-foreground">
                 All system users
               </p>
@@ -195,7 +220,7 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {people.filter(p => p.role === 'admin').length}
+                {users.filter(u => u.role === 'admin').length}
               </div>
               <p className="text-xs text-muted-foreground">
                 Users with admin access
@@ -249,41 +274,38 @@ export default function AdminPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {people.length > 0 ? (
+                {users.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Last Login</TableHead>
+                        <TableHead>Created</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {people.map((person) => (
-                        <TableRow key={person.id}>
+                      {users.map((user) => (
+                        <TableRow key={user.id}>
                           <TableCell className="font-medium">
-                            {person.first_name} {person.last_name}
+                            {user.email.split('@')[0]}
                           </TableCell>
                           <TableCell>
-                            {person.email && person.email[0] ? person.email[0] : '-'}
+                            {user.email}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={person.role === 'admin' ? 'default' : 'secondary'}>
-                              {person.role || 'user'}
+                            <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                              {user.role}
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {person.last_login 
-                              ? new Date(person.last_login).toLocaleDateString()
-                              : 'Never'
-                            }
+                            {new Date(user.created_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {person.last_login ? 'Active' : 'Inactive'}
+                              Active
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -346,7 +368,7 @@ export default function AdminPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {people.filter(p => p.role !== 'admin').length > 0 ? (
+                {users.filter(u => u.role !== 'admin').length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -358,20 +380,20 @@ export default function AdminPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {people
-                        .filter(p => p.role !== 'admin') // Only show non-admin users
-                        .map((person) => {
-                          const roundRobinEntry = roundRobinConfig.find(c => c.user_id === person.id)
+                      {users
+                        .filter(u => u.role !== 'admin') // Only show non-admin users
+                        .map((user) => {
+                          const roundRobinEntry = roundRobinConfig.find(c => c.user_id === user.id)
                           const isInRoundRobin = !!roundRobinEntry
                           const isActive = roundRobinEntry?.is_active ?? false
                           
                           return (
-                            <TableRow key={person.id}>
+                            <TableRow key={user.id}>
                               <TableCell className="font-medium">
-                                {person.first_name} {person.last_name}
+                                {user.email.split('@')[0]}
                               </TableCell>
                               <TableCell>
-                                {person.email && person.email[0] ? person.email[0] : '-'}
+                                {user.email}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center space-x-2">
@@ -379,9 +401,9 @@ export default function AdminPage() {
                                     checked={isActive}
                                     onCheckedChange={(checked) => {
                                       if (isInRoundRobin) {
-                                        handleToggleRoundRobinStatus(person.id, checked)
+                                        handleToggleRoundRobinStatus(user.id, checked)
                                       } else {
-                                        handleAddToRoundRobin(person.id)
+                                        handleAddToRoundRobin(user.id)
                                       }
                                     }}
                                   />
@@ -401,7 +423,7 @@ export default function AdminPage() {
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          onClick={() => handleRemoveFromRoundRobin(person.id)}
+                                          onClick={() => handleRemoveFromRoundRobin(user.id)}
                                           className="text-destructive hover:text-destructive"
                                         >
                                           <UserMinus className="h-4 w-4" />
@@ -417,7 +439,7 @@ export default function AdminPage() {
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          onClick={() => handleAddToRoundRobin(person.id)}
+                                          onClick={() => handleAddToRoundRobin(user.id)}
                                         >
                                           <UserPlus className="h-4 w-4" />
                                         </Button>

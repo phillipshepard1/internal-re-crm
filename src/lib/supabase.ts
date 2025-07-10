@@ -42,6 +42,10 @@ export interface Person {
   zip_code?: string
   country?: string
   lead_source?: string
+  // Properties fields
+  looking_for?: string
+  selling?: string
+  closed?: string
 }
 
 export interface Note {
