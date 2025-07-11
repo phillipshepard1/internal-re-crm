@@ -1,17 +1,9 @@
 'use client'
 
-import { LogOut, User, Settings, Bell, Menu, Calendar, CheckSquare, AlertCircle } from 'lucide-react'
+import { LogOut, User, Settings, Bell, Menu, Calendar } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { 
   Dialog,
   DialogContent,
