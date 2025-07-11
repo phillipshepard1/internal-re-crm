@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         if (session?.user) {
           // Try to fetch user row
-          let { data: userData, error } = await supabase
+          const { data: userData, error } = await supabase
             .from('users')
             .select('role')
             .eq('id', session.user.id)
@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         try {
           // Try to fetch user row
-          let { data: userData, error } = await supabase
+          const { data: userData, error } = await supabase
             .from('users')
             .select('role')
             .eq('id', session.user.id)
