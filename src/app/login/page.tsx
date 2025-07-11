@@ -215,14 +215,7 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          <div className="text-center text-sm text-muted-foreground space-y-2">
-            <p>
-              Demo credentials: admin@example.com / password123
-            </p>
-            <p className="text-xs">
-              Google users will be automatically assigned roles based on their email domain
-            </p>
-          </div>
+
         </div>
       </div>
     </TooltipProvider>

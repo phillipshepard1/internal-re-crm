@@ -246,22 +246,6 @@ export default function CreateUserPage() {
           </form>
         </CardContent>
       </Card>
-
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Login Credentials for New User</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 text-sm">
-            <p><strong>Email:</strong> The email address you enter above</p>
-            <p><strong>Password:</strong> The password you set above</p>
-            <p><strong>Login URL:</strong> <code className="bg-muted px-1 rounded">your-domain.com/login</code></p>
-            <p className="text-muted-foreground">
-              The user can log in immediately after creation. No email confirmation required.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 } 

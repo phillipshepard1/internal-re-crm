@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut, User, Settings, Bell, Menu } from 'lucide-react'
+import { LogOut, User, Settings, Bell, Menu, Calendar, CheckSquare, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -12,6 +12,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface HeaderProps {
   sidebarOpen: boolean
@@ -19,7 +31,10 @@ interface HeaderProps {
 }
 
 export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
-  const { signOut, userRole } = useAuth()
+  const { signOut, userRole, user } = useAuth()
+  const router = useRouter()
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
 
   const handleLogout = async () => {
     try {
@@ -29,19 +44,13 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
     }
   }
 
-  const handleNotifications = () => {
-    // TODO: Implement notifications functionality
-    alert('Notifications feature coming soon!')
-  }
-
   const handleSettings = () => {
-    // TODO: Implement settings functionality
-    alert('Settings feature coming soon!')
-  }
-
-  const handleProfile = () => {
-    // TODO: Implement profile functionality
-    alert('Profile feature coming soon!')
+    if (userRole === 'admin') {
+      router.push('/admin')
+    } else {
+      // For non-admin users, could navigate to a user settings page
+      alert('Settings feature coming soon!')
+    }
   }
 
   return (
@@ -70,21 +79,67 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
           
           <div className="flex items-center space-x-2">
             {/* Notifications */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleNotifications}
-                >
-                  <Bell className="h-4 w-4" />
-                  <span className="sr-only">Notifications</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Notifications</p>
-              </TooltipContent>
-            </Tooltip>
+            <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
+              <DialogTrigger asChild>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="relative"
+                    >
+                      <Bell className="h-4 w-4" />
+                      <span className="sr-only">Notifications</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Notifications</p>
+                  </TooltipContent>
+                </Tooltip>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Notifications</DialogTitle>
+                  <DialogDescription>
+                    Your recent activities and reminders
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center text-sm">
+                        <Calendar className="mr-2 h-4 w-4 text-blue-600" />
+                        Quick Actions
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full"
+                        onClick={() => {
+                          setNotificationsOpen(false)
+                          router.push('/follow-ups')
+                        }}
+                      >
+                        View Follow-ups
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full"
+                        onClick={() => {
+                          setNotificationsOpen(false)
+                          router.push('/tasks')
+                        }}
+                      >
+                        View Tasks
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </DialogContent>
+            </Dialog>
             
             {/* Settings */}
             <Tooltip>
@@ -99,13 +154,13 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Settings</p>
+                <p>{userRole === 'admin' ? 'Admin Panel' : 'Settings'}</p>
               </TooltipContent>
             </Tooltip>
             
-            {/* Profile Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            {/* Profile */}
+            <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+              <DialogTrigger asChild>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="ghost" size="sm">
@@ -117,25 +172,60 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                     <p>Profile</p>
                   </TooltipContent>
                 </Tooltip>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleProfile}>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSettings}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Profile</DialogTitle>
+                  <DialogDescription>
+                    Your account information
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Account Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium">Email:</span>
+                        <span className="text-sm text-muted-foreground">{user?.email}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium">Role:</span>
+                        <Badge variant={userRole === 'admin' ? 'default' : 'secondary'}>
+                          {userRole === 'admin' ? 'Administrator' : 'Agent'}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium">User ID:</span>
+                        <span className="text-sm text-muted-foreground font-mono text-xs">
+                          {user?.id?.slice(0, 8)}...
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <div className="flex justify-end space-x-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      Close
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => {
+                        setProfileOpen(false)
+                        handleLogout()
+                      }}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Logout
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             
             {/* Logout (standalone for quick access) */}
             <Tooltip>
