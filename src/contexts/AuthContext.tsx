@@ -24,91 +24,145 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    // Initial session check
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!isMounted) return;
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        try {
-          const { data: userData, error } = await supabase
+    async function restoreSession() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          // Try to fetch user row
+          let { data: userData, error } = await supabase
             .from('users')
             .select('role')
             .eq('id', session.user.id)
             .single();
+
+          // If user row is missing, create it
+          if (error && (error.code === 'PGRST116' || error.message?.toLowerCase().includes('no rows'))) {
+            const { error: insertError } = await supabase
+              .from('users')
+              .insert({
+                id: session.user.id,
+                email: session.user.email,
+                role: 'agent', // default role
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              });
+            if (insertError) throw insertError;
+            // Try fetching again
+            ({ data: userData, error } = await supabase
+              .from('users')
+              .select('role')
+              .eq('id', session.user.id)
+              .single());
+          }
+
+          // If user row exists but role is missing/invalid, update it
+          if (userData && (!userData.role || !['admin', 'agent'].includes(userData.role))) {
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ role: 'agent', updated_at: new Date().toISOString() })
+              .eq('id', session.user.id);
+            if (updateError) throw updateError;
+            userData.role = 'agent';
+          }
+
           if (error || !userData?.role) {
-            console.error('User role fetch error:', error);
-            if (userRole === 'admin') {
-              setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
-              setUserRole(null);
-            } else {
-              setUserRole('agent');
-              setRoleError(null);
-            }
+            setUser(null);
+            setUserRole(null);
+            setRoleError('Unable to verify your permissions.');
           } else {
             setUserRole(userData.role);
             setRoleError(null);
           }
-        } catch (err) {
-          console.error('User role fetch exception:', err);
-          if (userRole === 'admin') {
-            setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
-            setUserRole(null);
-          } else {
-            setUserRole('agent');
-            setRoleError(null);
-          }
+        } else {
+          setUserRole(null);
+          setRoleError(null);
         }
-      } else {
+      } catch (err) {
+        setUser(null);
         setUserRole(null);
-        setRoleError(null);
+        setRoleError('Session restoration failed.');
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false); // Always set loading to false
-    });
+    }
+
+    restoreSession();
 
     // Listen for auth changes (sign in/out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        try {
-          const { data: userData, error } = await supabase
+        // Try to fetch user row
+        let { data: userData, error } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+
+        // If user row is missing, create it
+        if (error && (error.code === 'PGRST116' || error.message?.toLowerCase().includes('no rows'))) {
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              id: session.user.id,
+              email: session.user.email,
+              role: 'agent', // default role
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          if (insertError) {
+            setUser(null);
+            setUserRole(null);
+            setRoleError('Unable to create user profile.');
+            setLoading(false);
+            return;
+          }
+          // Try fetching again
+          ({ data: userData, error } = await supabase
             .from('users')
             .select('role')
             .eq('id', session.user.id)
-            .single();
-          if (error || !userData?.role) {
-            console.error('User role fetch error:', error);
-            if (userRole === 'admin') {
-              setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
-              setUserRole(null);
-            } else {
-              setUserRole('agent');
-              setRoleError(null);
-            }
-          } else {
-            setUserRole(userData.role);
-            setRoleError(null);
-          }
-        } catch (err) {
-          console.error('User role fetch exception:', err);
-          if (userRole === 'admin') {
-            setRoleError('Unable to verify your admin permissions. Please refresh or contact support.');
+            .single());
+        }
+
+        // If user row exists but role is missing/invalid, update it
+        if (userData && (!userData.role || !['admin', 'agent'].includes(userData.role))) {
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ role: 'agent', updated_at: new Date().toISOString() })
+            .eq('id', session.user.id);
+          if (updateError) {
+            setUser(null);
             setUserRole(null);
-          } else {
-            setUserRole('agent');
-            setRoleError(null);
+            setRoleError('Unable to update user role.');
+            setLoading(false);
+            return;
           }
+          userData.role = 'agent';
+        }
+
+        if (error || !userData?.role) {
+          setUser(null);
+          setUserRole(null);
+          setRoleError('Unable to verify your permissions.');
+        } else {
+          setUserRole(userData.role);
+          setRoleError(null);
         }
       } else {
         setUserRole(null);
         setRoleError(null);
       }
+      setLoading(false);
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [userRole]);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
