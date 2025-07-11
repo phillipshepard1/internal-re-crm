@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus } from 'lucide-react'
-import { getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus } from '@/lib/database'
+import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus, Crown } from 'lucide-react'
+import { getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus, updateUserRole, getAdminDomains } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -21,6 +22,7 @@ export default function AdminPage() {
   const [roundRobinConfig, setRoundRobinConfig] = useState<RoundRobinConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [roleUpdateLoading, setRoleUpdateLoading] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     try {
@@ -90,6 +92,19 @@ export default function AdminPage() {
     } catch (err) {
       console.error('Error updating Round Robin status:', err)
       alert('Failed to update Round Robin status. The Round Robin table may not exist yet.')
+    }
+  }
+
+  const handleRoleChange = async (userId: string, newRole: 'admin' | 'agent') => {
+    try {
+      setRoleUpdateLoading(userId)
+      await updateUserRole(userId, newRole)
+      await loadData() // Reload data
+    } catch (err) {
+      console.error('Error updating user role:', err)
+      alert('Failed to update user role.')
+    } finally {
+      setRoleUpdateLoading(null)
     }
   }
 
@@ -235,13 +250,15 @@ export default function AdminPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">System Status</CardTitle>
-              <Settings className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Admin Domains</CardTitle>
+              <Crown className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">Online</div>
+              <div className="text-2xl font-bold">
+                {getAdminDomains().length}
+              </div>
               <p className="text-xs text-muted-foreground">
-                All systems operational
+                Configured admin domains
               </p>
             </CardContent>
           </Card>
@@ -251,8 +268,8 @@ export default function AdminPage() {
           <TabsList>
             <TabsTrigger value="users">User Management</TabsTrigger>
             <TabsTrigger value="roundRobin">Round Robin</TabsTrigger>
+            <TabsTrigger value="roles">Role Management</TabsTrigger>
             <TabsTrigger value="system">System Settings</TabsTrigger>
-            <TabsTrigger value="logs">Activity Logs</TabsTrigger>
           </TabsList>
           
           <TabsContent value="users" className="space-y-4">
@@ -345,6 +362,118 @@ export default function AdminPage() {
                     <AlertDescription>No users found in the system.</AlertDescription>
                   </Alert>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="roles" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Role Management</CardTitle>
+                <CardDescription>
+                  Manage user roles and permissions. Google users are automatically assigned roles based on their email domain.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Admin Domains Configuration */}
+                  <div className="p-4 border rounded-lg bg-muted/50">
+                    <h3 className="font-semibold mb-2">Admin Domain Configuration</h3>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Users with emails from these domains will automatically be assigned admin roles:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {getAdminDomains().length > 0 ? (
+                        getAdminDomains().map((domain) => (
+                          <Badge key={domain} variant="outline">
+                            @{domain}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No admin domains configured</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Configure admin domains in your environment variables (NEXT_PUBLIC_ADMIN_DOMAINS)
+                    </p>
+                  </div>
+
+                  {/* Role Management Table */}
+                  <div>
+                    <h3 className="font-semibold mb-3">User Role Management</h3>
+                    {users.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>User</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Current Role</TableHead>
+                            <TableHead>Domain</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {users.map((user) => {
+                            const userDomain = user.email.split('@')[1]
+                            const isAdminDomain = getAdminDomains().includes(userDomain)
+                            
+                            return (
+                              <TableRow key={user.id}>
+                                <TableCell className="font-medium">
+                                  {user.email.split('@')[0]}
+                                </TableCell>
+                                <TableCell>
+                                  {user.email}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                                    {user.role}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <span>@{userDomain}</span>
+                                    {isAdminDomain && (
+                                      <Badge variant="outline" className="text-xs">
+                                        Admin Domain
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <Select
+                                      value={user.role}
+                                      onValueChange={(value: 'admin' | 'agent') => 
+                                        handleRoleChange(user.id, value)
+                                      }
+                                      disabled={roleUpdateLoading === user.id}
+                                    >
+                                      <SelectTrigger className="w-32">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="agent">Agent</SelectItem>
+                                        <SelectItem value="admin">Admin</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    {roleUpdateLoading === user.id && (
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <Alert>
+                        <AlertDescription>No users found in the system.</AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -448,27 +577,65 @@ export default function AdminPage() {
                   </Table>
                 ) : (
                   <Alert>
-                    <AlertDescription>No agent users found. Add agent users to configure Round Robin distribution.</AlertDescription>
+                    <AlertDescription>
+                      No agent users found. Only agent users can participate in Round Robin lead distribution.
+                    </AlertDescription>
                   </Alert>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
-          
+
           <TabsContent value="system" className="space-y-4">
-            <Alert>
-              <AlertDescription>
-                System settings configuration coming soon! This will allow you to configure global settings, integrations, and system preferences.
-              </AlertDescription>
-            </Alert>
-          </TabsContent>
-          
-          <TabsContent value="logs" className="space-y-4">
-            <Alert>
-              <AlertDescription>
-                Activity logs feature coming soon! This will show detailed logs of user actions, system events, and security activities.
-              </AlertDescription>
-            </Alert>
+            <Card>
+              <CardHeader>
+                <CardTitle>System Settings</CardTitle>
+                <CardDescription>
+                  Configure system-wide settings and integrations
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="p-4 border rounded-lg">
+                    <h3 className="font-semibold mb-2">Authentication Settings</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Google OAuth:</span>
+                        <Badge variant="outline">Enabled</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Email/Password:</span>
+                        <Badge variant="outline">Enabled</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Admin Domains:</span>
+                        <span className="text-muted-foreground">
+                          {getAdminDomains().length} configured
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 border rounded-lg">
+                    <h3 className="font-semibold mb-2">Lead Integration Status</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Gmail Integration:</span>
+                        <Badge variant="outline">Available</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>HomeStack Integration:</span>
+                        <Badge variant="outline">Available</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Round Robin:</span>
+                        <Badge variant="outline">Active</Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

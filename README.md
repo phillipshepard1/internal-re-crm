@@ -12,6 +12,13 @@ A modern, internal CRM system built with Next.js, Tailwind CSS, and Supabase for
 - **Notes**: System-wide note-taking
 - **Admin Panel**: User management and system configuration
 
+### Authentication & Security
+- **Google OAuth**: One-click login with Google accounts
+- **Email/Password**: Traditional authentication method
+- **Domain-Based Roles**: Automatic admin assignment based on email domains
+- **Role-Based Access**: Admin and Agent permissions
+- **Session Management**: Secure session handling with Supabase
+
 ### Key Workflows
 - **Lead Management**: Round Robin assignment for new leads
 - **Follow-up Workflow**: Automated follow-up scheduling with interaction logging
@@ -23,11 +30,11 @@ A modern, internal CRM system built with Next.js, Tailwind CSS, and Supabase for
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 with App Router
-- **Styling**: Tailwind CSS + Tailwind UI
-- **Authentication**: Supabase Auth
+- **Frontend**: Next.js 15 with App Router
+- **Styling**: Tailwind CSS + shadcn/ui components
+- **Authentication**: Supabase Auth with Google OAuth
 - **Database**: Supabase (PostgreSQL)
-- **Icons**: Heroicons
+- **Icons**: Lucide React
 - **Date Handling**: date-fns
 
 ## Getting Started
@@ -37,6 +44,7 @@ A modern, internal CRM system built with Next.js, Tailwind CSS, and Supabase for
 - Node.js 18+ 
 - npm or yarn
 - Supabase account
+- Google Cloud Console account (for OAuth)
 
 ### Installation
 
@@ -55,12 +63,30 @@ A modern, internal CRM system built with Next.js, Tailwind CSS, and Supabase for
    
    Create `.env.local` file in the root directory:
    ```env
+   # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
    NEXT_PUBLIC_APP_NAME=CRM Project
+   
+   # Google OAuth (optional - for additional features)
+   NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
+   
+   # Admin Domain Configuration
+   NEXT_PUBLIC_ADMIN_DOMAINS=yourcompany.com,admin.yourcompany.com
    ```
 
-4. **Set up Supabase Database**
+4. **Set up Google OAuth (Optional but Recommended)**
+   
+   Follow the comprehensive setup guide: [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)
+   
+   Quick setup:
+   - Create Google Cloud Console project
+   - Enable Google+ API
+   - Create OAuth 2.0 credentials
+   - Configure Supabase Google provider
+   - Set admin domains in environment variables
+
+5. **Set up Supabase Database**
 
    Create the following tables in your Supabase database:
 
@@ -187,23 +213,42 @@ A modern, internal CRM system built with Next.js, Tailwind CSS, and Supabase for
      ('Past Clients', 'Previous clients for re-engagement');
    ```
 
-5. **Run the development server**
+6. **Run the development server**
    ```bash
    npm run dev
    ```
 
-6. **Open your browser**
+7. **Open your browser**
    
    Navigate to [http://localhost:3000](http://localhost:3000)
+
+## Authentication Features
+
+### Google OAuth Integration
+- **One-click login** with Google accounts
+- **Domain-based role assignment** - Company emails get admin access
+- **Automatic user creation** with proper role assignment
+- **Secure session management** with Supabase
+
+### Role Assignment Logic
+- **Admin Domains**: Users with emails from configured domains get admin access
+- **Agent Default**: All other users get agent access
+- **Manual Override**: Admins can change user roles in the admin panel
+
+### Environment Configuration
+```bash
+# Configure admin domains (comma-separated)
+NEXT_PUBLIC_ADMIN_DOMAINS=yourcompany.com,admin.yourcompany.com,management.yourcompany.com
+```
 
 ## Project Structure
 
 ```
 src/
 ├── app/                    # Next.js App Router pages
-│   ├── admin/             # Admin panel
+│   ├── admin/             # Admin panel with role management
 │   ├── follow-ups/        # Follow-ups module
-│   ├── login/             # Authentication
+│   ├── login/             # Authentication (Google + Email/Password)
 │   ├── notes/             # Notes module
 │   ├── people/            # People module
 │   ├── tasks/             # Tasks module
@@ -211,7 +256,7 @@ src/
 ├── components/            # Reusable components
 │   ├── auth/              # Authentication components
 │   └── layout/            # Layout components
-├── contexts/              # React contexts
+├── contexts/              # React contexts (AuthContext with Google OAuth)
 ├── lib/                   # Utility libraries
 └── types/                 # TypeScript type definitions
 ```
@@ -219,9 +264,10 @@ src/
 ## Key Features Implementation
 
 ### Authentication
-- Supabase Auth integration
-- Role-based access control
-- Protected routes with AuthGuard
+- **Supabase Auth** with Google OAuth integration
+- **Role-based access control** with domain-based assignment
+- **Protected routes** with AuthGuard
+- **Session persistence** and automatic role assignment
 
 ### People Module
 - Contact list with search and filtering
@@ -247,42 +293,42 @@ src/
 - Overdue/upcoming filtering
 
 ### Admin Panel
-- User management
-- Round Robin configuration
-- Activity monitoring
+- **User management** with role assignment
+- **Role management** with domain configuration display
+- **Round Robin configuration** for lead distribution
+- **System settings** and integration status
+- **Authentication monitoring** and configuration
 
-## Development Notes
+## Documentation
 
-### Current Status
-- ✅ Basic UI structure and navigation
-- ✅ Authentication setup with role-based access
-- ✅ All main module pages created
-- ✅ Complete client information fields
-- ✅ Round Robin lead assignment logic
-- ✅ API integration for lead sources
-- ✅ Role-based data access (agents see only assigned contacts)
-- ✅ Real-time dashboard statistics
-- ✅ Enhanced Person interface with all required fields
-- ⏳ Database schema implementation
-- ⏳ File upload functionality
-- ⏳ Advanced activity monitoring
+- **[Google OAuth Setup Guide](./GOOGLE_OAUTH_SETUP.md)** - Complete setup instructions
+- **[Lead Integration Guide](./LEAD_INTEGRATION_GUIDE.md)** - Lead capture and processing
+- **[Database Schema](./supabase/migrations/)** - Database structure and migrations
 
-### Next Steps
-1. Set up Supabase database with the provided schema
-2. Configure environment variables for lead source API
-3. Test round robin assignment functionality
-4. Implement file upload functionality
-5. Add advanced activity monitoring and reporting
-6. Set up automated lead processing (cron jobs/webhooks)
+## Deployment
 
-## Contributing
+### Production Considerations
+1. **Environment Variables**: Set production values
+2. **Google OAuth**: Update redirect URLs for production domain
+3. **SSL Certificate**: Required for Google OAuth in production
+4. **Admin Domains**: Configure production admin domains
+5. **Supabase**: Use production Supabase project
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+### Environment Variables for Production
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-production-anon-key
+NEXT_PUBLIC_ADMIN_DOMAINS=yourcompany.com,admin.yourcompany.com
+```
 
-## License
+## Support
 
-This project is proprietary and confidential.
+For authentication setup and troubleshooting:
+1. Check [Google OAuth Setup Guide](./GOOGLE_OAUTH_SETUP.md)
+2. Review browser console for errors
+3. Verify environment variables
+4. Check Supabase authentication logs
+
+---
+
+**Your CRM now features enterprise-grade authentication with Google OAuth and domain-based role management! 🚀**

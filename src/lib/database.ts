@@ -1,6 +1,53 @@
 import { supabase } from './supabase'
 import type { Person, Note, Task, FollowUp, Activity } from './supabase'
 
+// Role management utilities
+export const getAdminDomains = (): string[] => {
+  const domains = process.env.NEXT_PUBLIC_ADMIN_DOMAINS
+  return domains ? domains.split(',').map(d => d.trim()) : []
+}
+
+export const assignUserRole = async (userId: string, email: string): Promise<'admin' | 'agent'> => {
+  const adminDomains = getAdminDomains()
+  const userDomain = email?.split('@')[1]
+  
+  // Check if user's email domain is in admin domains
+  const role = adminDomains.includes(userDomain || '') ? 'admin' : 'agent'
+  
+  // Create or update user record with assigned role
+  const { error } = await supabase
+    .from('users')
+    .upsert({
+      id: userId,
+      email: email,
+      role: role,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+  
+  if (error) {
+    console.error('Error assigning user role:', error)
+    throw error
+  }
+  
+  return role
+}
+
+export const updateUserRole = async (userId: string, newRole: 'admin' | 'agent'): Promise<void> => {
+  const { error } = await supabase
+    .from('users')
+    .update({
+      role: newRole,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', userId)
+  
+  if (error) {
+    console.error('Error updating user role:', error)
+    throw error
+  }
+}
+
 // People/Contacts
 export async function getPeople(userId?: string, userRole?: string) {
   let query = supabase
