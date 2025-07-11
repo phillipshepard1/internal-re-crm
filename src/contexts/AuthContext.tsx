@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserRole(null);
           setRoleError(null);
         }
-      } catch (err) {
+      } catch {
         setUser(null);
         setUserRole(null);
         setRoleError('Session restoration failed.');
