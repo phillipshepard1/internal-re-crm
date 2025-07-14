@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { usePagination } from '@/hooks/usePagination'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 
 export default function PeoplePage() {
   const { user, userRole } = useAuth()
@@ -42,6 +44,21 @@ export default function PeoplePage() {
     `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (person.email && person.email[0]?.toLowerCase().includes(searchQuery.toLowerCase()))
   )
+
+  const {
+    currentData: paginatedPeople,
+    currentPage,
+    totalPages,
+    totalItems,
+    goToPage,
+    hasNextPage,
+    hasPreviousPage,
+    startIndex,
+    endIndex
+  } = usePagination({
+    data: filteredPeople,
+    itemsPerPage: 10
+  })
 
   if (loading) {
     return (
@@ -126,6 +143,7 @@ export default function PeoplePage() {
           </CardHeader>
           <CardContent>
             {filteredPeople.length > 0 ? (
+              <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -139,7 +157,7 @@ export default function PeoplePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPeople.map((person) => (
+                    {paginatedPeople.map((person) => (
                     <TableRow key={person.id}>
                       <TableCell className="font-medium">
                         <Link 
@@ -212,6 +230,19 @@ export default function PeoplePage() {
                   ))}
                 </TableBody>
               </Table>
+                  <div className="mt-4">
+                    <DataTablePagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      totalItems={totalItems}
+                      startIndex={startIndex}
+                      endIndex={endIndex}
+                      onPageChange={goToPage}
+                      hasNextPage={hasNextPage}
+                      hasPreviousPage={hasPreviousPage}
+                    />
+                  </div>
+                </>
             ) : (
               <Alert>
                 <AlertDescription>

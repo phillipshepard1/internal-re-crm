@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { usePagination } from '@/hooks/usePagination'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { AlertModal } from '@/components/ui/alert-modal'
 
 export default function NotesPage() {
@@ -35,6 +37,21 @@ export default function NotesPage() {
     title: '',
     message: '',
     type: 'info'
+  })
+
+  const {
+    currentData: paginatedNotes,
+    currentPage,
+    totalPages,
+    totalItems,
+    goToPage,
+    hasNextPage,
+    hasPreviousPage,
+    startIndex,
+    endIndex
+  } = usePagination({
+    data: notes,
+    itemsPerPage: 10
   })
 
   useEffect(() => {
@@ -244,17 +261,18 @@ export default function NotesPage() {
           </CardHeader>
           <CardContent>
             {notes.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Content</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {notes.map((note) => (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Content</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedNotes.map((note) => (
                     <TableRow key={note.id}>
                       <TableCell className="font-medium">{note.title}</TableCell>
                       <TableCell className="max-w-[300px] truncate">
@@ -303,13 +321,22 @@ export default function NotesPage() {
                   ))}
                 </TableBody>
               </Table>
+              <div className="mt-4">
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  startIndex={startIndex}
+                  endIndex={endIndex}
+                  onPageChange={goToPage}
+                  hasNextPage={hasNextPage}
+                  hasPreviousPage={hasPreviousPage}
+                />
+              </div>
+            </>
             ) : (
               <Alert>
                 <AlertDescription>No notes found. Create your first note to get started.</AlertDescription>
-                <Button onClick={handleCreateNote} className="mt-4">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First Note
-                </Button>
               </Alert>
             )}
           </CardContent>

@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react'
 import { getFollowUps, updateFollowUp, createFollowUp, createActivity, createNote } from '@/lib/database'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { usePagination } from '@/hooks/usePagination'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectItem } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
 import type { FollowUp, Person } from '@/lib/supabase';
 type FollowUpWithPerson = FollowUp & { people?: Person };
@@ -34,7 +36,7 @@ function isOverdue(fu: FollowUpWithPerson) {
 }
 
 export default function FollowUpsPage() {
-  const { user } = useAuth()
+  const { user, userRole } = useAuth()
   const [followUps, setFollowUps] = useState<FollowUpWithPerson[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,12 +55,33 @@ export default function FollowUpsPage() {
   const [scheduleNotes, setScheduleNotes] = useState('')
   const [scheduleSaving, setScheduleSaving] = useState(false)
 
+  const filteredFollowUps = followUps.filter(fu =>
+    filter === 'upcoming'
+      ? fu.status !== 'completed' && new Date(fu.scheduled_date) >= new Date()
+      : isOverdue(fu)
+  )
+
+  const {
+    currentData: paginatedFollowUps,
+    currentPage,
+    totalPages,
+    totalItems,
+    goToPage,
+    hasNextPage,
+    hasPreviousPage,
+    startIndex,
+    endIndex
+  } = usePagination({
+    data: filteredFollowUps,
+    itemsPerPage: 10
+  })
+
   useEffect(() => {
     async function loadFollowUps() {
       try {
         setLoading(true)
         setError('')
-        const data = await getFollowUps()
+        const data = await getFollowUps(user?.id, userRole || undefined)
         setFollowUps(data)
       } catch {
         setError('Failed to load follow-ups')
@@ -73,7 +96,7 @@ export default function FollowUpsPage() {
   useEffect(() => {
     async function loadPeople() {
       try {
-        const data = await (await import('@/lib/database')).getPeople()
+        const data = await (await import('@/lib/database')).getPeople(user?.id, userRole || undefined)
         setPeopleOptions(data)
       } catch {}
     }
@@ -124,10 +147,9 @@ export default function FollowUpsPage() {
         status: 'pending',
         type: activeFollowUp.type || 'call',
         notes: '',
-        assigned_to: activeFollowUp.people?.assigned_to,
       })
       // 4. Refresh list
-      const data = await getFollowUps()
+      const data = await getFollowUps(user?.id, userRole || undefined)
       setFollowUps(data)
       closeModal()
     } catch {
@@ -158,9 +180,8 @@ export default function FollowUpsPage() {
         status: 'pending',
         type: followUpType,
         notes: scheduleNotes,
-        assigned_to: peopleOptions.find(p => p.id === selectedPersonId)?.assigned_to,
       })
-      const data = await getFollowUps()
+      const data = await getFollowUps(user?.id, userRole || undefined)
       setFollowUps(data)
       closeScheduleModal()
     } catch {
@@ -169,12 +190,6 @@ export default function FollowUpsPage() {
       setScheduleSaving(false)
     }
   }
-
-  const filteredFollowUps = followUps.filter(fu =>
-    filter === 'upcoming'
-      ? fu.status !== 'completed' && new Date(fu.scheduled_date) >= new Date()
-      : isOverdue(fu)
-  )
 
   return (
     <div className="flex-1 p-4 md:p-8 pt-6">
@@ -213,8 +228,9 @@ export default function FollowUpsPage() {
               No follow-ups found. Schedule your first follow-up to get started.
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredFollowUps.map((fu: FollowUpWithPerson) => (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {paginatedFollowUps.map((fu: FollowUpWithPerson) => (
                 <Card key={fu.id} className={`border ${isOverdue(fu) ? 'border-destructive' : ''}`}>
                   <CardHeader>
                     <CardTitle>
@@ -233,6 +249,19 @@ export default function FollowUpsPage() {
                 </Card>
               ))}
             </div>
+            <div className="mt-4">
+              <DataTablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={goToPage}
+                hasNextPage={hasNextPage}
+                hasPreviousPage={hasPreviousPage}
+              />
+            </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -251,9 +280,14 @@ export default function FollowUpsPage() {
             <div>
               <label className="block mb-1 font-medium">Next Follow-up</label>
               <Select value={String(nextFollowUpDays)} onValueChange={v => setNextFollowUpDays(Number(v))}>
-                {NEXT_FOLLOWUP_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                ))}
+                <SelectTrigger>
+                  {NEXT_FOLLOWUP_OPTIONS.find(opt => opt.value === nextFollowUpDays)?.label || 'Select...'}
+                </SelectTrigger>
+                <SelectContent>
+                  {NEXT_FOLLOWUP_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
           </div>

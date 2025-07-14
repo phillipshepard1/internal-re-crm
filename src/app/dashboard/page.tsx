@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { User, Users, CheckCircle, AlertCircle } from 'lucide-react'
-import { getDashboardStats } from '@/lib/database'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { User, CheckCircle, AlertCircle, Activity, Clock } from 'lucide-react'
+import { getDashboardStats, getRecentActivities, getPeople, getFollowUps, getTasks } from '@/lib/database'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface DashboardStats {
   totalPeople: number
@@ -13,22 +16,52 @@ interface DashboardStats {
   totalTasks: number
 }
 
+interface ActivityWithDetails {
+  id: string
+  person_id: string
+  type: 'created' | 'follow_up' | 'note_added' | 'task_added'
+  description: string
+  created_by: string
+  created_at: string
+  people?: {
+    id: string
+    first_name: string
+    last_name: string
+    assigned_to: string
+  }
+}
+
 export default function DashboardPage() {
+  const { user, userRole } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentActivities, setRecentActivities] = useState<ActivityWithDetails[]>([])
+  const [myPeople, setMyPeople] = useState<any[]>([])
+  const [myFollowUps, setMyFollowUps] = useState<any[]>([])
+  const [myTasks, setMyTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await getDashboardStats()
-      setStats(data)
+      const [statsData, activitiesData, peopleData, followUpsData, tasksData] = await Promise.all([
+        getDashboardStats(),
+        getRecentActivities(10),
+        getPeople(user?.id, userRole || undefined),
+        getFollowUps(user?.id, userRole || undefined),
+        getTasks(undefined, user?.id, userRole || undefined)
+      ])
+      setStats(statsData)
+      setRecentActivities(activitiesData)
+      setMyPeople(peopleData)
+      setMyFollowUps(followUpsData)
+      setMyTasks(tasksData)
     } catch {
       setError('Failed to load dashboard data')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user?.id, userRole])
 
   useEffect(() => {
     loadDashboardData()
@@ -56,47 +89,188 @@ export default function DashboardPage() {
     )
   }
 
+  const myLeads = myPeople.filter(p => p.client_type === 'lead')
+  const pendingFollowUps = myFollowUps.filter(f => f.status === 'pending')
+  const overdueFollowUps = pendingFollowUps.filter(f => new Date(f.scheduled_date) < new Date())
+  const pendingTasks = myTasks.filter(t => t.status === 'pending')
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+      <div className="flex items-center justify-between space-y-2">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-muted-foreground">
+            Welcome back! Here&apos;s what&apos;s happening with your leads and contacts.
+          </p>
+        </div>
+      </div>
+
+      {/* Main Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total People</CardTitle>
+            <CardTitle className="text-sm font-medium">My People</CardTitle>
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalPeople ?? 0}</div>
-            <p className="text-xs text-muted-foreground">All contacts in CRM</p>
+            <div className="text-2xl font-bold">{myPeople.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {myLeads.length} leads, {myPeople.length - myLeads.length} clients
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Pending Follow-ups</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalLeads ?? 0}</div>
-            <p className="text-xs text-muted-foreground">Leads in the system</p>
+            <div className="text-2xl font-bold">{pendingFollowUps.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {overdueFollowUps.length} overdue
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Follow Ups</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalFollowUps ?? 0}</div>
-            <p className="text-xs text-muted-foreground">Scheduled follow-ups</p>
+            <div className="text-2xl font-bold">{pendingTasks.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Tasks to complete
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tasks</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalTasks ?? 0}</div>
-            <p className="text-xs text-muted-foreground">Open tasks</p>
+            <div className="text-2xl font-bold">{recentActivities.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Last 7 days
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activities */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activities</CardTitle>
+          <CardDescription>
+            Your latest interactions and activities
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentActivities.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentActivities.map((activity) => (
+                  <TableRow key={activity.id}>
+                    <TableCell>
+                      <Badge variant={
+                        activity.type === 'created' ? 'default' :
+                        activity.type === 'follow_up' ? 'secondary' :
+                        activity.type === 'note_added' ? 'outline' :
+                        'secondary'
+                      }>
+                        {activity.type.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {activity.people ? `${activity.people.first_name} ${activity.people.last_name}` : 'N/A'}
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {activity.description}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(activity.created_at).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Alert>
+              <AlertDescription>No recent activities found.</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Overdue Follow-ups</CardTitle>
+            <CardDescription>
+              Follow-ups that need attention
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {overdueFollowUps.length > 0 ? (
+              <div className="space-y-2">
+                {overdueFollowUps.slice(0, 5).map((followUp) => (
+                  <div key={followUp.id} className="flex items-center justify-between p-2 border rounded">
+                    <div>
+                      <p className="font-medium">
+                        {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {followUp.type} - {new Date(followUp.scheduled_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge variant="destructive">Overdue</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Alert>
+                <AlertDescription>No overdue follow-ups!</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending Tasks</CardTitle>
+            <CardDescription>
+              Tasks that need completion
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pendingTasks.length > 0 ? (
+              <div className="space-y-2">
+                {pendingTasks.slice(0, 5).map((task) => (
+                  <div key={task.id} className="flex items-center justify-between p-2 border rounded">
+                    <div>
+                      <p className="font-medium">{task.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No due date'}
+                      </p>
+                    </div>
+                    <Badge variant="outline">Pending</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Alert>
+                <AlertDescription>No pending tasks!</AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       </div>

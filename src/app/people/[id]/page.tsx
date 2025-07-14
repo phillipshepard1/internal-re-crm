@@ -219,11 +219,11 @@ export default function PersonDetailPage() {
       type: 'warning',
       showCancel: true,
       onConfirm: async () => {
-        try {
-          await deletePerson(person.id)
-          router.push('/people')
+    try {
+      await deletePerson(person.id)
+      router.push('/people')
         } catch (err: unknown) {
-          console.error('Error deleting person:', err)
+      console.error('Error deleting person:', err)
           
           // Check if it's a foreign key constraint error
           if (err && typeof err === 'object' && 'code' in err && err.code === '23503') {
@@ -243,7 +243,7 @@ export default function PersonDetailPage() {
                 message: 'Failed to delete person: ' + errorMessage,
                 type: 'error'
               })
-            }
+    }
         }
       }
     })
@@ -468,19 +468,19 @@ export default function PersonDetailPage() {
   return (
     <TooltipProvider>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-                    <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm" onClick={() => router.back()}>
-                      <ArrowLeft className="mr-2 h-4 w-4" />
-                      Back
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Go back to people list</p>
-                  </TooltipContent>
-                </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={() => router.back()}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Go back to people list</p>
+              </TooltipContent>
+            </Tooltip>
                 <div className="flex items-center space-x-4">
                   <div className="relative group">
                     {person.profile_picture ? (
@@ -520,16 +520,16 @@ export default function PersonDetailPage() {
                       </label>
                     </div>
                   </div>
-                  <div>
-                    <h2 className="text-3xl font-bold tracking-tight">
-                      {person.first_name} {person.last_name}
-                    </h2>
-                    <p className="text-muted-foreground">
-                      Contact details and information
-                    </p>
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">
+                {person.first_name} {person.last_name}
+              </h2>
+              <p className="text-muted-foreground">
+                Contact details and information
+              </p>
                   </div>
-                </div>
-              </div>
+            </div>
+          </div>
           <div className="flex items-center space-x-2">
             <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
               <DialogTrigger asChild>
@@ -1158,7 +1158,7 @@ export default function PersonDetailPage() {
                             <span className="text-muted-foreground">Notes:</span> {notes.length}
                           </div>
                         )}
-                        {tasks.length > 0 && (
+                  {tasks.length > 0 && (
                           <div>
                             <span className="text-muted-foreground">Tasks:</span> {tasks.length}
                           </div>
@@ -1390,9 +1390,9 @@ export default function PersonDetailPage() {
                   <Dialog open={showFileModal} onOpenChange={setShowFileModal}>
                     <DialogTrigger asChild>
                       <Button>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Upload File
-                      </Button>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload File
+                  </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
@@ -1470,13 +1470,13 @@ export default function PersonDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
+                <div className="text-center py-8">
+                  <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
                     <h3 className="mt-4 text-lg font-semibold">No files uploaded yet</h3>
-                    <p className="text-muted-foreground">
+                  <p className="text-muted-foreground">
                       Upload your first file to get started.
-                    </p>
-                  </div>
+                  </p>
+                </div>
                 )}
               </CardContent>
             </Card>

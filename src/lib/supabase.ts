@@ -76,10 +76,13 @@ export interface FollowUp {
   scheduled_date: string
   status: 'pending' | 'completed' | 'cancelled'
   notes: string | null
-  assigned_to: string
   created_at: string
   updated_at: string
   type: 'call' | 'email' | 'meeting' | 'task' | 'other'
+}
+
+export interface FollowUpWithPerson extends FollowUp {
+  people?: Person
 }
 
 export interface Activity {
@@ -98,7 +101,7 @@ export interface RoundRobinConfig {
   priority: number
   created_at: string
   updated_at: string
-}
+} 
 
 export interface File {
   id: string

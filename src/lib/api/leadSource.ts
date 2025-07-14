@@ -114,15 +114,15 @@ function transformApiResponse(apiResponse: unknown): LeadData[] {
  */
 export async function processNewLeads(config: LeadSourceConfig): Promise<number> {
   try {
-    console.log('Fetching new leads from API...')
+
     const leads = await fetchNewLeads(config)
     
     if (leads.length === 0) {
-      console.log('No new leads found')
+  
       return 0
     }
 
-    console.log(`Found ${leads.length} new leads, processing...`)
+
     
     let processedCount = 0
     
@@ -130,14 +130,14 @@ export async function processNewLeads(config: LeadSourceConfig): Promise<number>
       try {
         await assignLeadToRoundRobin(lead)
         processedCount++
-        console.log(`Processed lead: ${lead.first_name} ${lead.last_name}`)
+
       } catch (error) {
         console.error(`Failed to process lead ${lead.first_name} ${lead.last_name}:`, error)
         // Continue processing other leads even if one fails
       }
     }
 
-    console.log(`Successfully processed ${processedCount} out of ${leads.length} leads`)
+
     return processedCount
   } catch (error) {
     console.error('Error processing new leads:', error)
@@ -169,7 +169,7 @@ export async function handleLeadWebhook(payload: unknown): Promise<boolean> {
     // Assign the lead via round robin
     await assignLeadToRoundRobin(leadData)
     
-    console.log(`Webhook lead processed: ${leadData.first_name} ${leadData.last_name}`)
+
     return true
   } catch (error) {
     console.error('Error processing webhook lead:', error)

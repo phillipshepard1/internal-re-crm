@@ -30,7 +30,7 @@ export async function getNextRoundRobinUser(): Promise<string | null> {
     }
 
     if (!data || data.length === 0) {
-      console.log('No active users in Round Robin queue')
+  
       return null
     }
 
@@ -104,7 +104,7 @@ export async function assignLeadToRoundRobin(leadData: LeadData): Promise<boolea
       created_by: assignedUserId,
     })
 
-    console.log(`Lead assigned to user ${assignedUserId}: ${leadData.first_name} ${leadData.last_name}`)
+
     return true
   } catch (error) {
     console.error('Error assigning lead via Round Robin:', error)
@@ -146,7 +146,7 @@ export class RoundRobinService {
         created_by: nextUserId,
       })
 
-      console.log(`Lead assigned to user ${nextUserId}:`, newPerson)
+  
       return true
       
     } catch (error) {

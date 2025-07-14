@@ -76,7 +76,7 @@ export class GmailIntegration {
           const person = await EmailLeadProcessor.createPersonFromEmail(lead)
           if (person) {
             processedCount++
-            console.log(`Processed lead from email: ${person.first_name} ${person.last_name}`)
+        
           }
         }
       }
@@ -228,7 +228,7 @@ export class GmailIntegration {
       }
       
       const data = await response.json()
-      console.log('Gmail push notifications setup:', data)
+  
       return true
     } catch (error) {
       console.error('Error setting up push notifications:', error)
@@ -255,7 +255,7 @@ export class GmailIntegration {
         throw new Error(`Failed to stop push notifications: ${response.statusText}`)
       }
       
-      console.log('Gmail push notifications stopped')
+  
       return true
     } catch (error) {
       console.error('Error stopping push notifications:', error)

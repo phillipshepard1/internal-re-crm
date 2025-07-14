@@ -343,9 +343,9 @@ export default function AddPersonPage() {
                         onChange={(e) => setFormData(prev => ({ ...prev, profile_picture: e.target.value }))}
                         placeholder="Enter profile picture URL"
                         className="mt-1"
-                      />
-                    </div>
-                  </div>
+                  />
+                </div>
+              </div>
 
                   <div className="grid gap-2">
                     <label htmlFor="clientType" className="text-sm font-medium">Client Type</label>

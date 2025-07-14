@@ -92,7 +92,7 @@ export class HomeStackIntegration {
         const person = await this.createPersonFromLead(lead)
         if (person) {
           processedCount++
-          console.log(`Processed HomeStack lead: ${person.first_name} ${person.last_name}`)
+      
         }
       } catch (error) {
         console.error(`Error processing lead ${lead.id}:`, error)

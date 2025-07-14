@@ -26,7 +26,7 @@ export class EmailLeadProcessor {
       // Extract lead data based on source
       const leadData = await this.extractLeadData(source, subject, body)
       if (!leadData) {
-        console.log('No lead data found in email:', subject)
+    
         return null
       }
       return {
@@ -276,7 +276,7 @@ export class EmailLeadProcessor {
         created_by: assignedUserId,
       })
       
-      console.log(`New lead created from email: ${newPerson.first_name} ${newPerson.last_name}`)
+  
       return newPerson
       
     } catch (error) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus, Crown } from 'lucide-react'
-import { getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus, updateUserRole, getAdminDomains } from '@/lib/database'
+import { getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus, updateUserRole } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertModal } from '@/components/ui/alert-modal'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ActivityDashboard } from '@/components/admin/ActivityDashboard'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -280,20 +281,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Admin Domains</CardTitle>
-              <Crown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {getAdminDomains().length}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Configured admin domains
-              </p>
-            </CardContent>
-          </Card>
+
         </div>
 
         <Tabs defaultValue="users" className="space-y-4">
@@ -302,6 +290,7 @@ export default function AdminPage() {
             <TabsTrigger value="roundRobin">Round Robin</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
             <TabsTrigger value="system">System Settings</TabsTrigger>
+            <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
           </TabsList>
           
           <TabsContent value="users" className="space-y-4">
@@ -403,33 +392,11 @@ export default function AdminPage() {
               <CardHeader>
                 <CardTitle>Role Management</CardTitle>
                 <CardDescription>
-                  Manage user roles and permissions. Google users are automatically assigned roles based on their email domain.
+                  Manage user roles and permissions. All new users are assigned agent roles by default.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {/* Admin Domains Configuration */}
-                  <div className="p-4 border rounded-lg bg-muted/50">
-                    <h3 className="font-semibold mb-2">Admin Domain Configuration</h3>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Users with emails from these domains will automatically be assigned admin roles:
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {getAdminDomains().length > 0 ? (
-                        getAdminDomains().map((domain) => (
-                          <Badge key={domain} variant="outline">
-                            @{domain}
-                          </Badge>
-                        ))
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No admin domains configured</p>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Configure admin domains in your environment variables (NEXT_PUBLIC_ADMIN_DOMAINS)
-                    </p>
-                  </div>
-
                   {/* Role Management Table */}
                   <div>
                     <h3 className="font-semibold mb-3">User Role Management</h3>
@@ -440,63 +407,47 @@ export default function AdminPage() {
                             <TableHead>User</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead>Current Role</TableHead>
-                            <TableHead>Domain</TableHead>
                             <TableHead>Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {users.map((user) => {
-                            const userDomain = user.email.split('@')[1]
-                            const isAdminDomain = getAdminDomains().includes(userDomain)
-                            
-                            return (
-                              <TableRow key={user.id}>
-                                <TableCell className="font-medium">
-                                  {user.email.split('@')[0]}
-                                </TableCell>
-                                <TableCell>
-                                  {user.email}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                                    {user.role}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center space-x-2">
-                                    <span>@{userDomain}</span>
-                                    {isAdminDomain && (
-                                      <Badge variant="outline" className="text-xs">
-                                        Admin Domain
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center space-x-2">
-                                    <Select
-                                      value={user.role}
-                                      onValueChange={(value: 'admin' | 'agent') => 
-                                        handleRoleChange(user.id, value)
-                                      }
-                                      disabled={roleUpdateLoading === user.id}
-                                    >
-                                      <SelectTrigger className="w-32">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="agent">Agent</SelectItem>
-                                        <SelectItem value="admin">Admin</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    {roleUpdateLoading === user.id && (
-                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
+                          {users.map((user) => (
+                            <TableRow key={user.id}>
+                              <TableCell className="font-medium">
+                                {user.email.split('@')[0]}
+                              </TableCell>
+                              <TableCell>
+                                {user.email}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                                  {user.role}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center space-x-2">
+                                  <Select
+                                    value={user.role}
+                                    onValueChange={(value: 'admin' | 'agent') => 
+                                      handleRoleChange(user.id, value)
+                                    }
+                                    disabled={roleUpdateLoading === user.id}
+                                  >
+                                    <SelectTrigger className="w-32">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="agent">Agent</SelectItem>
+                                      <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  {roleUpdateLoading === user.id && (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
                         </TableBody>
                       </Table>
                     ) : (
@@ -640,10 +591,8 @@ export default function AdminPage() {
                         <Badge variant="outline">Enabled</Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span>Admin Domains:</span>
-                        <span className="text-muted-foreground">
-                          {getAdminDomains().length} configured
-                        </span>
+                        <span>Role Assignment:</span>
+                        <Badge variant="outline">Manual</Badge>
                       </div>
                     </div>
                   </div>
@@ -668,6 +617,10 @@ export default function AdminPage() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="activity" className="space-y-4">
+            <ActivityDashboard users={users} />
           </TabsContent>
         </Tabs>
       </div>

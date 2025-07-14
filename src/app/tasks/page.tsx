@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { usePagination } from '@/hooks/usePagination'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { AlertModal } from '@/components/ui/alert-modal'
 
 const statusOptions = [
@@ -45,6 +47,21 @@ export default function TasksPage() {
     title: '',
     message: '',
     type: 'info'
+  })
+
+  const {
+    currentData: paginatedTasks,
+    currentPage,
+    totalPages,
+    totalItems,
+    goToPage,
+    hasNextPage,
+    hasPreviousPage,
+    startIndex,
+    endIndex
+  } = usePagination({
+    data: tasks,
+    itemsPerPage: 10
   })
 
   const loadTasks = useCallback(async () => {
@@ -284,6 +301,7 @@ export default function TasksPage() {
           </CardHeader>
           <CardContent>
             {tasks.length > 0 ? (
+              <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -295,7 +313,7 @@ export default function TasksPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tasks.map((task) => (
+                    {paginatedTasks.map((task) => (
                     <TableRow key={task.id}>
                       <TableCell className="font-medium">{task.title}</TableCell>
                       <TableCell className="max-w-[200px] truncate">
@@ -345,6 +363,19 @@ export default function TasksPage() {
                   ))}
                 </TableBody>
               </Table>
+              <div className="mt-4">
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  startIndex={startIndex}
+                  endIndex={endIndex}
+                  onPageChange={goToPage}
+                  hasNextPage={hasNextPage}
+                  hasPreviousPage={hasPreviousPage}
+                />
+              </div>
+            </>
             ) : (
               <Alert>
                 <AlertDescription>No tasks found. Create your first task to get started.</AlertDescription>
