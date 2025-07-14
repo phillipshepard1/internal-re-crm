@@ -10,16 +10,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   useEffect(() => {
-    console.log('AuthGuard - user:', user?.email, 'loading:', loading, 'pathname:', pathname)
-    
     if (!loading && !user && pathname !== '/login') {
-      console.log('Redirecting to login - no user')
       router.push('/login')
     }
     
     // If user is authenticated and on login page, redirect to dashboard
     if (!loading && user && pathname === '/login') {
-      console.log('Redirecting to dashboard - user authenticated')
       router.push('/dashboard')
     }
   }, [user, loading, router, pathname])
@@ -29,7 +25,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading authentication...</p>
+          <p className="mt-4 text-muted-foreground">Loading...</p>
         </div>
       </div>
     )

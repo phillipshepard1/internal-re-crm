@@ -43,30 +43,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    // Clean up hash fragments from OAuth redirects
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const cleanUrl = window.location.href.split('#')[0]
-      window.history.replaceState({}, document.title, cleanUrl)
-    }
 
-    // Handle OAuth redirect completion
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search)
-      const accessToken = urlParams.get('access_token')
-      const refreshToken = urlParams.get('refresh_token')
-      
-      if (accessToken || refreshToken) {
-        // OAuth redirect detected, let Supabase handle it
-        console.log('OAuth redirect detected, processing...')
-      }
-    }
 
     async function restoreSession() {
       try {
-        console.log('Restoring session...')
         const { data: { session } } = await supabase.auth.getSession();
-        console.log('Session found:', !!session, session?.user?.email)
-        
         if (!isMounted) return;
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -119,8 +100,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes (sign in/out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, session?.user?.email);
-      
       setUser(session?.user ?? null);
       if (session?.user) {
         try {
