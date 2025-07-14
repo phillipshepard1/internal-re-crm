@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertModal } from '@/components/ui/alert-modal'
 
 export default function NotesPage() {
   const [notes, setNotes] = useState<Note[]>([])
@@ -22,6 +23,19 @@ export default function NotesPage() {
   const [noteTitle, setNoteTitle] = useState('')
   const [noteContent, setNoteContent] = useState('')
   const [saving, setSaving] = useState(false)
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+    onConfirm?: () => void
+    showCancel?: boolean
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
 
   useEffect(() => {
     loadNotes()
@@ -82,22 +96,39 @@ export default function NotesPage() {
       setNoteContent('')
     } catch (err) {
       console.error('Error saving note:', err)
-      alert('Failed to save note')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to save note',
+        type: 'error'
+      })
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteNote = async (noteId: string) => {
-    if (!confirm('Are you sure you want to delete this note?')) return
-
-    try {
-      await deleteNote(noteId)
-      setNotes(notes.filter(note => note.id !== noteId))
-    } catch (err) {
-      console.error('Error deleting note:', err)
-      alert('Failed to delete note')
-    }
+    setAlertModal({
+      open: true,
+      title: 'Confirm Deletion',
+      message: 'Are you sure you want to delete this note?',
+      type: 'warning',
+      showCancel: true,
+      onConfirm: async () => {
+        try {
+          await deleteNote(noteId)
+          setNotes(notes.filter(note => note.id !== noteId))
+        } catch (err) {
+          console.error('Error deleting note:', err)
+          setAlertModal({
+            open: true,
+            title: 'Error',
+            message: 'Failed to delete note',
+            type: 'error'
+          })
+        }
+      }
+    })
   }
 
   if (loading) {
@@ -284,6 +315,16 @@ export default function NotesPage() {
           </CardContent>
         </Card>
       </div>
+      
+      <AlertModal
+        open={alertModal.open}
+        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onConfirm={alertModal.onConfirm}
+        showCancel={alertModal.showCancel}
+      />
     </TooltipProvider>
   )
 } 

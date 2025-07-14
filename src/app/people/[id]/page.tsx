@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload } from 'lucide-react'
-import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask } from '@/lib/database'
-import type { Person, Note, Task } from '@/lib/supabase'
+import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare } from 'lucide-react'
+import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles } from '@/lib/database'
+import { supabase } from '@/lib/supabase'
+import type { Person, Note, Task, Activity as ActivityType, File } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { AlertModal } from '@/components/ui/alert-modal'
 
 const clientTypeOptions = [
   { value: 'lead', label: 'Lead' },
@@ -26,6 +28,20 @@ const clientTypeOptions = [
   { value: 'vendor', label: 'Vendor' },
 ]
 
+const bestToReachOptions = [
+  { value: 'phone', label: 'Phone' },
+  { value: 'text', label: 'Text' },
+  { value: 'email', label: 'Email' },
+  { value: 'mail', label: 'Mail' },
+]
+
+const listOptions = [
+  { value: 'vip_clients', label: 'VIP Clients' },
+  { value: 'hot_leads', label: 'Hot Leads' },
+  { value: 'cold_leads', label: 'Cold Leads' },
+  { value: 'past_clients', label: 'Past Clients' },
+]
+
 export default function PersonDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -33,17 +49,36 @@ export default function PersonDetailPage() {
   const [person, setPerson] = useState<Person | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [activities, setActivities] = useState<ActivityType[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showEditModal, setShowEditModal] = useState(false)
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [showTaskModal, setShowTaskModal] = useState(false)
+  const [showFileModal, setShowFileModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [noteTitle, setNoteTitle] = useState('')
   const [noteContent, setNoteContent] = useState('')
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDescription, setTaskDescription] = useState('')
   const [taskDueDate, setTaskDueDate] = useState('')
+  const [selectedFile, setSelectedFile] = useState<globalThis.File | null>(null)
+  const [fileDescription, setFileDescription] = useState('')
+  const [selectedProfilePicture, setSelectedProfilePicture] = useState<globalThis.File | null>(null)
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+    onConfirm?: () => void
+    showCancel?: boolean
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -58,6 +93,16 @@ export default function PersonDetailPage() {
     country: '',
     client_type: 'lead',
     notes: '',
+    // Missing fields
+    profile_picture: '',
+    birthday: '',
+    mailing_address: '',
+    relationship_id: '',
+    best_to_reach_by: '',
+    lists: [] as string[],
+    looking_for: '',
+    selling: '',
+    closed: '',
   })
 
   const loadPerson = useCallback(async () => {
@@ -66,15 +111,19 @@ export default function PersonDetailPage() {
     try {
       setLoading(true)
       const personId = params.id as string
-      const [personData, notesData, tasksData] = await Promise.all([
+      const [personData, notesData, tasksData, activitiesData, filesData] = await Promise.all([
         getPersonById(personId, user?.id, userRole || undefined),
         getNotes(personId),
         getTasks(personId, user?.id, userRole || undefined),
+        getActivities(personId),
+        getFiles(personId),
       ])
       
       setPerson(personData)
       setNotes(notesData)
       setTasks(tasksData)
+      setActivities(activitiesData)
+      setUploadedFiles(filesData)
       // setFollowUps(followUpsData.filter(f => f.person_id === personId)) // This line was removed from original, so it's removed here.
       // setActivities(activitiesData) // This line was removed from original, so it's removed here.
 
@@ -93,6 +142,15 @@ export default function PersonDetailPage() {
         country: personData.country || '',
         client_type: personData.client_type || 'lead',
         notes: personData.notes || '',
+        profile_picture: personData.profile_picture || '',
+        birthday: personData.birthday || '',
+        mailing_address: personData.mailing_address || '',
+        relationship_id: personData.relationship_id || '',
+        best_to_reach_by: personData.best_to_reach_by || '',
+        lists: personData.lists || [],
+        looking_for: personData.looking_for || '',
+        selling: personData.selling || '',
+        closed: personData.closed || '',
       })
     } catch (err) {
       console.error('Error loading person:', err)
@@ -125,27 +183,66 @@ export default function PersonDetailPage() {
         country: formData.country,
         client_type: formData.client_type as 'lead' | 'prospect' | 'client' | 'partner' | 'vendor',
         notes: formData.notes,
+        profile_picture: formData.profile_picture,
+        birthday: formData.birthday || null,
+        mailing_address: formData.mailing_address,
+        relationship_id: formData.relationship_id || null,
+        best_to_reach_by: formData.best_to_reach_by,
+        lists: formData.lists,
+        looking_for: formData.looking_for,
+        selling: formData.selling,
+        closed: formData.closed,
       })
       setPerson(updatedPerson)
       setShowEditModal(false)
     } catch (err) {
       console.error('Error updating person:', err)
-      alert('Failed to update person')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to update person',
+        type: 'error'
+      })
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!person || !confirm('Are you sure you want to delete this person?')) return
+    if (!person) return
 
-    try {
-      await deletePerson(person.id)
-      router.push('/people')
-    } catch (err) {
-      console.error('Error deleting person:', err)
-      alert('Failed to delete person')
-    }
+    setAlertModal({
+      open: true,
+      title: 'Confirm Deletion',
+      message: 'Are you sure you want to delete this person? This action cannot be undone and will also delete all related notes, tasks, follow-ups, and files.',
+      type: 'warning',
+      showCancel: true,
+      onConfirm: async () => {
+        try {
+          await deletePerson(person.id)
+          router.push('/people')
+        } catch (err: any) {
+          console.error('Error deleting person:', err)
+          
+          // Check if it's a foreign key constraint error
+          if (err.code === '23503') {
+            setAlertModal({
+              open: true,
+              title: 'Cannot Delete',
+              message: 'Cannot delete this person because they have related records (notes, tasks, follow-ups, or files). Please delete all related records first, or contact an administrator.',
+              type: 'error'
+            })
+          } else {
+            setAlertModal({
+              open: true,
+              title: 'Error',
+              message: 'Failed to delete person: ' + (err.message || 'Unknown error'),
+              type: 'error'
+            })
+          }
+        }
+      }
+    })
   }
 
   const handleSaveNote = async () => {
@@ -165,7 +262,12 @@ export default function PersonDetailPage() {
       setNoteContent('')
     } catch (err) {
       console.error('Error creating note:', err)
-      alert('Failed to create note')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to create note',
+        type: 'error'
+      })
     } finally {
       setSaving(false)
     }
@@ -191,7 +293,115 @@ export default function PersonDetailPage() {
       setTaskDueDate('')
     } catch (err) {
       console.error('Error creating task:', err)
-      alert('Failed to create task')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to create task',
+        type: 'error'
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleFileUpload = async () => {
+    if (!person || !selectedFile) return
+
+    try {
+      setSaving(true)
+      
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('personId', person.id)
+      formData.append('description', fileDescription)
+      formData.append('userId', user?.id || '')
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload file')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setUploadedFiles([result.file, ...uploadedFiles])
+        setShowFileModal(false)
+        setSelectedFile(null)
+        setFileDescription('')
+      } else {
+        throw new Error(result.error || 'Upload failed')
+      }
+    } catch (err) {
+      console.error('Error uploading file:', err)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to upload file',
+        type: 'error'
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+
+
+  const handleProfilePictureUpload = async () => {
+    if (!person || !selectedProfilePicture) return
+
+    try {
+      setSaving(true)
+      
+
+      
+      const formData = new FormData()
+      formData.append('file', selectedProfilePicture)
+      formData.append('personId', person.id)
+      formData.append('description', 'Profile Picture')
+      formData.append('userId', user?.id || '')
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload profile picture')
+      }
+
+      const result = await response.json()
+      
+
+      
+      if (result.success) {
+        // Update the person's profile picture URL
+        const updatedPerson = await updatePerson(person.id, {
+          profile_picture: result.publicUrl
+        })
+        setPerson(updatedPerson)
+        setFormData(prev => ({ ...prev, profile_picture: result.publicUrl }))
+        setSelectedProfilePicture(null)
+        setAlertModal({
+          open: true,
+          title: 'Success',
+          message: 'Profile picture uploaded successfully!',
+          type: 'success'
+        })
+      } else {
+        throw new Error(result.error || 'Upload failed')
+      }
+    } catch (err) {
+      console.error('Error uploading profile picture:', err)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to upload profile picture',
+        type: 'error'
+      })
     } finally {
       setSaving(false)
     }
@@ -254,34 +464,72 @@ export default function PersonDetailPage() {
   return (
     <TooltipProvider>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={() => router.back()}>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Go back to people list</p>
-              </TooltipContent>
-            </Tooltip>
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">
-                {person.first_name} {person.last_name}
-              </h2>
-              <p className="text-muted-foreground">
-                Contact details and information
-              </p>
-            </div>
-          </div>
+                    <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" onClick={() => router.back()}>
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Go back to people list</p>
+                  </TooltipContent>
+                </Tooltip>
+                <div className="flex items-center space-x-4">
+                  <div className="relative group">
+                    {person.profile_picture ? (
+                      <img
+                        src={person.profile_picture}
+                        alt={`${person.first_name} ${person.last_name}`}
+                        className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
+                        <User className="w-8 h-8 text-gray-500" />
+                      </div>
+                    )}
+                    
+                    {/* Quick Upload Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              setSelectedProfilePicture(file)
+                              // We'll handle the upload in the edit modal for better UX
+                              setShowEditModal(true)
+                            }
+                          }}
+                        />
+                        <Upload className="w-6 h-6 text-white" />
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-bold tracking-tight">
+                      {person.first_name} {person.last_name}
+                    </h2>
+                    <p className="text-muted-foreground">
+                      Contact details and information
+                    </p>
+                  </div>
+                </div>
+              </div>
           <div className="flex items-center space-x-2">
             <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
               <DialogTrigger asChild>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button>
+                    <Button onClick={() => setShowEditModal(true)}>
                       <Edit className="mr-2 h-4 w-4" />
                       Edit
                     </Button>
@@ -441,6 +689,186 @@ export default function PersonDetailPage() {
                       rows={4}
                     />
                   </div>
+
+                  {/* Profile Picture */}
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Profile Picture</label>
+                    
+                    {/* Current Profile Picture Display */}
+                    {formData.profile_picture && (
+                      <div className="flex items-center space-x-4 mb-4">
+                        <img
+                          src={formData.profile_picture}
+                          alt="Current profile picture"
+                          className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                        <div className="text-sm text-muted-foreground">
+                          Current profile picture
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* File Upload */}
+                    <div className="space-y-2">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          setSelectedProfilePicture(e.target.files?.[0] || null)
+                        }}
+                        className="cursor-pointer"
+                      />
+                      {selectedProfilePicture ? (
+                        <div className="flex items-center space-x-2">
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            onClick={handleProfilePictureUpload}
+                            disabled={saving}
+                          >
+                            {saving ? 'Uploading...' : 'Upload Profile Picture'}
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            {selectedProfilePicture.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          No file selected
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* URL Input (fallback) */}
+                    <div className="mt-2">
+                      <label htmlFor="profilePictureUrl" className="text-sm font-medium text-muted-foreground">
+                        Or enter URL manually:
+                      </label>
+                      <Input
+                        id="profilePictureUrl"
+                        value={formData.profile_picture}
+                        onChange={(e) => setFormData(prev => ({ ...prev, profile_picture: e.target.value }))}
+                        placeholder="Enter profile picture URL"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Birthday */}
+                  <div className="grid gap-2">
+                    <label htmlFor="birthday" className="text-sm font-medium">Birthday</label>
+                    <Input
+                      id="birthday"
+                      type="date"
+                      value={formData.birthday}
+                      onChange={(e) => setFormData(prev => ({ ...prev, birthday: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Mailing Address */}
+                  <div className="grid gap-2">
+                    <label htmlFor="mailingAddress" className="text-sm font-medium">Mailing Address</label>
+                    <Textarea
+                      id="mailingAddress"
+                      value={formData.mailing_address}
+                      onChange={(e) => setFormData(prev => ({ ...prev, mailing_address: e.target.value }))}
+                      placeholder="Enter mailing address"
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Best to Reach By */}
+                  <div className="grid gap-2">
+                    <label htmlFor="bestToReachBy" className="text-sm font-medium">Best to Reach By</label>
+                    <Select value={formData.best_to_reach_by} onValueChange={(value) => setFormData(prev => ({ ...prev, best_to_reach_by: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select preferred contact method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bestToReachOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Relationship */}
+                  <div className="grid gap-2">
+                    <label htmlFor="relationship" className="text-sm font-medium">Relationship</label>
+                    <Input
+                      id="relationship"
+                      value={formData.relationship_id}
+                      onChange={(e) => setFormData(prev => ({ ...prev, relationship_id: e.target.value }))}
+                      placeholder="Enter relationship or link to another contact"
+                    />
+                  </div>
+
+                  {/* Lists */}
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Lists</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {listOptions.map((option) => (
+                        <label key={option.value} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.lists.includes(option.value)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData(prev => ({ ...prev, lists: [...prev.lists, option.value] }))
+                              } else {
+                                setFormData(prev => ({ ...prev, lists: prev.lists.filter(list => list !== option.value) }))
+                              }
+                            }}
+                            className="rounded"
+                          />
+                          <span className="text-sm">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Properties Section */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Properties</h4>
+                    
+                    <div className="grid gap-2">
+                      <label htmlFor="lookingFor" className="text-sm font-medium">Looking For</label>
+                      <Textarea
+                        id="lookingFor"
+                        value={formData.looking_for}
+                        onChange={(e) => setFormData(prev => ({ ...prev, looking_for: e.target.value }))}
+                        placeholder="Describe what properties they're looking for"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <label htmlFor="selling" className="text-sm font-medium">Selling</label>
+                      <Textarea
+                        id="selling"
+                        value={formData.selling}
+                        onChange={(e) => setFormData(prev => ({ ...prev, selling: e.target.value }))}
+                        placeholder="Describe properties they're selling"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <label htmlFor="closed" className="text-sm font-medium">Closed</label>
+                      <Textarea
+                        id="closed"
+                        value={formData.closed}
+                        onChange={(e) => setFormData(prev => ({ ...prev, closed: e.target.value }))}
+                        placeholder="Describe closed transactions"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div className="flex justify-end space-x-2">
                   <Button variant="outline" onClick={() => setShowEditModal(false)}>
@@ -452,6 +880,8 @@ export default function PersonDetailPage() {
                 </div>
               </DialogContent>
             </Dialog>
+            
+
             
             <Tooltip>
               <TooltipTrigger asChild>
@@ -473,7 +903,7 @@ export default function PersonDetailPage() {
             <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="notes">Notes ({notes.length})</TabsTrigger>
             <TabsTrigger value="tasks">Tasks ({tasks.length})</TabsTrigger>
-            <TabsTrigger value="files">Files</TabsTrigger>
+            <TabsTrigger value="files">Files ({uploadedFiles.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -517,6 +947,33 @@ export default function PersonDetailPage() {
                     <div className="flex items-center space-x-2">
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span>{person.position}</span>
+                    </div>
+                  )}
+
+                  {person.birthday && (
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span>Birthday: {new Date(person.birthday).toLocaleDateString()}</span>
+                    </div>
+                  )}
+
+                  {person.best_to_reach_by && (
+                    <div className="flex items-center space-x-2">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      <span>Best to reach by: {person.best_to_reach_by}</span>
+                    </div>
+                  )}
+
+                  {person.lists && person.lists.length > 0 && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium">Lists:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {person.lists.map((list, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {listOptions.find(option => option.value === list)?.label || list}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -581,6 +1038,40 @@ export default function PersonDetailPage() {
               </CardContent>
             </Card>
 
+            {/* Properties Information */}
+            {(person.looking_for || person.selling || person.closed) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <MapPin className="mr-2 h-5 w-5" />
+                    Properties
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {person.looking_for && (
+                    <div>
+                      <h4 className="text-sm font-medium text-green-600">Looking For</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{person.looking_for}</p>
+                    </div>
+                  )}
+                  
+                  {person.selling && (
+                    <div>
+                      <h4 className="text-sm font-medium text-blue-600">Selling</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{person.selling}</p>
+                    </div>
+                  )}
+                  
+                  {person.closed && (
+                    <div>
+                      <h4 className="text-sm font-medium text-purple-600">Closed</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{person.closed}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* General Notes */}
             {person.notes && (
               <Card>
@@ -607,17 +1098,37 @@ export default function PersonDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
+                  {/* Contact creation activity */}
                   <div className="flex items-center space-x-3 p-3 bg-muted rounded-lg">
                     <div className="w-2 h-2 bg-primary rounded-full"></div>
                     <div className="flex-1">
                       <p className="text-sm font-medium">Contact created</p>
                       <p className="text-xs text-muted-foreground">
-                        Created by {user?.email} on {new Date(person.created_at).toLocaleDateString()}
+                        Created on {new Date(person.created_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
                   
-                  {person.last_interaction && (
+                  {/* Real activities from database */}
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="flex items-center space-x-3 p-3 bg-muted rounded-lg">
+                      <div className={`w-2 h-2 rounded-full ${
+                        activity.type === 'created' ? 'bg-primary' :
+                        activity.type === 'follow_up' ? 'bg-green-500' :
+                        activity.type === 'note_added' ? 'bg-blue-500' :
+                        activity.type === 'task_added' ? 'bg-orange-500' : 'bg-gray-500'
+                      }`}></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{activity.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(activity.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Last interaction if no activities */}
+                  {activities.length === 0 && person.last_interaction && (
                     <div className="flex items-center space-x-3 p-3 bg-muted rounded-lg">
                       <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                       <div className="flex-1">
@@ -629,26 +1140,21 @@ export default function PersonDetailPage() {
                     </div>
                   )}
                   
-                  {notes.length > 0 && (
-                    <div className="flex items-center space-x-3 p-3 bg-muted rounded-lg">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{notes.length} note{notes.length !== 1 ? 's' : ''} added</p>
-                        <p className="text-xs text-muted-foreground">
-                          Latest: {new Date(notes[0]?.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {tasks.length > 0 && (
-                    <div className="flex items-center space-x-3 p-3 bg-muted rounded-lg">
-                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{tasks.length} task{tasks.length !== 1 ? 's' : ''} created</p>
-                        <p className="text-xs text-muted-foreground">
-                          Latest: {new Date(tasks[0]?.created_at).toLocaleDateString()}
-                        </p>
+                  {/* Summary stats */}
+                  {(notes.length > 0 || tasks.length > 0) && (
+                    <div className="mt-6 p-4 border rounded-lg">
+                      <h4 className="text-sm font-medium mb-2">Summary</h4>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        {notes.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Notes:</span> {notes.length}
+                          </div>
+                        )}
+                        {tasks.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Tasks:</span> {tasks.length}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -873,25 +1379,112 @@ export default function PersonDetailPage() {
                       Files related to this contact
                     </CardDescription>
                   </div>
-                  <Button disabled>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload File
-                  </Button>
+                  <Dialog open={showFileModal} onOpenChange={setShowFileModal}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload File
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Upload File</DialogTitle>
+                        <DialogDescription>
+                          Upload a file related to this contact.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                          <label htmlFor="file" className="text-sm font-medium">File</label>
+                          <Input
+                            id="file"
+                            type="file"
+                            onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="fileDescription" className="text-sm font-medium">Description</label>
+                          <Textarea
+                            id="fileDescription"
+                            value={fileDescription}
+                            onChange={(e) => setFileDescription(e.target.value)}
+                            placeholder="Enter file description"
+                            rows={3}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-2">
+                        <Button variant="outline" onClick={() => setShowFileModal(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleFileUpload} disabled={!selectedFile || saving}>
+                          {saving ? 'Uploading...' : 'Upload File'}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8">
-                  <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <h3 className="mt-4 text-lg font-semibold">File upload coming soon</h3>
-                  <p className="text-muted-foreground">
-                    File upload functionality will be implemented in a future update.
-                  </p>
-                </div>
+                {uploadedFiles.length > 0 ? (
+                  <div className="space-y-4">
+                    {uploadedFiles.map((file) => (
+                      <div key={file.id} className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <Upload className="h-4 w-4 text-muted-foreground" />
+                            <h4 className="font-medium">{file.filename}</h4>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(file.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm text-muted-foreground">
+                            <p>Size: {file.file_size ? `${(file.file_size / 1024).toFixed(2)} KB` : 'Unknown'}</p>
+                            <p>Type: {file.mime_type || 'Unknown'}</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // Get the public URL from Supabase
+                              const { data } = supabase.storage
+                                .from('internal-re-crm-files')
+                                .getPublicUrl(file.file_path)
+                              window.open(data.publicUrl, '_blank')
+                            }}
+                          >
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <h3 className="mt-4 text-lg font-semibold">No files uploaded yet</h3>
+                    <p className="text-muted-foreground">
+                      Upload your first file to get started.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
+      
+      <AlertModal
+        open={alertModal.open}
+        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onConfirm={alertModal.onConfirm}
+        showCancel={alertModal.showCancel}
+      />
     </TooltipProvider>
   )
 } 

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, User, MapPin, Phone, MessageSquare } from 'lucide-react'
+import { ArrowLeft, Plus, User, MapPin, Phone, MessageSquare, Upload } from 'lucide-react'
 import { createPerson } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertModal } from '@/components/ui/alert-modal'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -42,6 +43,19 @@ export default function AddPersonPage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [selectedProfilePicture, setSelectedProfilePicture] = useState<globalThis.File | null>(null)
+  const [uploadingPicture, setUploadingPicture] = useState(false)
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -55,8 +69,10 @@ export default function AddPersonPage() {
     zip_code: '',
     country: '',
     client_type: 'lead',
+    profile_picture: '',
     birthday: '',
     mailing_address: '',
+    relationship_id: '',
     best_to_reach_by: '',
     notes: '',
     lists: [] as string[],
@@ -90,11 +106,16 @@ export default function AddPersonPage() {
         zip_code: formData.zip_code,
         country: formData.country,
         client_type: formData.client_type as 'lead' | 'prospect' | 'client' | 'partner' | 'vendor',
+        profile_picture: formData.profile_picture,
         birthday: formData.birthday || null,
         mailing_address: formData.mailing_address,
+        relationship_id: formData.relationship_id || null,
         best_to_reach_by: formData.best_to_reach_by,
         notes: formData.notes,
         lists: formData.lists,
+        looking_for: formData.looking_for,
+        selling: formData.selling,
+        closed: formData.closed,
         assigned_to: user?.id || '',
       })
       
@@ -142,6 +163,57 @@ export default function AddPersonPage() {
         ? prev.lists.filter(l => l !== listValue)
         : [...prev.lists, listValue]
     }))
+  }
+
+  const handleProfilePictureUpload = async () => {
+    if (!selectedProfilePicture) return
+
+    try {
+      setUploadingPicture(true)
+      
+      // Create a temporary person ID for upload
+      const tempPersonId = 'temp-' + Date.now()
+      
+      const formData = new FormData()
+      formData.append('file', selectedProfilePicture)
+      formData.append('personId', tempPersonId)
+      formData.append('description', 'Profile Picture')
+      formData.append('userId', user?.id || '')
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to upload profile picture')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setFormData(prev => ({ ...prev, profile_picture: result.publicUrl }))
+        setSelectedProfilePicture(null)
+        setAlertModal({
+          open: true,
+          title: 'Success',
+          message: 'Profile picture uploaded successfully!',
+          type: 'success'
+        })
+      } else {
+        throw new Error(result.error || 'Upload failed')
+      }
+    } catch (err) {
+      console.error('Error uploading profile picture:', err)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to upload profile picture',
+        type: 'error'
+      })
+    } finally {
+      setUploadingPicture(false)
+    }
   }
 
   return (
@@ -211,6 +283,66 @@ export default function AddPersonPage() {
                   />
                 </div>
               </div>
+
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Profile Picture</label>
+                    
+                    {/* Current Profile Picture Display */}
+                    {formData.profile_picture && (
+                      <div className="flex items-center space-x-4 mb-4">
+                        <img
+                          src={formData.profile_picture}
+                          alt="Profile picture preview"
+                          className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none'
+                          }}
+                        />
+                        <div className="text-sm text-muted-foreground">
+                          Profile picture preview
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* File Upload */}
+                    <div className="space-y-2">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setSelectedProfilePicture(e.target.files?.[0] || null)}
+                        className="cursor-pointer"
+                      />
+                      {selectedProfilePicture && (
+                        <div className="flex items-center space-x-2">
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            onClick={handleProfilePictureUpload}
+                            disabled={uploadingPicture}
+                          >
+                            {uploadingPicture ? 'Uploading...' : 'Upload Profile Picture'}
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            {selectedProfilePicture.name}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* URL Input (fallback) */}
+                    <div className="mt-2">
+                      <label htmlFor="profilePictureUrl" className="text-sm font-medium text-muted-foreground">
+                        Or enter URL manually:
+                      </label>
+                      <Input
+                        id="profilePictureUrl"
+                        value={formData.profile_picture}
+                        onChange={(e) => setFormData(prev => ({ ...prev, profile_picture: e.target.value }))}
+                        placeholder="Enter profile picture URL"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
 
                   <div className="grid gap-2">
                     <label htmlFor="clientType" className="text-sm font-medium">Client Type</label>
@@ -480,6 +612,16 @@ export default function AddPersonPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-2">
+                    <label htmlFor="relationship" className="text-sm font-medium">Relationship</label>
+                    <Input
+                      id="relationship"
+                      value={formData.relationship_id}
+                      onChange={(e) => setFormData(prev => ({ ...prev, relationship_id: e.target.value }))}
+                      placeholder="Enter relationship or link to another contact"
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
                     <label htmlFor="bestToReachBy" className="text-sm font-medium">Best To Reach By</label>
                 <Select
                       value={formData.best_to_reach_by}
@@ -534,6 +676,14 @@ export default function AddPersonPage() {
               </div>
             </form>
       </div>
+      
+      <AlertModal
+        open={alertModal.open}
+        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
     </TooltipProvider>
   )
 } 

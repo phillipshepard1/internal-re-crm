@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertModal } from '@/components/ui/alert-modal'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
@@ -23,6 +24,17 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [roleUpdateLoading, setRoleUpdateLoading] = useState<string | null>(null)
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
 
   const loadData = useCallback(async () => {
     try {
@@ -71,7 +83,12 @@ export default function AdminPage() {
       await loadData() // Reload data
     } catch (err) {
       console.error('Error adding user to Round Robin:', err)
-      alert('Failed to add user to Round Robin. The Round Robin table may not exist yet.')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to add user to Round Robin. The Round Robin table may not exist yet.',
+        type: 'error'
+      })
     }
   }
 
@@ -81,7 +98,12 @@ export default function AdminPage() {
       await loadData() // Reload data
     } catch (err) {
       console.error('Error removing user from Round Robin:', err)
-      alert('Failed to remove user from Round Robin. The Round Robin table may not exist yet.')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to remove user from Round Robin. The Round Robin table may not exist yet.',
+        type: 'error'
+      })
     }
   }
 
@@ -91,7 +113,12 @@ export default function AdminPage() {
       await loadData() // Reload data
     } catch (err) {
       console.error('Error updating Round Robin status:', err)
-      alert('Failed to update Round Robin status. The Round Robin table may not exist yet.')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to update Round Robin status. The Round Robin table may not exist yet.',
+        type: 'error'
+      })
     }
   }
 
@@ -102,7 +129,12 @@ export default function AdminPage() {
       await loadData() // Reload data
     } catch (err) {
       console.error('Error updating user role:', err)
-      alert('Failed to update user role.')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to update user role.',
+        type: 'error'
+      })
     } finally {
       setRoleUpdateLoading(null)
     }
@@ -639,6 +671,14 @@ export default function AdminPage() {
           </TabsContent>
         </Tabs>
       </div>
+      
+      <AlertModal
+        open={alertModal.open}
+        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
     </TooltipProvider>
   )
 } 

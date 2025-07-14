@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Person, Note, Task, FollowUp, Activity } from './supabase'
+import type { Person, Note, Task, FollowUp, Activity, File } from './supabase'
 
 // Role management utilities
 export const getAdminDomains = (): string[] => {
@@ -93,6 +93,58 @@ export async function getPersonById(id: string, userId?: string, userRole?: stri
 }
 
 export async function deletePerson(id: string) {
+  // First, delete all related records
+  const { error: activitiesError } = await supabase
+    .from('activities')
+    .delete()
+    .eq('person_id', id)
+  
+  if (activitiesError) {
+    console.error('Error deleting activities:', activitiesError)
+    throw activitiesError
+  }
+
+  const { error: notesError } = await supabase
+    .from('notes')
+    .delete()
+    .eq('person_id', id)
+  
+  if (notesError) {
+    console.error('Error deleting notes:', notesError)
+    throw notesError
+  }
+
+  const { error: tasksError } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('person_id', id)
+  
+  if (tasksError) {
+    console.error('Error deleting tasks:', tasksError)
+    throw tasksError
+  }
+
+  const { error: followUpsError } = await supabase
+    .from('follow_ups')
+    .delete()
+    .eq('person_id', id)
+  
+  if (followUpsError) {
+    console.error('Error deleting follow-ups:', followUpsError)
+    throw followUpsError
+  }
+
+  const { error: filesError } = await supabase
+    .from('files')
+    .delete()
+    .eq('person_id', id)
+  
+  if (filesError) {
+    console.error('Error deleting files:', filesError)
+    throw filesError
+  }
+
+  // Finally, delete the person
   const { error } = await supabase
     .from('people')
     .delete()
@@ -489,6 +541,39 @@ export async function createTestLead(leadData: {
 }
 
 // Dashboard statistics
+// Files
+export async function getFiles(personId?: string) {
+  let query = supabase.from('files').select('*').order('created_at', { ascending: false })
+  
+  if (personId) {
+    query = query.eq('person_id', personId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+export async function createFile(fileData: Partial<File>) {
+  const { data, error } = await supabase
+    .from('files')
+    .insert([fileData])
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function deleteFile(id: string) {
+  const { error } = await supabase
+    .from('files')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
 export async function getDashboardStats(): Promise<{
   totalPeople: number
   totalLeads: number

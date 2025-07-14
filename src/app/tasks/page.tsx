@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertModal } from '@/components/ui/alert-modal'
 
 const statusOptions = [
   { value: 'pending', label: 'Pending', color: 'bg-yellow-100 text-yellow-800' },
@@ -34,6 +35,17 @@ export default function TasksPage() {
   const [taskDueDate, setTaskDueDate] = useState('')
   const [taskStatus, setTaskStatus] = useState('pending')
   const [saving, setSaving] = useState(false)
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
 
   const loadTasks = useCallback(async () => {
     try {
@@ -106,7 +118,12 @@ export default function TasksPage() {
       setTaskStatus('pending')
     } catch (err) {
       console.error('Error saving task:', err)
-      alert('Failed to save task')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to save task',
+        type: 'error'
+      })
     } finally {
       setSaving(false)
     }
@@ -122,7 +139,12 @@ export default function TasksPage() {
       ))
     } catch (err) {
       console.error('Error updating task status:', err)
-      alert('Failed to update task status')
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to update task status',
+        type: 'error'
+      })
     }
   }
 
@@ -335,6 +357,14 @@ export default function TasksPage() {
           </CardContent>
         </Card>
       </div>
+      
+      <AlertModal
+        open={alertModal.open}
+        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
     </TooltipProvider>
   )
 } 

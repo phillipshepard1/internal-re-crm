@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertModal } from '@/components/ui/alert-modal'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -27,6 +28,17 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const router = useRouter()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
 
   const handleLogout = async () => {
     try {
@@ -41,7 +53,12 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
       router.push('/admin')
     } else {
       // For non-admin users, could navigate to a user settings page
-      alert('Settings feature coming soon!')
+      setAlertModal({
+        open: true,
+        title: 'Coming Soon',
+        message: 'Settings feature coming soon!',
+        type: 'info'
+      })
     }
   }
 
@@ -238,6 +255,14 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
           </div>
         </div>
       </header>
+      
+      <AlertModal
+        open={alertModal.open}
+        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
     </TooltipProvider>
   )
 } 

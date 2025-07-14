@@ -98,4 +98,15 @@ export interface RoundRobinConfig {
   priority: number
   created_at: string
   updated_at: string
+}
+
+export interface File {
+  id: string
+  person_id: string | null
+  filename: string
+  file_path: string
+  file_size: number | null
+  mime_type: string | null
+  uploaded_by: string
+  created_at: string
 } 
