@@ -9,6 +9,16 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Handle OAuth redirects better
+  async redirects() {
+    return [
+      {
+        source: '/dashboard#',
+        destination: '/dashboard',
+        permanent: false,
+      },
+    ]
+  },
 };
 
 export default nextConfig;

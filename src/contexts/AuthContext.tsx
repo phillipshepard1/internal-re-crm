@@ -43,6 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
+    // Clean up hash fragments from OAuth redirects
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const cleanUrl = window.location.href.split('#')[0]
+      window.history.replaceState({}, document.title, cleanUrl)
+    }
+
     async function restoreSession() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -169,7 +175,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         queryParams: {
           access_type: 'offline',
           prompt: 'consent'
-        }
+        },
+        skipBrowserRedirect: false
       }
     })
     if (error) throw error
