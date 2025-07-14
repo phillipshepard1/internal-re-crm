@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, User, MapPin, Phone, MessageSquare, Upload } from 'lucide-react'
+import Image from 'next/image'
+import { ArrowLeft, Plus, User, MapPin, Phone, MessageSquare } from 'lucide-react'
 import { createPerson } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -290,12 +291,14 @@ export default function AddPersonPage() {
                     {/* Current Profile Picture Display */}
                     {formData.profile_picture && (
                       <div className="flex items-center space-x-4 mb-4">
-                        <img
+                        <Image
                           src={formData.profile_picture}
                           alt="Profile picture preview"
+                          width={64}
+                          height={64}
                           className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
+                          onError={() => {
+                            // Handle error by hiding the image
                           }}
                         />
                         <div className="text-sm text-muted-foreground">

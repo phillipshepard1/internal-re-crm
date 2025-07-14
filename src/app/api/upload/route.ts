@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const personId = formData.get('personId') as string
-    const description = formData.get('description') as string
+
     const userId = formData.get('userId') as string
 
     if (!file || !personId || !userId) {
@@ -20,12 +20,11 @@ export async function POST(request: NextRequest) {
 
     // Generate a unique filename to avoid conflicts
     const timestamp = Date.now()
-    const fileExtension = file.name.split('.').pop()
     const uniqueFilename = `${timestamp}-${file.name}`
     const filePath = `${personId}/${uniqueFilename}`
 
     // Upload file to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabaseServer.storage
+    const { error: uploadError } = await supabaseServer.storage
       .from('internal-re-crm-files')
       .upload(filePath, file, {
         cacheControl: '3600',

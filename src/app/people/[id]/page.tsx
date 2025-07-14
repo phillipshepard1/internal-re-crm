@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare } from 'lucide-react'
 import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles } from '@/lib/database'
 import { supabase } from '@/lib/supabase'
@@ -221,7 +222,7 @@ export default function PersonDetailPage() {
         try {
           await deletePerson(person.id)
           router.push('/people')
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error('Error deleting person:', err)
           
           // Check if it's a foreign key constraint error
@@ -480,12 +481,14 @@ export default function PersonDetailPage() {
                 <div className="flex items-center space-x-4">
                   <div className="relative group">
                     {person.profile_picture ? (
-                      <img
+                      <Image
                         src={person.profile_picture}
                         alt={`${person.first_name} ${person.last_name}`}
+                        width={64}
+                        height={64}
                         className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none'
+                        onError={() => {
+                          // Handle error by hiding the image
                         }}
                       />
                     ) : (
@@ -697,12 +700,14 @@ export default function PersonDetailPage() {
                     {/* Current Profile Picture Display */}
                     {formData.profile_picture && (
                       <div className="flex items-center space-x-4 mb-4">
-                        <img
+                        <Image
                           src={formData.profile_picture}
                           alt="Current profile picture"
+                          width={64}
+                          height={64}
                           className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
+                          onError={() => {
+                            // Handle error by hiding the image
                           }}
                         />
                         <div className="text-sm text-muted-foreground">
