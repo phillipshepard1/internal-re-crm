@@ -226,21 +226,24 @@ export default function PersonDetailPage() {
           console.error('Error deleting person:', err)
           
           // Check if it's a foreign key constraint error
-          if (err.code === '23503') {
+          if (err && typeof err === 'object' && 'code' in err && err.code === '23503') {
             setAlertModal({
               open: true,
               title: 'Cannot Delete',
               message: 'Cannot delete this person because they have related records (notes, tasks, follow-ups, or files). Please delete all related records first, or contact an administrator.',
               type: 'error'
             })
-          } else {
-            setAlertModal({
-              open: true,
-              title: 'Error',
-              message: 'Failed to delete person: ' + (err.message || 'Unknown error'),
-              type: 'error'
-            })
-          }
+                      } else {
+              const errorMessage = err && typeof err === 'object' && 'message' in err 
+                ? String(err.message) 
+                : 'Unknown error'
+              setAlertModal({
+                open: true,
+                title: 'Error',
+                message: 'Failed to delete person: ' + errorMessage,
+                type: 'error'
+              })
+            }
         }
       }
     })
