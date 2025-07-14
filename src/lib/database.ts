@@ -280,16 +280,20 @@ export async function getFollowUps(userId?: string, userRole?: string): Promise<
   
   const { data, error } = await query
   if (error) throw error
-  return data || []
+  
+  // Transform the data to match FollowUpWithPerson type
+  const transformedData = (data || []).map((item: any) => ({
+    ...item,
+    people: Array.isArray(item.people) ? item.people[0] : item.people
+  }))
+  
+  return transformedData
 }
 
 export async function createFollowUp(followUpData: Partial<FollowUp>) {
-  // Remove assigned_to from the data since it doesn't exist in the database
-  const { assigned_to, ...dataToInsert } = followUpData
-  
   const { data, error } = await supabase
     .from('follow_ups')
-    .insert([dataToInsert])
+    .insert([followUpData])
     .select()
     .single()
   
@@ -298,12 +302,9 @@ export async function createFollowUp(followUpData: Partial<FollowUp>) {
 }
 
 export async function updateFollowUp(id: string, updates: Partial<FollowUp>) {
-  // Remove assigned_to from the updates since it doesn't exist in the database
-  const { assigned_to, ...updatesToApply } = updates
-  
   const { data, error } = await supabase
     .from('follow_ups')
-    .update(updatesToApply)
+    .update(updates)
     .eq('id', id)
     .select()
     .single()
