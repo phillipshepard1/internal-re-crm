@@ -190,14 +190,50 @@ export default function IntegrationsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5" />
-                Gmail Lead Processing
+                Gmail Integration
               </CardTitle>
               <CardDescription>
-                Automatically capture leads from Gmail emails. This integration monitors your inbox
-                for lead notification emails from real estate portals and creates contacts automatically.
+                Connect your Gmail account to automatically process emails and extract leads
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* API Status */}
+              <div className="p-4 border rounded-lg bg-muted/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">API Access Status</span>
+                  <Badge variant="secondary">Pending Approval</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Google OAuth API access is required for Gmail integration. 
+                  Video demonstration has been prepared for submission.
+                </p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                    <span>Gmail API Access - Pending</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                    <span>OAuth Consent Screen - Ready</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                    <span>Video Demonstration - Ready</span>
+                  </div>
+                </div>
+                
+                {/* Configuration Instructions */}
+                <div className="mt-4 p-3 bg-background border rounded">
+                  <h4 className="text-sm font-medium mb-2">Configuration Steps:</h4>
+                  <ol className="text-xs text-muted-foreground space-y-1">
+                    <li>1. Submit video demonstration to Google</li>
+                    <li>2. Get API keys from Google Cloud Console</li>
+                    <li>3. Add environment variables to .env.local</li>
+                    <li>4. Test Gmail integration</li>
+                  </ol>
+                </div>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Switch
                   id="gmail-enabled"

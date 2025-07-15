@@ -91,7 +91,7 @@ export class GmailIntegration {
   /**
    * Get recent emails from Gmail
    */
-  private async getRecentEmails(maxResults: number): Promise<Record<string, unknown>[]> {
+  public async getRecentEmails(maxResults: number): Promise<Record<string, unknown>[]> {
     const response = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
       {
