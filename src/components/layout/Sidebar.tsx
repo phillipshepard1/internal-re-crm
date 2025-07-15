@@ -12,7 +12,8 @@ import {
   CheckSquare, 
   FileText, 
   Settings,
-  Mail
+  Mail,
+  Shield
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -27,7 +28,7 @@ const navigation = [
 ]
 
 const adminNavigation = [
-  { name: 'Admin Panel', href: '/admin', icon: Settings },
+  { name: 'Admin Panel', href: '/admin', icon: Shield },
 ]
 
 interface SidebarProps {

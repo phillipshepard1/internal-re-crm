@@ -18,7 +18,8 @@ import {
   Calendar,
   FileText,
   Activity,
-  Settings
+  Settings,
+  HelpCircle
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -104,6 +105,17 @@ Beth`,
       isRead: true,
       hasAttachments: false,
       body: 'New lead inquiry for the property at 58 Carrick Drive, Bella Vista, AR 72715. Please contact the client as soon as possible.',
+      to: 'me'
+    },
+    {
+      id: '4',
+      from: 'Support',
+      subject: '25 wins, halfway through 2025',
+      preview: 'Congratulations on reaching 25 wins this year...',
+      date: 'Jul 2',
+      isRead: true,
+      hasAttachments: false,
+      body: 'Congratulations on reaching 25 wins this year! You\'re making great progress.',
       to: 'me'
     }
   ]
@@ -210,19 +222,19 @@ Beth`,
 
   if (loading) {
     return (
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading inbox...</p>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-sm text-muted-foreground">Loading inbox...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 flex h-screen bg-background">
+    <div className=" container flex-1 flex h-[calc(100vh-4rem)] bg-background overflow-hidden">
       {/* Left Sidebar - Mailbox Navigation */}
-      <div className="w-64 border-r bg-muted/30">
+      <div className="w-[220px] border-r bg-muted/20 flex-shrink-0">
         <div className="p-4">
           <h2 className="text-lg font-semibold mb-4">My Inbox (1880)</h2>
           <nav className="space-y-1">
@@ -235,7 +247,7 @@ Beth`,
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
                     currentFolder === folder.id
                       ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
+                      : 'hover:bg-muted/60 text-muted-foreground'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -253,14 +265,14 @@ Beth`,
       </div>
 
       {/* Middle Panel - Email List */}
-      <div className="flex-1 flex flex-col border-r">
+      <div className="flex-1 flex flex-col border-r min-w-0">
         {/* Email List Header */}
-        <div className="p-4 border-b bg-background">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium">Select conversations</h3>
+        <div className="p-4 border-b bg-background flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-muted-foreground">Select conversations</h3>
             <Select>
-              <SelectTrigger className="w-32">
-                <Filter className="h-4 w-4 mr-2" />
+              <SelectTrigger className="w-32 h-8">
+                <Filter className="h-3 w-3 mr-2" />
                 <SelectValue placeholder="Filter" />
               </SelectTrigger>
               <SelectContent>
@@ -275,24 +287,24 @@ Beth`,
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search emails..."
+              placeholder="Search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 h-9"
             />
           </div>
         </div>
 
         {/* Email List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {filteredEmails.map((email) => (
             <div
               key={email.id}
               onClick={() => handleEmailSelect(email)}
-              className={`p-4 border-b cursor-pointer transition-colors ${
+              className={`p-3 border-b cursor-pointer transition-colors ${
                 selectedEmail?.id === email.id
                   ? 'bg-primary/5 border-primary/20'
-                  : 'hover:bg-muted/50'
+                  : 'hover:bg-muted/30 border-transparent'
               }`}
             >
               <div className="flex items-start gap-3">
@@ -326,68 +338,87 @@ Beth`,
 
       {/* Right Panel - Email Content */}
       {selectedEmail && (
-        <div className="w-96 flex flex-col border-r">
+        <div className="w-96 flex flex-col border-r flex-shrink-0">
           {/* Email Header */}
-          <div className="p-4 border-b bg-background">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>
+          <div className="p-4 border-b bg-background flex-shrink-0">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="text-sm">
                     {selectedEmail.from.split(' ').map(n => n[0]).join('').toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="font-medium text-sm">{selectedEmail.from}</div>
-                  <div className="text-xs text-muted-foreground">to me</div>
+                  <div className="text-xs text-muted-foreground">Last Communication 6 hours ago</div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setSelectedEmail(null)}>
-                  <X className="h-4 w-4" />
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Phone className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm">
-                  <MoreVertical className="h-4 w-4" />
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Video className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Mail className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-            <div className="text-sm text-muted-foreground mb-2">
-              {selectedEmail.date}, 6:31 pm
+            
+            {/* Contact Info */}
+            <div className="space-y-2 mb-4 text-sm">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span>{selectedContact?.phone}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <span>{selectedContact?.email}</span>
+              </div>
             </div>
-            <div className="font-medium text-sm mb-3">{selectedEmail.subject}</div>
+
+            {/* Email Details */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-medium">{selectedEmail.from}</span>
+                <span className="text-sm text-muted-foreground">to</span>
+                <Avatar className="h-6 w-6">
+                  <AvatarFallback className="text-xs">P</AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">me</span>
+              </div>
+              <div className="text-sm text-muted-foreground mb-2">
+                {selectedEmail.date}, 6:31 pm
+              </div>
+              <div className="font-medium text-sm mb-3">{selectedEmail.subject}</div>
+            </div>
             
             {/* Action Buttons */}
             <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Reply className="h-4 w-4 mr-1" />
+              <Button variant="outline" size="sm" className="h-8">
+                <Reply className="h-3 w-3 mr-1" />
                 Reply
               </Button>
-              <Button variant="outline" size="sm">
-                <ReplyAll className="h-4 w-4 mr-1" />
+              <Button variant="outline" size="sm" className="h-8">
+                <ReplyAll className="h-3 w-3 mr-1" />
                 Reply All
               </Button>
-              <Button variant="outline" size="sm">
-                <Forward className="h-4 w-4 mr-1" />
+              <Button variant="outline" size="sm" className="h-8">
+                <Forward className="h-3 w-3 mr-1" />
                 Forward
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={processEmailAsLead}
-                disabled={processingEmail}
-              >
-                {processingEmail ? 'Processing...' : 'Import as Lead'}
               </Button>
             </div>
           </div>
 
           {/* Email Body */}
-          <div className="flex-1 p-4 overflow-y-auto">
-            <div className="prose prose-sm max-w-none">
-              <p className="whitespace-pre-wrap">{selectedEmail.body}</p>
+          <div className="flex-1 p-4 overflow-y-auto min-h-0">
+            <div className="prose prose-sm max-w-none mb-4">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{selectedEmail.body}</p>
             </div>
             
             {selectedEmail.hasAttachments && (
-              <div className="mt-4 p-3 border rounded-lg">
+              <div className="mb-4 p-3 border rounded-lg bg-muted/20">
                 <div className="flex items-center gap-2">
                   <Paperclip className="h-4 w-4" />
                   <span className="text-sm font-medium">
@@ -398,8 +429,8 @@ Beth`,
             )}
 
             {/* Add Note Section */}
-            <div className="mt-6">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
                 <span className="text-sm font-medium">Add Note</span>
               </div>
@@ -407,8 +438,8 @@ Beth`,
                 placeholder="Add a note about this email..."
                 value={noteContent}
                 onChange={(e) => setNoteContent(e.target.value)}
-                className="mb-2"
-                rows={3}
+                className="text-sm"
+                rows={2}
               />
               <Button size="sm" onClick={createNote} disabled={!noteContent.trim()}>
                 Create Note
@@ -420,30 +451,13 @@ Beth`,
 
       {/* Rightmost Panel - Contact Information */}
       {selectedContact && (
-        <div className="w-80 bg-muted/30 p-4">
-          <div className="mb-4">
-            <h3 className="font-medium text-sm mb-1">{selectedContact.name}</h3>
-            <p className="text-xs text-muted-foreground">Last Communication 6 hours ago</p>
-          </div>
-
-          {/* Contact Info */}
-          <div className="space-y-3 mb-6">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{selectedContact.phone} (mobile)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{selectedContact.email}</span>
-            </div>
-          </div>
-
+        <div className="w-80 bg-muted/20 p-4 relative flex-shrink-0">
           {/* Sections */}
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Relationships</span>
-                <Button variant="ghost" size="sm">
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
                   <Plus className="h-3 w-3" />
                 </Button>
               </div>
@@ -475,6 +489,13 @@ Beth`,
               <span className="text-sm font-medium">Activity</span>
               <p className="text-sm text-muted-foreground mt-1">No website activity yet</p>
             </div>
+          </div>
+
+          {/* Bottom Actions */}
+          <div className="absolute bottom-4 right-4">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full">
+              <HelpCircle className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       )}
