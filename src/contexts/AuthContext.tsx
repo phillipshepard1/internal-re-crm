@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      // Clear local storage and session storage
+      // Clear local storage and session storage immediately
       localStorage.clear()
       sessionStorage.clear()
       
@@ -193,7 +193,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRoleError(null)
     } catch (error) {
       console.error('Sign out error:', error)
-      // Even if there's an error, clear the state
+      // Even if there's an error, clear the state and storage
+      localStorage.clear()
+      sessionStorage.clear()
       setUser(null)
       setUserRole(null)
       setRoleError(null)

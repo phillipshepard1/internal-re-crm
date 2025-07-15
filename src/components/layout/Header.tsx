@@ -42,22 +42,21 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
 
   const handleLogout = async () => {
     try {
-      // Clear any local storage or session storage
+      // Clear any local storage or session storage immediately
       localStorage.clear()
       sessionStorage.clear()
       
       // Sign out from Supabase
       await signOut()
       
-      // Force navigation to login page
-      router.push('/login')
-      
-      // Force page reload to clear any cached state
+      // Force navigation to login page and clear any cached state
       window.location.href = '/login'
     } catch (error) {
       console.error('Logout error:', error)
-      // Even if there's an error, try to navigate to login
-      router.push('/login')
+      // Even if there's an error, clear storage and navigate to login
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/login'
     }
   }
 
