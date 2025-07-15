@@ -25,6 +25,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [roleUpdateLoading, setRoleUpdateLoading] = useState<string | null>(null)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [showUserModal, setShowUserModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [alertModal, setAlertModal] = useState<{
     open: boolean
     title: string
@@ -138,6 +142,49 @@ export default function AdminPage() {
       })
     } finally {
       setRoleUpdateLoading(null)
+    }
+  }
+
+  const handleViewUser = (user: User) => {
+    setSelectedUser(user)
+    setShowUserModal(true)
+  }
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user)
+    setShowUserModal(true)
+  }
+
+  const handleDeleteUser = (user: User) => {
+    setUserToDelete(user)
+    setShowDeleteModal(true)
+  }
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return
+
+    try {
+      // In a real app, you would call an API to delete the user
+      // For now, we'll just remove them from the local state
+      setUsers(users.filter(u => u.id !== userToDelete.id))
+      
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: `User ${userToDelete.email} has been deleted.`,
+        type: 'success'
+      })
+    } catch (err) {
+      console.error('Error deleting user:', err)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to delete user.',
+        type: 'error'
+      })
+    } finally {
+      setShowDeleteModal(false)
+      setUserToDelete(null)
     }
   }
 
@@ -340,7 +387,11 @@ export default function AdminPage() {
                             <div className="flex items-center space-x-2">
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="sm">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleViewUser(user)}
+                                  >
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
@@ -350,7 +401,11 @@ export default function AdminPage() {
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="sm">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleEditUser(user)}
+                                  >
                                     <Edit className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
@@ -364,6 +419,7 @@ export default function AdminPage() {
                                     variant="ghost" 
                                     size="sm"
                                     className="text-destructive hover:text-destructive"
+                                    onClick={() => handleDeleteUser(user)}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
@@ -625,6 +681,71 @@ export default function AdminPage() {
         </Tabs>
       </div>
       
+      {/* User View/Edit Modal */}
+      <AlertModal
+        open={showUserModal}
+        onOpenChange={setShowUserModal}
+        title={selectedUser ? `User Details - ${selectedUser.email}` : 'User Details'}
+        message={
+          selectedUser ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="font-medium">Email:</span>
+                  <p className="text-muted-foreground">{selectedUser.email}</p>
+                </div>
+                <div>
+                  <span className="font-medium">Role:</span>
+                  <p className="text-muted-foreground capitalize">{selectedUser.role}</p>
+                </div>
+                <div>
+                  <span className="font-medium">Created:</span>
+                  <p className="text-muted-foreground">
+                    {new Date(selectedUser.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium">Status:</span>
+                  <p className="text-muted-foreground">Active</p>
+                </div>
+              </div>
+              <div className="pt-3">
+                <p className="text-sm text-muted-foreground">
+                  To edit user permissions, use the role management section below.
+                </p>
+              </div>
+            </div>
+          ) : 'No user selected'
+        }
+        type="info"
+      />
+
+      {/* Delete Confirmation Modal */}
+      <AlertModal
+        open={showDeleteModal}
+        onOpenChange={setShowDeleteModal}
+        title="Confirm User Deletion"
+        message={
+          userToDelete ? (
+            <div className="space-y-3">
+              <p>Are you sure you want to delete the user account for:</p>
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="font-medium">{userToDelete.email}</p>
+                <p className="text-sm text-muted-foreground">Role: {userToDelete.role}</p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                This action cannot be undone. The user will lose access to the system immediately.
+              </p>
+            </div>
+          ) : 'No user selected for deletion'
+        }
+        type="warning"
+        onConfirm={confirmDeleteUser}
+        confirmText="Delete User"
+        cancelText="Cancel"
+        showCancel={true}
+      />
+
       <AlertModal
         open={alertModal.open}
         onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}

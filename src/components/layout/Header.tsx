@@ -42,20 +42,10 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
 
   const handleLogout = async () => {
     try {
-      // Clear any local storage or session storage immediately
-      localStorage.clear()
-      sessionStorage.clear()
-      
-      // Sign out from Supabase
       await signOut()
-      
-      // Force navigation to login page and clear any cached state
       window.location.href = '/login'
     } catch (error) {
       console.error('Logout error:', error)
-      // Even if there's an error, clear storage and navigate to login
-      localStorage.clear()
-      sessionStorage.clear()
       window.location.href = '/login'
     }
   }
@@ -63,14 +53,6 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const handleSettings = () => {
     if (userRole === 'admin') {
       router.push('/admin')
-    } else {
-      // For non-admin users, could navigate to a user settings page
-      setAlertModal({
-        open: true,
-        title: 'Coming Soon',
-        message: 'Settings feature coming soon!',
-        type: 'info'
-      })
     }
   }
 
@@ -162,22 +144,24 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
               </DialogContent>
             </Dialog>
             
-            {/* Settings */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleSettings}
-                >
-                  <Settings className="h-4 w-4" />
-                  <span className="sr-only">Settings</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{userRole === 'admin' ? 'Admin Panel' : 'Settings'}</p>
-              </TooltipContent>
-            </Tooltip>
+            {/* Admin Panel - Only show for admin users */}
+            {userRole === 'admin' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={handleSettings}
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span className="sr-only">Admin Panel</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Admin Panel</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
             
             {/* Profile */}
             <Dialog open={profileOpen} onOpenChange={setProfileOpen}>

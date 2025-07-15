@@ -13,16 +13,23 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const publicRoutes = ['/login', '/privacy-policy', '/terms-of-service']
 
   useEffect(() => {
-    if (!loading && !user && !publicRoutes.includes(pathname)) {
+    // If still loading, don't do anything yet
+    if (loading) return
+
+    // If user is not authenticated and not on a public route, redirect to login
+    if (!user && !publicRoutes.includes(pathname)) {
       router.push('/login')
+      return
     }
     
     // If user is authenticated and on login page, redirect to dashboard
-    if (!loading && user && pathname === '/login') {
+    if (user && pathname === '/login') {
       router.push('/dashboard')
+      return
     }
   }, [user, loading, router, pathname])
 
+  // Show loading spinner while loading
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">

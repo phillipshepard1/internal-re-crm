@@ -1,6 +1,58 @@
 import { supabase } from './supabase'
 import type { Person, Note, Task, FollowUp, FollowUpWithPerson, Activity, File } from './supabase'
 
+// Database connection test
+export async function testDatabaseConnection(): Promise<{ connected: boolean; error?: string }> {
+  try {
+    const startTime = Date.now()
+    const { data, error } = await supabase
+      .from('users')
+      .select('count')
+      .limit(1)
+    
+    const responseTime = Date.now() - startTime
+    
+    if (error) {
+      return { connected: false, error: error.message }
+    }
+    
+    console.log(`Database connection test: ${responseTime}ms`)
+    return { connected: true }
+  } catch (error) {
+    console.error('Database connection test failed:', error)
+    return { connected: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+// Simple function to get user role from database
+export async function getUserRole(userId: string): Promise<'admin' | 'agent'> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', userId)
+    .single()
+
+  if (error || !data?.role) {
+    // If user doesn't exist or has no role, create them with 'agent' role
+    const { error: upsertError } = await supabase
+      .from('users')
+      .upsert({
+        id: userId,
+        role: 'agent',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+    
+    if (upsertError) {
+      console.error('Error creating user:', upsertError)
+    }
+    
+    return 'agent'
+  }
+
+  return data.role as 'admin' | 'agent'
+}
+
 // Role management utilities
 export const assignUserRole = async (userId: string, email: string): Promise<'agent'> => {
   // Always assign 'agent' role to new users

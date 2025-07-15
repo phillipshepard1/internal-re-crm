@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { getUserRole } from '@/lib/database'
 
 interface AuthContextType {
   user: User | null
@@ -11,149 +12,82 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
-  roleError: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-// Always assign 'agent' role to new users
-const assignUserRole = async (user: User): Promise<'agent'> => {
-  const { error } = await supabase
-    .from('users')
-    .upsert({
-      id: user.id,
-      email: user.email,
-      role: 'agent',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-  if (error) {
-    console.error('Error assigning user role:', error)
-    throw error
-  }
-  return 'agent'
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [userRole, setUserRole] = useState<'admin' | 'agent' | null>(null)
   const [loading, setLoading] = useState(true)
-  const [roleError, setRoleError] = useState<string | null>(null)
 
   useEffect(() => {
-    let isMounted = true;
+    let isMounted = true
 
-
-
-    async function restoreSession() {
+    // Get initial session
+    const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!isMounted) return;
-        setUser(session?.user ?? null);
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!isMounted) return
+        
         if (session?.user) {
-          // Try to fetch user row
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          // If user row is missing, create it as agent
-          if (error && (error.code === 'PGRST116' || error.message?.toLowerCase().includes('no rows'))) {
-            await assignUserRole(session.user)
-            setUserRole('agent')
-            setRoleError(null)
-            return
-          }
-
-          // If user row exists but role is missing/invalid, update it to agent
-          if (userData && (!userData.role || !['admin', 'agent'].includes(userData.role))) {
-            await assignUserRole(session.user)
-            setUserRole('agent')
-            setRoleError(null)
-            return
-          }
-
-          if (error || !userData?.role) {
-            setUser(null);
-            setUserRole(null);
-            setRoleError('Unable to verify your permissions.');
-          } else {
-            setUserRole(userData.role);
-            setRoleError(null);
+          setUser(session.user)
+          const role = await getUserRole(session.user.id)
+          if (isMounted) {
+            setUserRole(role)
           }
         } else {
-          setUserRole(null);
-          setRoleError(null);
+          setUser(null)
+          setUserRole(null)
         }
       } catch (error) {
-        console.error('Session restoration error:', error)
-        setUser(null);
-        setUserRole(null);
-        setRoleError('Session restoration failed.');
+        console.error('Error getting initial session:', error)
+        if (isMounted) {
+          setUser(null)
+          setUserRole(null)
+        }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
-    restoreSession();
+    getInitialSession()
 
-    // Listen for auth changes (sign in/out)
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null);
+      if (!isMounted) return
+
       if (session?.user) {
+        setUser(session.user)
         try {
-          // Try to fetch user row
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          // If user row is missing, create it as agent
-          if (error && (error.code === 'PGRST116' || error.message?.toLowerCase().includes('no rows'))) {
-            await assignUserRole(session.user)
-            setUserRole('agent')
-            setRoleError(null)
-            setLoading(false)
-            return
-          }
-
-          // If user row exists but role is missing/invalid, update it to agent
-          if (userData && (!userData.role || !['admin', 'agent'].includes(userData.role))) {
-            await assignUserRole(session.user)
-            setUserRole('agent')
-            setRoleError(null)
-            setLoading(false)
-            return
-          }
-
-          if (error || !userData?.role) {
-            setUser(null);
-            setUserRole(null);
-            setRoleError('Unable to verify your permissions.');
-          } else {
-            setUserRole(userData.role);
-            setRoleError(null);
+          const role = await getUserRole(session.user.id)
+          if (isMounted) {
+            setUserRole(role)
           }
         } catch (error) {
-          console.error('Auth state change error:', error)
-          setUser(null);
-          setUserRole(null);
-          setRoleError('Unable to verify your permissions.');
+          console.error('Error getting user role:', error)
+          if (isMounted) {
+            setUserRole('agent') // Default fallback
+          }
         }
       } else {
-        setUserRole(null);
-        setRoleError(null);
+        setUser(null)
+        setUserRole(null)
       }
-      setLoading(false);
-    });
+
+      if (isMounted) {
+        setLoading(false)
+      }
+    })
 
     return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -178,29 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
-    try {
-      // Clear local storage and session storage immediately
-      localStorage.clear()
-      sessionStorage.clear()
-      
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-      
-      // Clear user state immediately
-      setUser(null)
-      setUserRole(null)
-      setRoleError(null)
-    } catch (error) {
-      console.error('Sign out error:', error)
-      // Even if there's an error, clear the state and storage
-      localStorage.clear()
-      sessionStorage.clear()
-      setUser(null)
-      setUserRole(null)
-      setRoleError(null)
-      throw error
-    }
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
   }
 
   const value = {
@@ -210,7 +123,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signIn,
     signInWithGoogle,
     signOut,
-    roleError,
   }
 
   return (

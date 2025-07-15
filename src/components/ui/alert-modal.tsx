@@ -14,7 +14,7 @@ export interface AlertModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
-  message: string
+  message: string | React.ReactNode
   type?: 'success' | 'error' | 'warning' | 'info'
   confirmText?: string
   cancelText?: string
@@ -81,9 +81,15 @@ export function AlertModal({
             {getIcon()}
             {title}
           </DialogTitle>
-          <DialogDescription className="text-left">
-            {message}
-          </DialogDescription>
+          {typeof message === 'string' ? (
+            <DialogDescription className="text-left">
+              {message}
+            </DialogDescription>
+          ) : (
+            <div className="text-left text-sm text-muted-foreground">
+              {message}
+            </div>
+          )}
         </DialogHeader>
         <DialogFooter className="flex gap-2">
           {showCancel && (

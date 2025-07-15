@@ -18,13 +18,12 @@ export default function HomePage() {
     }
   }, [user, loading, router])
 
+  // Show loading spinner while determining redirect
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="text-center py-12">
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-        <p className="mt-4 text-muted-foreground">
-          {loading ? 'Loading...' : user ? 'Redirecting to dashboard...' : 'Redirecting to login...'}
-        </p>
+        <p className="mt-4 text-muted-foreground">Loading...</p>
       </div>
     </div>
   )

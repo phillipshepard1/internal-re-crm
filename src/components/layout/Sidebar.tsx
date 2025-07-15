@@ -11,7 +11,6 @@ import {
   Calendar, 
   CheckSquare, 
   FileText, 
-  Settings,
   Mail,
   Shield
 } from 'lucide-react'
@@ -24,7 +23,6 @@ const navigation = [
   { name: 'Follow-ups', href: '/follow-ups', icon: Calendar },
   { name: 'Tasks', href: '/tasks', icon: CheckSquare },
   { name: 'Notes', href: '/notes', icon: FileText },
-  { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
 const adminNavigation = [
