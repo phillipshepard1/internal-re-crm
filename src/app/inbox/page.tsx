@@ -297,51 +297,64 @@ Beth`,
 
         {/* Email List */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {filteredEmails.map((email) => (
-            <div
-              key={email.id}
-              onClick={() => handleEmailSelect(email)}
-              className={`p-3 border-b cursor-pointer transition-colors ${
-                selectedEmail?.id === email.id
-                  ? 'bg-primary/5 border-primary/20'
-                  : 'hover:bg-muted/30 border-transparent'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  {!email.isRead && (
-                    <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`font-medium text-sm ${!email.isRead ? 'font-semibold' : ''}`}>
-                      {email.from}
-                    </span>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {email.hasAttachments && <Paperclip className="h-3 w-3" />}
-                      {email.date}
+          {filteredEmails.length === 0 ? (
+            <div className="flex items-center justify-center h-full p-8">
+              <div className="text-center">
+                <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-sm font-medium text-muted-foreground mb-2">No emails found</p>
+                <p className="text-xs text-muted-foreground">
+                  {searchQuery ? `No results for "${searchQuery}"` : 'No emails in this folder'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            filteredEmails.map((email) => (
+              <div
+                key={email.id}
+                onClick={() => handleEmailSelect(email)}
+                className={`p-3 border-b cursor-pointer transition-colors ${
+                  selectedEmail?.id === email.id
+                    ? 'bg-primary/5 border-primary/20'
+                    : 'hover:bg-muted/30 border-transparent'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    {!email.isRead && (
+                      <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-medium text-sm ${!email.isRead ? 'font-semibold' : ''}`}>
+                        {email.from}
+                      </span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {email.hasAttachments && <Paperclip className="h-3 w-3" />}
+                        {email.date}
+                      </div>
                     </div>
-                  </div>
-                  <div className={`text-sm mb-1 ${!email.isRead ? 'font-semibold' : ''}`}>
-                    {email.subject}
-                  </div>
-                  <div className="text-sm text-muted-foreground truncate">
-                    {email.preview}
+                    <div className={`text-sm mb-1 ${!email.isRead ? 'font-semibold' : ''}`}>
+                      {email.subject}
+                    </div>
+                    <div className="text-sm text-muted-foreground truncate">
+                      {email.preview}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
       {/* Right Panel - Email Content */}
       {selectedEmail && (
-        <div className="w-96 flex flex-col border-r flex-shrink-0">
+        <div className="w-[455px] flex flex-col border-r flex-shrink-0">
           {/* Email Header */}
           <div className="p-4 border-b bg-background flex-shrink-0">
-            <div className="flex items-center justify-between mb-4">
+            {/* Email Details */}
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
                   <AvatarFallback className="text-sm">
@@ -350,52 +363,34 @@ Beth`,
                 </Avatar>
                 <div>
                   <div className="font-medium text-sm">{selectedEmail.from}</div>
-                  <div className="text-xs text-muted-foreground">Last Communication 6 hours ago</div>
+                  <div className="text-xs text-muted-foreground">to me</div>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Phone className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Video className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Mail className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            
-            {/* Contact Info */}
-            <div className="space-y-2 mb-4 text-sm">
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <span>{selectedContact?.phone}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span>{selectedContact?.email}</span>
-              </div>
-            </div>
-
-            {/* Email Details */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium">{selectedEmail.from}</span>
-                <span className="text-sm text-muted-foreground">to</span>
-                <Avatar className="h-6 w-6">
-                  <AvatarFallback className="text-xs">P</AvatarFallback>
-                </Avatar>
-                <span className="text-sm font-medium">me</span>
-              </div>
-              <div className="text-sm text-muted-foreground mb-2">
+              <div className="text-sm text-muted-foreground">
                 {selectedEmail.date}, 6:31 pm
               </div>
-              <div className="font-medium text-sm mb-3">{selectedEmail.subject}</div>
             </div>
-            
+          </div>
+
+          {/* Email Body */}
+          <div className="flex-1 p-4 overflow-y-auto min-h-0">
+            <div className="prose prose-sm max-w-none mb-4 p-4 border rounded-lg bg-background">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{selectedEmail.body}</p>
+              
+              {selectedEmail.hasAttachments && (
+                <div className="mt-4 p-3 border rounded-lg bg-muted/20">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-4 w-4 flex-shrink-0" />
+                    <span className="text-sm font-medium truncate">
+                      Estimate_1530_from_Pinnacle_NWA_Handyman_LLC.pdf (80 KB)
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Action Buttons */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 mb-4">
               <Button variant="outline" size="sm" className="h-8">
                 <Reply className="h-3 w-3 mr-1" />
                 Reply
@@ -409,24 +404,6 @@ Beth`,
                 Forward
               </Button>
             </div>
-          </div>
-
-          {/* Email Body */}
-          <div className="flex-1 p-4 overflow-y-auto min-h-0">
-            <div className="prose prose-sm max-w-none mb-4">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{selectedEmail.body}</p>
-            </div>
-            
-            {selectedEmail.hasAttachments && (
-              <div className="mb-4 p-3 border rounded-lg bg-muted/20">
-                <div className="flex items-center gap-2">
-                  <Paperclip className="h-4 w-4" />
-                  <span className="text-sm font-medium">
-                    Estimate_1530_from_Pinnacle_NWA_Handyman_LLC.pdf (80 KB)
-                  </span>
-                </div>
-              </div>
-            )}
 
             {/* Add Note Section */}
             <div className="space-y-3">
@@ -452,6 +429,23 @@ Beth`,
       {/* Rightmost Panel - Contact Information */}
       {selectedContact && (
         <div className="w-80 bg-muted/20 p-4 relative flex-shrink-0">
+          {/* Contact Info */}
+          <div className="mb-4">
+            <h3 className="font-medium text-sm mb-1">{selectedContact.name}</h3>
+            <p className="text-xs text-muted-foreground">Last Communication 6 hours ago</p>
+          </div>
+
+          <div className="space-y-3 mb-6">
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">{selectedContact.phone} (mobile)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">{selectedContact.email}</span>
+            </div>
+          </div>
+
           {/* Sections */}
           <div className="space-y-4">
             <div>
