@@ -73,7 +73,9 @@ export class EmailLeadProcessor {
     
     // Generic email form patterns
     if (subjectLower.includes('lead') || subjectLower.includes('inquiry') || 
-        subjectLower.includes('contact') || subjectLower.includes('form')) {
+        subjectLower.includes('contact') || subjectLower.includes('form') ||
+        subjectLower.includes('property') || subjectLower.includes('house') ||
+        subjectLower.includes('home') || subjectLower.includes('real estate')) {
       return 'email_form'
     }
     

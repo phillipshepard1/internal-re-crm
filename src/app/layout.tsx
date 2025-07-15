@@ -19,14 +19,15 @@ export default function RootLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const isLoginPage = pathname === '/login'
+  const isPublicPage = ['/login', '/privacy-policy', '/terms-of-service'].includes(pathname)
 
   return (
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
           <AuthGuard>
-            {isLoginPage ? (
-              // Login page - no sidebar/header
+            {isPublicPage ? (
+              // Public pages - no sidebar/header
               <>{children}</>
             ) : (
               // Authenticated pages - with sidebar/header

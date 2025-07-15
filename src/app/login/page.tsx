@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
+
 // Google Icon Component
 const GoogleIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -215,6 +216,29 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
+          {/* Privacy Policy and Terms of Service Links */}
+          <div className="text-center space-y-2">
+            <p className="text-xs text-muted-foreground">
+              By signing in, you agree to our{' '}
+              <a 
+                href="/terms-of-service" 
+                className="text-primary hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Terms of Service
+              </a>
+              {' '}and{' '}
+              <a 
+                href="/privacy-policy" 
+                className="text-primary hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Privacy Policy
+              </a>
+            </p>
+          </div>
 
         </div>
       </div>
