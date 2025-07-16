@@ -19,7 +19,16 @@ import {
   FileText,
   Activity,
   Settings,
-  HelpCircle
+  HelpCircle,
+  AlertTriangle,
+  Trash2,
+  Star,
+  Circle,
+  Users,
+  Tag,
+  Bell,
+  MessageSquare,
+  RefreshCw
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,8 +37,10 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -71,341 +82,393 @@ export default function InboxPage() {
   const [gmailConnected, setGmailConnected] = useState(false)
   const [loadingEmails, setLoadingEmails] = useState(false)
   const [currentFilter, setCurrentFilter] = useState('all')
+  const [gmailLabels, setGmailLabels] = useState<Array<{
+    id: string
+    name: string
+    type: string
+    messagesTotal?: number
+    messagesUnread?: number
+  }>>([])
+  const [loadingLabels, setLoadingLabels] = useState(false)
+  const [hasMoreEmails, setHasMoreEmails] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [nextPageToken, setNextPageToken] = useState<string | undefined>(undefined)
+  const [initialFolderSet, setInitialFolderSet] = useState(false)
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [showComposeModal, setShowComposeModal] = useState(false)
+  const [composeMode, setComposeMode] = useState<'reply' | 'replyAll' | 'forward'>('reply')
+  const [composeData, setComposeData] = useState({
+    to: '',
+    cc: '',
+    bcc: '',
+    subject: '',
+    body: ''
+  })
+  const [sendingEmail, setSendingEmail] = useState(false)
 
-  // Mock data for different folders
-  const mockEmailsByFolder: Record<string, Email[]> = {
-    inbox: [
-      {
-        id: '1',
-        from: 'Beth Cuccia Reilly',
-        subject: 'your opinion?',
-        preview: 'Hi Phillip, I just got a call from Block Management about the handyman invoice...',
-        date: 'Jul 9',
-        isRead: false,
-        hasAttachments: true,
-        body: `Hi Phillip,
 
-I just got a call from Block Management about the handyman invoice. They attached the estimate from Pinnacle NWA Handyman LLC. 
 
-Can you take a look and let me know what you think?
 
-Thanks,
-Beth`,
-        to: 'me',
-        lastUpdated: '2024-07-10T12:00:00Z'
-      },
-      {
-        id: '2',
-        from: 'John Smith',
-        subject: 'Property Inquiry - 123 Main St',
-        preview: 'Hi, I saw your listing for the property at 123 Main St and I\'m very interested...',
-        date: 'Jul 7',
-        isRead: true,
-        hasAttachments: false,
-        body: 'Hi, I saw your listing for the property at 123 Main St and I\'m very interested in scheduling a viewing. Could you please let me know what times are available this week? Thanks, John',
-        to: 'me',
-        lastUpdated: '2024-07-09T10:00:00Z'
-      },
-      {
-        id: '3',
-        from: 'Sarah Johnson',
-        subject: 'Client Update - Closing Documents',
-        preview: 'Hi Phillip, I wanted to update you on the closing process for the Bella Vista property...',
-        date: 'Jul 3',
-        isRead: true,
-        hasAttachments: false,
-        body: 'Hi Phillip, I wanted to update you on the closing process for the Bella Vista property. All documents have been signed and we\'re ready to proceed. Thanks, Sarah',
-        to: 'me',
-        lastUpdated: '2024-07-08T14:00:00Z'
-      },
-      {
-        id: '4',
-        from: 'Mike Davis',
-        subject: 'Prospect - Interested in Investment Properties',
-        preview: 'Hello, I\'m looking to invest in rental properties in the area...',
-        date: 'Jul 2',
-        isRead: true,
-        hasAttachments: false,
-        body: 'Hello, I\'m looking to invest in rental properties in the area. I have a budget of $300k and would like to see what\'s available. Thanks, Mike',
-        to: 'me',
-        lastUpdated: '2024-07-07T09:00:00Z'
-      }
-    ],
-    assigned: [
-      {
-        id: '5',
-        from: 'Lisa Chen',
-        subject: 'Assigned Lead - 456 Oak Ave',
-        preview: 'This lead has been assigned to you for follow-up...',
-        date: 'Jul 8',
-        isRead: false,
-        hasAttachments: true,
-        body: 'This lead has been assigned to you for follow-up. Please contact them within 24 hours.',
-        to: 'me',
-        lastUpdated: '2024-07-09T11:00:00Z'
-      },
-      {
-        id: '6',
-        from: 'David Wilson',
-        subject: 'Assigned Prospect - Investment Property',
-        preview: 'Prospect assigned for investment property consultation...',
-        date: 'Jul 6',
-        isRead: true,
-        hasAttachments: false,
-        body: 'Prospect assigned for investment property consultation. They are looking for properties in the $400k range.',
-        to: 'me',
-        lastUpdated: '2024-07-08T15:00:00Z'
-      }
-    ],
-    drafts: [
-      {
-        id: '7',
-        from: 'me',
-        subject: 'Draft: Response to Beth Reilly',
-        preview: 'Draft response to the handyman invoice inquiry...',
-        date: 'Jul 9',
-        isRead: true,
-        hasAttachments: false,
-        body: 'Hi Beth, Thanks for forwarding the handyman estimate. I\'ve reviewed it and...',
-        to: 'Beth Cuccia Reilly',
-        lastUpdated: '2024-07-09T13:00:00Z'
-      },
-      {
-        id: '8',
-        from: 'me',
-        subject: 'Draft: Property Listing Update',
-        preview: 'Draft email updating property listing information...',
-        date: 'Jul 8',
-        isRead: true,
-        hasAttachments: true,
-        body: 'Hi team, I wanted to update you on the property listing changes...',
-        to: 'Team',
-        lastUpdated: '2024-07-08T16:00:00Z'
-      }
-    ],
-    sent: [
-      {
-        id: '9',
-        from: 'me',
-        subject: 'Re: Property Inquiry - 789 Pine St',
-        preview: 'Sent response to property inquiry...',
-        date: 'Jul 7',
-        isRead: true,
-        hasAttachments: false,
-        body: 'Hi Sarah, Thanks for your inquiry about 789 Pine St. I\'d be happy to show you the property...',
-        to: 'Sarah Johnson',
-        lastUpdated: '2024-07-07T10:00:00Z'
-      },
-      {
-        id: '10',
-        from: 'me',
-        subject: 'Property Update - 123 Main St',
-        preview: 'Sent property update to interested buyer...',
-        date: 'Jul 5',
-        isRead: true,
-        hasAttachments: true,
-        body: 'Hi John, I wanted to update you on the status of 123 Main St...',
-        to: 'John Smith',
-        lastUpdated: '2024-07-05T11:00:00Z'
-      }
-    ],
-    closed: [
-      {
-        id: '11',
-        from: 'Closing Team',
-        subject: 'Closed Deal - 456 Oak Ave',
-        preview: 'Deal closed successfully for 456 Oak Ave...',
-        date: 'Jul 1',
-        isRead: true,
-        hasAttachments: true,
-        body: 'Congratulations! The deal for 456 Oak Ave has been closed successfully.',
-        to: 'me',
-        lastUpdated: '2024-07-01T12:00:00Z'
-      },
-      {
-        id: '12',
-        from: 'Legal Team',
-        subject: 'Closed Transaction - 789 Pine St',
-        preview: 'Transaction closed for 789 Pine St property...',
-        date: 'Jun 28',
-        isRead: true,
-        hasAttachments: false,
-        body: 'The transaction for 789 Pine St has been completed and closed.',
-        to: 'me',
-        lastUpdated: '2024-06-28T13:00:00Z'
-      }
-    ]
-  }
-
-  // Get current folder emails
-  const currentFolderEmails = mockEmailsByFolder[currentFolder] || mockEmailsByFolder.inbox
-
-  const mockContact: Contact = {
-    name: 'Beth Cuccia Reilly',
-    email: 'bethcucciareilly@comcast.net',
-    phone: '(707) 567-0710',
-    stage: 'Lead',
-    agent: 'Phillip Shepard',
-    lender: '',
-    recentConversations: [
-      'your opinion?',
-      'Re: Reilly/Oakland property',
-      'Re: Oakland Docs',
-      'Fwd: report',
-      'Re: inspection'
-    ]
-  }
-
-  // Generate dynamic contact information based on selected email
-  const getContactFromEmail = (email: Email): Contact => {
-    // Extract name from email sender
-    const senderName = email.from
-    
-    // Generate email based on sender name
-    const emailAddress = email.from.toLowerCase().replace(/\s+/g, '.') + '@example.com'
-    
-    // Generate consistent phone number based on sender name (for demo purposes)
-    const nameHash = email.from.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    const phoneNumber = `(${Math.floor((nameHash % 900) + 100)}) ${Math.floor((nameHash % 900) + 100)}-${Math.floor((nameHash % 9000) + 1000)}`
-    
-    // Determine stage based on email subject/content
-    let stage = 'Lead'
-    const subjectLower = email.subject.toLowerCase()
-    const bodyLower = email.body.toLowerCase()
-    
-    if (subjectLower.includes('client') || subjectLower.includes('closing') || bodyLower.includes('closing')) {
-      stage = 'Client'
-    } else if (subjectLower.includes('prospect') || subjectLower.includes('interested') || bodyLower.includes('interested')) {
-      stage = 'Prospect'
-    } else if (subjectLower.includes('lead') || subjectLower.includes('inquiry') || bodyLower.includes('viewing')) {
-      stage = 'Lead'
-    }
-    
-    // Generate recent conversations based on email subject and content
-    const recentConversations = [
-      email.subject,
-      `Re: ${email.subject}`,
-      'Property inquiry',
-      'Follow-up call',
-      'Document request'
-    ]
-    
-    // Determine lender based on stage and random chance
-    let lender = 'Not assigned'
-    if (stage === 'Client' && Math.random() > 0.3) {
-      const lenders = ['ABC Mortgage', 'XYZ Bank', 'First National', 'Home Loans Inc']
-      lender = lenders[Math.floor(Math.random() * lenders.length)]
-    }
-    
-    return {
-      name: senderName,
-      email: emailAddress,
-      phone: phoneNumber,
-      stage: stage,
-      agent: 'Phillip Shepard', // Default agent
-      lender: lender,
-      recentConversations: recentConversations,
-      lastUpdated: email.lastUpdated || email.date // fallback to email.date if lastUpdated missing
-    }
-  }
-
-  useEffect(() => {
-    // Simulate loading emails
-    setTimeout(() => {
-      setEmails(currentFolderEmails)
-      setLoading(false)
-    }, 1000)
-  }, [currentFolder, currentFolderEmails])
 
   // Check Gmail connection status
   useEffect(() => {
     checkGmailConnection()
   }, [])
 
-  // Auto-load emails when Gmail is connected
+  // Handle OAuth callback parameters
   useEffect(() => {
-    if (gmailConnected && !loadingEmails) {
-      loadGmailEmails()
+    const urlParams = new URLSearchParams(window.location.search)
+    const success = urlParams.get('success')
+    const error = urlParams.get('error')
+    const email = urlParams.get('email')
+
+    if (success === 'true' && email) {
+      toast.success('Gmail Connected Successfully', {
+        description: `Your Gmail account (${email}) has been connected successfully!`,
+        duration: 5000,
+      })
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname)
+      // Refresh Gmail connection status
+    checkGmailConnection()
+    } else if (error) {
+      const errorMessages: Record<string, string> = {
+        'missing_params': 'Missing OAuth parameters',
+        'invalid_state': 'Invalid OAuth state',
+        'token_exchange_failed': 'Failed to exchange OAuth tokens',
+        'storage_failed': 'Failed to store Gmail tokens',
+        'callback_failed': 'OAuth callback failed'
+      }
+      
+      toast.error('Gmail Connection Failed', {
+        description: errorMessages[error] || 'An error occurred during Gmail connection',
+        duration: 6000,
+      })
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
-  }, [gmailConnected])
+  }, [])
+
+  // Load emails and labels when Gmail connection status changes
+  useEffect(() => {
+    if (gmailConnected && user?.id) {
+      // Load real emails and labels when Gmail is connected
+      loadGmailEmails()
+      loadGmailLabels()
+    } else if (!gmailConnected) {
+      // Don't show any data when Gmail is not connected
+      setEmails([])
+      setLoading(false)
+    }
+  }, [gmailConnected, user?.id])
 
   const checkGmailConnection = async () => {
     try {
       // Check if Gmail environment variables are set
-      const response = await fetch('/api/gmail/status')
+      const response = await fetch(`/api/gmail/status?userId=${user?.id}`)
       const data = await response.json()
-      setGmailConnected(data.connected)
+      setGmailConnected(data.userConnected)
     } catch (error) {
       console.error('Error checking Gmail connection:', error)
       setGmailConnected(false)
     }
   }
 
-  const loadGmailEmails = async () => {
-    setLoadingEmails(true)
+  const connectGmail = async () => {
+    if (!user?.id) {
+      toast.error('User not authenticated')
+      return
+    }
+
     try {
-      // Simulate Gmail API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // For now, just refresh the mock data to simulate loading from Gmail
-      // This will be replaced with real Gmail API call when connected
-      const refreshedEmails = [
-        ...currentFolderEmails,
-        {
-          id: '13',
-          from: 'Jennifer Wilson',
-          subject: 'New Lead Inquiry - 456 Oak Ave',
-          preview: 'Hi, I saw your listing for the property at 456 Oak Ave. I would like to schedule a viewing...',
-          date: 'Jul 10',
-          isRead: false,
-          hasAttachments: false,
-          body: `Hi there,
-
-I saw your listing for the property at 456 Oak Ave and I'm very interested in scheduling a viewing. 
-
-Could you please let me know what times are available this week?
-
-Thanks,
-Jennifer`,
-          to: 'me',
-          lastUpdated: '2024-07-10T12:00:00Z'
+      // Get OAuth URL
+      const response = await fetch('/api/gmail/setup/auth-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        {
-          id: '14',
-          from: 'Robert Chen',
-          subject: 'Zillow Lead - Property at 789 Pine St',
-          preview: 'You have a new lead from Zillow for the property at 789 Pine St...',
-          date: 'Jul 10',
+        body: JSON.stringify({ userId: user.id })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate OAuth URL')
+      }
+
+      // Redirect to Gmail OAuth
+      window.location.href = data.authUrl
+
+    } catch (error) {
+      console.error('Error connecting Gmail:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to connect Gmail')
+    }
+  }
+
+  const disconnectGmail = async () => {
+    if (!user?.id) {
+      toast.error('User not authenticated')
+      return
+    }
+
+    setDisconnecting(true)
+    try {
+      const response = await fetch('/api/gmail/disconnect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          revokeAccess: true
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to disconnect Gmail')
+      }
+
+      if (data.success) {
+        toast.success('Gmail Disconnected', {
+          description: 'Your Gmail account has been disconnected successfully.',
+          duration: 5000,
+        })
+        // Update local state
+        setGmailConnected(false)
+        setGmailLabels([])
+        setEmails([])
+        setSelectedEmail(null) // Clear selected email
+        setSelectedContact(null) // Clear selected contact
+        setNextPageToken(undefined)
+        setHasMoreEmails(false)
+        setInitialFolderSet(false)
+        setLoading(false) // Immediately stop loading
+        setShowDisconnectModal(false) // Close modal
+      } else {
+        throw new Error(data.message || 'Failed to disconnect Gmail')
+      }
+    } catch (error) {
+      console.error('Error disconnecting Gmail:', error)
+      toast.error('Failed to Disconnect Gmail', {
+        description: error instanceof Error ? error.message : 'There was an error disconnecting your Gmail account.',
+        duration: 6000,
+      })
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
+  const loadGmailLabels = useCallback(async () => {
+    if (!user?.id) {
+      return
+    }
+
+    setLoadingLabels(true)
+    try {
+      const response = await fetch('/api/gmail/labels', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        console.log('Gmail Labels received:', data.labels)
+        
+        // Debug: Log the counts for each label
+        console.log('=== Labels received from API ===')
+        data.labels.forEach((label: any) => {
+          console.log(`Label: ${label.name}, Total: ${label.messagesTotal}, Unread: ${label.messagesUnread}`)
+        })
+        
+        // Check for duplicate labels
+        const labelNames = data.labels.map((label: any) => label.name)
+        const duplicates = labelNames.filter((name: string, index: number) => labelNames.indexOf(name) !== index)
+        if (duplicates.length > 0) {
+          console.warn('Duplicate labels found:', duplicates)
+        }
+        
+        setGmailLabels(data.labels)
+        
+        // Set current folder to INBOX if it exists and we haven't set it yet
+        if (data.labels.length > 0 && !initialFolderSet) {
+          const inboxLabel = data.labels.find((label: any) => label.name === 'INBOX')
+          if (inboxLabel) {
+            setCurrentFolder(inboxLabel.id)
+            setInitialFolderSet(true)
+          }
+        }
+      } else {
+        console.error('Failed to load Gmail labels:', data.error)
+      }
+    } catch (error) {
+      console.error('Error loading Gmail labels:', error)
+    } finally {
+      setLoadingLabels(false)
+    }
+  }, [user?.id, initialFolderSet])
+
+  const loadMoreEmails = async () => {
+    if (!user?.id || !gmailConnected || loadingMore) {
+      return
+    }
+
+    setLoadingMore(true)
+    try {
+      const response = await fetch('/api/gmail/fetch-emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          maxResults: 100,
+          labelId: currentFolder,
+          pageToken: nextPageToken
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success && data.emails) {
+        // Transform Gmail API response to our Email interface
+        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
+          id: gmailEmail.id,
+          from: gmailEmail.from,
+          subject: gmailEmail.subject,
+          preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
+          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
           isRead: false,
           hasAttachments: false,
-          body: `New lead from Zillow:
+          body: gmailEmail.body || '',
+          to: gmailEmail.to || 'me',
+          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+        }))
 
-Name: Robert Chen
-Email: robert.chen@email.com
-Phone: (555) 987-6543
-Property: 789 Pine St
-Message: I'm interested in this property and would like more information about financing options.`,
-          to: 'me',
-          lastUpdated: '2024-07-10T13:00:00Z'
-        }
-      ]
-      
-      setEmails(currentFolderEmails)
-      toast.success('Gmail Emails Loaded', {
-        description: `Successfully loaded ${refreshedEmails.length} emails. Currently showing mock data - will show real emails when API keys are configured.`,
-        duration: 5000,
+        // Append new emails to existing ones
+        setEmails(prevEmails => [...prevEmails, ...transformedEmails])
+        
+        // Store the next page token and check if there are more emails to load
+        setNextPageToken(data.nextPageToken)
+        setHasMoreEmails(!!data.nextPageToken)
+        
+        toast.success('More Emails Loaded', {
+          description: `Loaded ${transformedEmails.length} more emails.`,
+          duration: 2000,
+        })
+      } else {
+        throw new Error(data.message || 'Failed to load more emails')
+      }
+    } catch (error) {
+      console.error('Error loading more emails:', error)
+      toast.error('Failed to Load More Emails', {
+        description: error instanceof Error ? error.message : 'There was an error loading more emails.',
+        duration: 4000,
       })
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const loadGmailEmails = useCallback(async () => {
+    if (!user?.id) {
+      toast.error('User not authenticated')
+      return
+    }
+
+    setLoadingEmails(true)
+    setLoading(true) // Also set main loading state
+    try {
+      // Determine if we should load emails for a specific label
+      let requestBody: any = {
+        userId: user.id,
+        maxResults: 100 // Increased from 20 to 100
+      }
+      
+      // If we're on a Gmail label (not a mock folder), include the label ID
+      if (gmailConnected && gmailLabels.length > 0) {
+        const currentLabel = gmailLabels.find(label => label.id === currentFolder)
+        if (currentLabel) {
+          requestBody.labelId = currentFolder
+        }
+      }
+      
+      // Fetch real emails from Gmail API
+      const response = await fetch('/api/gmail/fetch-emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch emails')
+      }
+
+      if (data.success && data.emails) {
+        // Transform Gmail API response to our Email interface
+        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
+          id: gmailEmail.id,
+          from: gmailEmail.from,
+          subject: gmailEmail.subject,
+          preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
+          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
+          isRead: false, // Gmail API doesn't provide read status in this endpoint
+          hasAttachments: false, // Would need to check message parts for attachments
+          body: gmailEmail.body || '',
+          to: gmailEmail.to || 'me',
+          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+        }))
+
+        setEmails(transformedEmails)
+        
+        // Get label name for the toast message
+        let labelName = 'your Gmail account'
+        if (requestBody.labelId) {
+          const currentLabel = gmailLabels.find(label => label.id === requestBody.labelId)
+          if (currentLabel) {
+            labelName = currentLabel.name
+          }
+        }
+        
+        toast.success('Gmail Emails Loaded', {
+          description: `Successfully loaded ${transformedEmails.length} emails from ${labelName}.`,
+          duration: 5000,
+        })
+      } else {
+        throw new Error(data.message || 'Failed to load emails')
+      }
       
     } catch (error) {
       console.error('Error loading Gmail emails:', error)
       toast.error('Failed to Load Emails', {
-        description: 'There was an error loading emails from Gmail. Please try again.',
+        description: error instanceof Error ? error.message : 'There was an error loading emails from Gmail. Please try again.',
         duration: 6000,
       })
+      // Fallback to empty emails on error
+      setEmails([])
     } finally {
       setLoadingEmails(false)
+      setLoading(false) // Clear main loading state
     }
-  }
+  }, [user?.id, gmailConnected, gmailLabels, currentFolder])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -450,44 +513,111 @@ Message: I'm interested in this property and would like more information about f
 
   const handleEmailSelect = (email: Email) => {
     setSelectedEmail(email)
-    setSelectedContact(getContactFromEmail(email)) // In real app, fetch contact data
+    
+    // Extract email address from the "from" field
+    const emailMatch = email.from.match(/<(.+?)>/) || email.from.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/)
+    const emailAddress = emailMatch ? emailMatch[1] || emailMatch[0] : email.from
+    
+    // Extract name from the "from" field (remove email part)
+    const nameMatch = email.from.match(/^([^<]+)/)
+    const displayName = nameMatch ? nameMatch[1].trim() : emailAddress.split('@')[0]
+    
+    // Generate dynamic contact info from email
+    const contact: Contact = {
+      name: displayName,
+      email: emailAddress,
+      phone: 'Not provided',
+      stage: 'New Lead',
+      agent: 'Unassigned',
+      lender: 'Not assigned',
+      recentConversations: [email.subject],
+      lastUpdated: email.lastUpdated || new Date().toISOString()
+    }
+    setSelectedContact(contact)
   }
 
   const processEmailAsLead = async () => {
-    if (!selectedEmail) return
+    if (!selectedEmail || !user?.id) return
     
     setProcessingEmail(true)
     try {
-      // For now, simulate the email processing with mock data
-      // This will be replaced with real API call when Gmail is connected
-      await new Promise(resolve => setTimeout(resolve, 1500)) // Simulate API delay
-      
-      // Simulate successful lead creation
-      const mockLeadData = {
-        name: selectedEmail.from,
-        email: selectedEmail.from.toLowerCase().replace(' ', '.') + '@example.com',
-        phone: '(555) 123-4567',
-        source: 'email',
-        message: selectedEmail.body.substring(0, 100) + '...'
-      }
-      
-      // Mark email as processed
-      setEmails(emails.map(email => 
-        email.id === selectedEmail.id 
-          ? { ...email, isRead: true }
-          : email
-      ))
-      
-      // Show success message with more details
-      toast.success('Lead Imported Successfully', {
-        description: `${mockLeadData.name} has been added as a new lead and assigned to an agent via Round Robin.`,
-        duration: 5000,
+      // Use AI-powered lead detection first
+      const { LeadDetectionService } = await import('@/lib/leadDetection')
+      const leadResult = await LeadDetectionService.extractLeadData({
+        from: selectedEmail.from,
+        subject: selectedEmail.subject,
+        body: selectedEmail.body,
+        to: selectedEmail.to,
+        date: selectedEmail.lastUpdated
       })
+
+      if (leadResult.success && leadResult.lead_data) {
+        // Create person from detected lead data
+        const { EmailLeadProcessor } = await import('@/lib/emailProcessor')
+        const person = await EmailLeadProcessor.createPersonFromLeadData(leadResult.lead_data)
+        
+        if (person) {
+          // Mark email as processed
+          setEmails(emails.map(email => 
+            email.id === selectedEmail.id 
+              ? { ...email, isRead: true }
+              : email
+          ))
+          
+          // Show success message with detection details
+          const confidence = (leadResult.lead_data.confidence_score * 100).toFixed(1)
+          const source = leadResult.lead_data.lead_source
+          const reasons = leadResult.analysis_result?.reasons.join(', ') || 'AI analysis'
+          
+          toast.success('Lead Imported Successfully', {
+            description: `${selectedEmail.from} has been added as a new lead from ${source} (${confidence}% confidence). ${reasons}`,
+            duration: 6000,
+          })
+        } else {
+          throw new Error('Failed to create lead record')
+        }
+      } else {
+        // Fallback to manual processing if AI detection fails
+        const response = await fetch('/api/gmail/process-emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            maxResults: 1, // Process just this one email
+            emailId: selectedEmail.id // Pass the specific email ID
+          })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to process email as lead')
+        }
+
+        if (data.success) {
+          // Mark email as processed
+          setEmails(emails.map(email => 
+            email.id === selectedEmail.id 
+              ? { ...email, isRead: true }
+              : email
+          ))
+          
+          // Show success message
+          toast.success('Lead Imported Successfully', {
+            description: `${selectedEmail.from} has been added as a new lead and assigned to an agent via Round Robin.`,
+            duration: 5000,
+          })
+        } else {
+          throw new Error(data.message || 'Failed to process email')
+        }
+      }
       
     } catch (error) {
       console.error('Error processing email as lead:', error)
       toast.error('Failed to Import Lead', {
-        description: 'There was an error processing this email. Please try again.',
+        description: error instanceof Error ? error.message : 'There was an error processing this email. Please try again.',
         duration: 6000,
       })
     } finally {
@@ -526,61 +656,221 @@ Message: I'm interested in this property and would like more information about f
 
   const handleReply = () => {
     if (!selectedEmail) return
-    toast.info('Reply Email', {
-      description: `Composing reply to ${selectedEmail.from}`,
-      duration: 3000,
+    
+    // Extract email address from the "from" field
+    const emailMatch = selectedEmail.from.match(/<(.+?)>/) || selectedEmail.from.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/)
+    const emailAddress = emailMatch ? emailMatch[1] || emailMatch[0] : selectedEmail.from
+    
+    setComposeData({
+      to: emailAddress,
+      cc: '',
+      bcc: '',
+      subject: `Re: ${selectedEmail.subject}`,
+      body: `\n\nOn ${selectedEmail.date}, ${selectedEmail.from} wrote:\n> ${selectedEmail.body.split('\n').join('\n> ')}`
     })
+    setComposeMode('reply')
+    setShowComposeModal(true)
   }
 
   const handleReplyAll = () => {
     if (!selectedEmail) return
-    toast.info('Reply All', {
-      description: `Composing reply to all recipients of "${selectedEmail.subject}"`,
-      duration: 3000,
+    
+    // Extract email address from the "from" field
+    const emailMatch = selectedEmail.from.match(/<(.+?)>/) || selectedEmail.from.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/)
+    const emailAddress = emailMatch ? emailMatch[1] || emailMatch[0] : selectedEmail.from
+    
+    // For reply all, include original recipients
+    const originalRecipients = selectedEmail.to !== 'me' ? selectedEmail.to : ''
+    
+    setComposeData({
+      to: emailAddress,
+      cc: originalRecipients,
+      bcc: '',
+      subject: `Re: ${selectedEmail.subject}`,
+      body: `\n\nOn ${selectedEmail.date}, ${selectedEmail.from} wrote:\n> ${selectedEmail.body.split('\n').join('\n> ')}`
     })
+    setComposeMode('replyAll')
+    setShowComposeModal(true)
   }
 
   const handleForward = () => {
     if (!selectedEmail) return
-    toast.info('Forward Email', {
-      description: `Forwarding "${selectedEmail.subject}" from ${selectedEmail.from}`,
-      duration: 3000,
+    
+    setComposeData({
+      to: '',
+      cc: '',
+      bcc: '',
+      subject: `Fwd: ${selectedEmail.subject}`,
+      body: `\n\n---------- Forwarded message ----------\nFrom: ${selectedEmail.from}\nDate: ${selectedEmail.date}\nSubject: ${selectedEmail.subject}\n\n${selectedEmail.body}`
     })
+    setComposeMode('forward')
+    setShowComposeModal(true)
   }
 
-  const handleFolderChange = (folderId: string) => {
+  const getLabelIcon = (labelId: string, labelName: string) => {
+    // Map Gmail label IDs to appropriate icons
+    const iconMap: Record<string, any> = {
+      'INBOX': Mail,
+      'SENT': Mail,
+      'DRAFT': FileText,
+      'SPAM': AlertTriangle,
+      'TRASH': Trash2,
+      'IMPORTANT': Star,
+      'STARRED': Star,
+      'UNREAD': Circle,
+      'CATEGORY_PERSONAL': User,
+      'CATEGORY_SOCIAL': Users,
+      'CATEGORY_PROMOTIONS': Tag,
+      'CATEGORY_UPDATES': Bell,
+      'CATEGORY_FORUMS': MessageSquare,
+    }
+
+    // Check for exact match first
+    if (iconMap[labelId]) {
+      return iconMap[labelId]
+    }
+
+    // Check for partial matches in label name
+    const nameLower = labelName.toLowerCase()
+    if (nameLower.includes('draft')) return FileText
+    if (nameLower.includes('sent')) return Mail
+    if (nameLower.includes('trash')) return Trash2
+    if (nameLower.includes('spam')) return AlertTriangle
+    if (nameLower.includes('star')) return Star
+    if (nameLower.includes('important')) return Star
+    if (nameLower.includes('personal')) return User
+    if (nameLower.includes('social')) return Users
+    if (nameLower.includes('promotion')) return Tag
+    if (nameLower.includes('update')) return Bell
+    if (nameLower.includes('forum')) return MessageSquare
+
+    // Default icon
+    return Mail
+  }
+
+  const handleFolderChange = async (folderId: string) => {
     setCurrentFolder(folderId)
+    setLoading(true)
     
-    // Simulate different email counts for different folders
-    const folderCounts = {
-      inbox: 1880,
-      assigned: 45,
-      drafts: 12,
-      sent: 234,
-      closed: 567
+    if (gmailConnected) {
+      // For Gmail labels, load emails for the specific label
+      try {
+        const response = await fetch('/api/gmail/fetch-emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+            maxResults: 100, // Increased from 20 to 100
+            labelId: folderId
+          })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch emails')
+        }
+
+        if (data.success && data.emails) {
+          // Transform Gmail API response to our Email interface
+          const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
+            id: gmailEmail.id,
+            from: gmailEmail.from,
+            subject: gmailEmail.subject,
+            preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
+            date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric' 
+            }),
+            isRead: false, // Gmail API doesn't provide read status in this endpoint
+            hasAttachments: false, // Would need to check message parts for attachments
+            body: gmailEmail.body || '',
+            to: gmailEmail.to || 'me',
+            lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+          }))
+
+          setEmails(transformedEmails)
+          
+          // Store the next page token and check if there are more emails to load
+          setNextPageToken(data.nextPageToken)
+          const currentLabel = gmailLabels.find(label => label.id === folderId)
+          const totalEmails = currentLabel?.messagesTotal || 0
+          setHasMoreEmails(!!data.nextPageToken || transformedEmails.length < totalEmails)
+          
+          // Find the label name for the toast message
+          const labelName = currentLabel ? currentLabel.name : folderId
+          
+          toast.success('Emails Loaded', {
+            description: `Successfully loaded ${transformedEmails.length} emails from ${labelName}.${totalEmails > transformedEmails.length ? ` ${totalEmails - transformedEmails.length} more available.` : ''}`,
+            duration: 3000,
+          })
+        } else {
+          throw new Error(data.message || 'Failed to load emails')
+        }
+      } catch (error) {
+        console.error('Error loading emails for label:', error)
+        toast.error('Failed to Load Emails', {
+          description: error instanceof Error ? error.message : 'There was an error loading emails for this label.',
+          duration: 4000,
+        })
+        // Fallback to empty emails
+        setEmails([])
+            } finally {
+        setLoading(false)
+      }
     }
-    
-    const folderNames = {
-      inbox: 'Inbox',
-      assigned: 'Assigned',
-      drafts: 'Drafts', 
-      sent: 'Sent',
-      closed: 'Closed'
-    }
-    
-    const folderName = folderNames[folderId as keyof typeof folderNames]
-    const emailCount = folderCounts[folderId as keyof typeof folderCounts]
-    
-    console.log(`Switched to ${folderName} folder`)
   }
 
-  const folders = [
-    { id: 'inbox', name: 'Inbox', count: mockEmailsByFolder.inbox.length, icon: Mail },
-    { id: 'assigned', name: 'Assigned', count: mockEmailsByFolder.assigned.length, icon: User },
-    { id: 'drafts', name: 'Drafts', count: mockEmailsByFolder.drafts.length, icon: FileText },
-    { id: 'sent', name: 'Sent', count: mockEmailsByFolder.sent.length, icon: Mail },
-    { id: 'closed', name: 'Closed', count: mockEmailsByFolder.closed.length, icon: Calendar }
-  ]
+  // Create dynamic folders based on Gmail labels
+  const getFolders = () => {
+    if (gmailConnected && gmailLabels.length > 0) {
+      // Filter and map Gmail labels to our folder format
+      const importantLabels = gmailLabels.filter(label => 
+        label.type === 'system' || 
+        label.name === 'INBOX' ||
+        label.name === 'SENT' ||
+        label.name === 'DRAFT' ||
+        label.name === 'SPAM' ||
+        label.name === 'TRASH' ||
+        label.name === 'IMPORTANT' ||
+        label.name === 'STARRED' ||
+        label.name.startsWith('CATEGORY_')
+      )
+
+      // Remove duplicates based on label name
+      const uniqueLabels = importantLabels.filter((label, index, self) => 
+        index === self.findIndex(l => l.name === label.name)
+      )
+
+      console.log('=== Filtered Labels for Display ===')
+      uniqueLabels.forEach(label => {
+        console.log(`${label.name}: Total=${label.messagesTotal}, Unread=${label.messagesUnread}`)
+      })
+
+      return uniqueLabels.map(label => ({
+        id: label.id,
+        name: label.name === 'INBOX' ? 'Inbox' : 
+              label.name === 'SENT' ? 'Sent' :
+              label.name === 'DRAFT' ? 'Drafts' :
+              label.name === 'SPAM' ? 'Spam' :
+              label.name === 'TRASH' ? 'Trash' :
+              label.name === 'IMPORTANT' ? 'Important' :
+              label.name === 'STARRED' ? 'Starred' :
+              label.name.replace('CATEGORY_', '').charAt(0).toUpperCase() + 
+              label.name.replace('CATEGORY_', '').slice(1).toLowerCase(),
+        count: label.messagesTotal || 0,
+        icon: getLabelIcon(label.id, label.name),
+        unreadCount: label.messagesUnread || 0
+      }))
+    } else {
+      // Return empty array when Gmail is not connected
+      return []
+    }
+  }
+
+  const folders = getFolders()
 
   if (loading) {
     return (
@@ -594,17 +884,19 @@ Message: I'm interested in this property and would like more information about f
   }
 
   return (
-    <div className=" container flex-1 flex h-[calc(100vh-4rem)] bg-background overflow-hidden">
+    <div className=" container flex-1 flex h-[91vh] bg-background overflow-hidden">
       {/* Left Sidebar - Mailbox Navigation */}
       <div className="w-[220px] border-r bg-muted/20 flex-shrink-0">
         <div className="p-4">
           <h2 className="text-lg font-semibold mb-4">
-            {currentFolder === 'inbox' ? 'My Inbox' : 
-             currentFolder === 'assigned' ? 'Assigned' :
-             currentFolder === 'drafts' ? 'Drafts' :
-             currentFolder === 'sent' ? 'Sent' :
-             currentFolder === 'closed' ? 'Closed' : 'My Inbox'} 
-            ({currentFolderEmails.length})
+            {gmailConnected && gmailLabels.length > 0 ? (
+              (() => {
+                const currentLabel = gmailLabels.find(label => label.id === currentFolder)
+                return currentLabel ? `${currentLabel.name} (${currentLabel.messagesTotal || 0})` : 'My Inbox'
+              })()
+            ) : (
+              'Gmail Inbox'
+            )}
           </h2>
           
           {/* Gmail Connection Status */}
@@ -614,54 +906,104 @@ Message: I'm interested in this property and would like more information about f
               <span className="text-sm font-medium">Gmail Integration</span>
             </div>
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <div className={`w-2 h-2 rounded-full ${gmailConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span className="text-xs text-muted-foreground">
-                Ready for Demo
+                {gmailConnected ? 'Connected' : 'Not Connected'}
               </span>
             </div>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              onClick={loadGmailEmails}
-              disabled={loadingEmails}
-              className="w-full mt-2"
-            >
-              {loadingEmails ? (
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-1"></div>
-              ) : (
+                        {gmailConnected ? (
+              <div className="space-y-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={loadGmailEmails}
+                  disabled={loadingEmails}
+                  className="w-full"
+                >
+                  {loadingEmails ? (
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-1"></div>
+                  ) : (
+                    <Mail className="h-3 w-3 mr-1" />
+                  )}
+                  {loadingEmails ? 'Loading...' : 'Load Gmail Emails'}
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={loadGmailLabels}
+                  disabled={loadingLabels}
+                  className="w-full"
+                >
+                  {loadingLabels ? (
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-1"></div>
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                  )}
+                  {loadingLabels ? 'Loading...' : 'Refresh Labels'}
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setShowDisconnectModal(true)}
+                  className="w-full"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Disconnect Gmail
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={connectGmail}
+                className="w-full mt-2"
+              >
                 <Mail className="h-3 w-3 mr-1" />
-              )}
-              {loadingEmails ? 'Loading...' : 'Load Gmail Emails'}
-            </Button>
+                Connect Gmail
+              </Button>
+            )}
             <p className="text-xs text-muted-foreground mt-2">
-              Currently showing mock data - will show real emails when API keys are configured
+              {gmailConnected 
+                ? 'Your Gmail account is connected and ready to use'
+                : 'Connect your Gmail account to import emails and leads'
+              }
             </p>
           </div>
           
-          <nav className="space-y-1">
-            {folders.map((folder) => {
-              const Icon = folder.icon
-              return (
-                <button
-                  key={folder.id}
-                  onClick={() => handleFolderChange(folder.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
-                    currentFolder === folder.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted/60 text-muted-foreground'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-4 w-4" />
-                    {folder.name}
-                  </div>
-                  <Badge variant="secondary" className="text-xs">
-                    {folder.count}
-                  </Badge>
-                </button>
-              )
-            })}
-          </nav>
+          {gmailConnected && folders.length > 0 && (
+            <nav className="space-y-1 max-h-[283px] overflow-y-auto pr-2">
+              {folders.map((folder) => {
+                const Icon = folder.icon
+                return (
+                  <button
+                    key={folder.id}
+                    onClick={() => handleFolderChange(folder.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
+                      currentFolder === folder.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-muted/60 text-muted-foreground'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-4 w-4" />
+                      <span className="flex-1 text-left">{folder.name}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </nav>
+          )}
+          
+          {!gmailConnected && (
+            <div className="mt-4 p-3 bg-muted/20 rounded-lg">
+              <div className="text-center">
+                <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground mb-3">
+                  Connect your Gmail to see your folders and labels
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -698,7 +1040,24 @@ Message: I'm interested in this property and would like more information about f
 
         {/* Email List */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {filteredEmails.length === 0 ? (
+          {!gmailConnected ? (
+            <div className="flex items-center justify-center h-full p-8">
+              <div className="text-center max-w-md">
+                <Mail className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">Connect Your Gmail</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  To view and manage your emails, please connect your Gmail account first.
+                </p>
+                <Button onClick={connectGmail} className="w-full">
+                  <Mail className="h-4 w-4 mr-2" />
+                  Connect Gmail Account
+                </Button>
+                <p className="text-xs text-muted-foreground mt-4">
+                  Your emails will be securely imported and you can process them as leads directly from your inbox.
+                </p>
+              </div>
+            </div>
+          ) : filteredEmails.length === 0 ? (
             <div className="flex items-center justify-center h-full p-8">
               <div className="text-center">
                 <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -746,11 +1105,35 @@ Message: I'm interested in this property and would like more information about f
               </div>
             ))
           )}
+          
+          {/* Load More Button */}
+          {gmailConnected && hasMoreEmails && (
+            <div className="p-4 border-t">
+              <Button 
+                onClick={loadMoreEmails}
+                disabled={loadingMore}
+                variant="outline"
+                className="w-full"
+              >
+                {loadingMore ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-2"></div>
+                    Loading more emails...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3 w-3 mr-2" />
+                    Load More Emails
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Right Panel - Email Content */}
-      {selectedEmail && (
+      {gmailConnected && selectedEmail && (
         <div className="w-[455px] flex flex-col border-r flex-shrink-0">
           {/* Email Header */}
           <div className="p-4 border-b bg-background flex-shrink-0">
@@ -776,7 +1159,7 @@ Message: I'm interested in this property and would like more information about f
           {/* Email Body */}
           <div className="flex-1 p-4 overflow-y-auto min-h-0">
             <div className="prose prose-sm max-w-none mb-4 p-4 border rounded-lg bg-background">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{selectedEmail.body}</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed break-words overflow-wrap-anywhere max-w-full">{selectedEmail.body}</p>
               
               {selectedEmail.hasAttachments && (
                 <div className="mt-4 p-3 border rounded-lg bg-muted/20">
@@ -842,7 +1225,7 @@ Message: I'm interested in this property and would like more information about f
       )}
 
       {/* Rightmost Panel - Contact Information */}
-      {selectedContact && (
+      {gmailConnected && selectedContact && (
         <div className="w-80 bg-muted/20 p-4 relative flex-shrink-0">
           {/* Contact Info */}
           <div className="mb-4">
@@ -864,13 +1247,15 @@ Message: I'm interested in this property and would like more information about f
 
           <div className="space-y-3 mb-6">
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{selectedContact.phone} (mobile)</span>
-            </div>
-            <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{selectedContact.email}</span>
+              <span className="text-sm break-all">{selectedContact.email}</span>
             </div>
+            {selectedContact.phone !== 'Not provided' && (
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">{selectedContact.phone}</span>
+              </div>
+            )}
           </div>
 
           {/* Sections */}
@@ -897,12 +1282,16 @@ Message: I'm interested in this property and would like more information about f
             <div>
               <span className="text-sm font-medium">Recent Conversations</span>
               <div className="mt-2 space-y-1">
-                {selectedContact.recentConversations.map((conversation, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <Mail className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-sm">{conversation}</span>
-                  </div>
-                ))}
+                {selectedContact.recentConversations.length > 0 ? (
+                  selectedContact.recentConversations.map((conversation, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm truncate">{conversation}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No recent conversations</p>
+                )}
               </div>
             </div>
 
@@ -920,6 +1309,205 @@ Message: I'm interested in this property and would like more information about f
           </div>
         </div>
       )}
+
+      {/* Disconnect Gmail Confirmation Modal */}
+      <Dialog open={showDisconnectModal} onOpenChange={setShowDisconnectModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Disconnect Gmail Account</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to disconnect your Gmail account? This will remove access to your emails and you will need to reconnect to use Gmail features again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDisconnectModal(false)}
+              disabled={disconnecting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={disconnectGmail}
+              disabled={disconnecting}
+            >
+              {disconnecting ? (
+                <>
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
+                  Disconnecting...
+                </>
+              ) : (
+                'Disconnect Gmail'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Compose Email Modal */}
+      <Dialog open={showComposeModal} onOpenChange={setShowComposeModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>
+              {composeMode === 'reply' && 'Reply to Email'}
+              {composeMode === 'replyAll' && 'Reply All'}
+              {composeMode === 'forward' && 'Forward Email'}
+            </DialogTitle>
+            <DialogDescription>
+              {composeMode === 'reply' && `Reply to ${selectedEmail?.from}`}
+              {composeMode === 'replyAll' && `Reply to all recipients of "${selectedEmail?.subject}"`}
+              {composeMode === 'forward' && `Forward "${selectedEmail?.subject}" from ${selectedEmail?.from}`}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <Label htmlFor="to">To</Label>
+                  <Input
+                    id="to"
+                    value={composeData.to}
+                    onChange={(e) => setComposeData({ ...composeData, to: e.target.value })}
+                    placeholder="recipient@example.com"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="cc">CC</Label>
+                  <Input
+                    id="cc"
+                    value={composeData.cc}
+                    onChange={(e) => setComposeData({ ...composeData, cc: e.target.value })}
+                    placeholder="cc@example.com (optional)"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="bcc">BCC</Label>
+                  <Input
+                    id="bcc"
+                    value={composeData.bcc}
+                    onChange={(e) => setComposeData({ ...composeData, bcc: e.target.value })}
+                    placeholder="bcc@example.com (optional)"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="subject">Subject</Label>
+                  <Input
+                    id="subject"
+                    value={composeData.subject}
+                    onChange={(e) => setComposeData({ ...composeData, subject: e.target.value })}
+                    placeholder="Email subject"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="body">Message</Label>
+                  <Textarea
+                    id="body"
+                    value={composeData.body}
+                    onChange={(e) => setComposeData({ ...composeData, body: e.target.value })}
+                    placeholder="Type your message here..."
+                    rows={6}
+                    className="resize-none"
+                    autoFocus
+                    onFocus={(e) => {
+                      // Position cursor at the beginning of the textarea
+                      e.target.setSelectionRange(0, 0)
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter className="flex-shrink-0 mt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowComposeModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={async () => {
+                try {
+                  // Validate required fields
+                  if (!composeData.to || !composeData.subject || !composeData.body) {
+                    toast.error('Missing Required Fields', {
+                      description: 'Please fill in all required fields (To, Subject, and Message).',
+                      duration: 4000,
+                    })
+                    return
+                  }
+
+                  setSendingEmail(true)
+
+                  // Send email via API
+                  const response = await fetch('/api/gmail/send-email', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      userId: user?.id,
+                      to: composeData.to,
+                      cc: composeData.cc || undefined,
+                      bcc: composeData.bcc || undefined,
+                      subject: composeData.subject,
+                      body: composeData.body
+                    })
+                  })
+
+                  const data = await response.json()
+
+                  if (!response.ok) {
+                    throw new Error(data.error || 'Failed to send email')
+                  }
+
+                  if (data.success) {
+                    toast.success('Email Sent Successfully', {
+                      description: `Your ${composeMode} email has been sent via Gmail.`,
+                      duration: 4000,
+                    })
+                    setShowComposeModal(false)
+                    // Reset compose data
+                    setComposeData({
+                      to: '',
+                      cc: '',
+                      bcc: '',
+                      subject: '',
+                      body: ''
+                    })
+                  } else {
+                    throw new Error(data.error || 'Failed to send email')
+                  }
+                } catch (error) {
+                  console.error('Error sending email:', error)
+                  toast.error('Failed to Send Email', {
+                    description: error instanceof Error ? error.message : 'There was an error sending your email. Please try again.',
+                    duration: 6000,
+                  })
+                } finally {
+                  setSendingEmail(false)
+                }
+              }}
+              disabled={sendingEmail}
+            >
+              {sendingEmail ? (
+                <>
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
+                  Sending...
+                </>
+              ) : (
+                'Send Email'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 } 

@@ -1,26 +1,67 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-export async function GET() {
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+})
+
+export async function GET(request: NextRequest) {
   try {
-    // Check if Gmail environment variables are configured
+    // Get user ID from query parameters or headers
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId') || request.headers.get('x-user-id')
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if Gmail client credentials are configured
     const hasClientId = !!process.env.GMAIL_CLIENT_ID
     const hasClientSecret = !!process.env.GMAIL_CLIENT_SECRET
-    const hasRefreshToken = !!process.env.GMAIL_REFRESH_TOKEN
-    const hasEmailAddress = !!process.env.GMAIL_EMAIL_ADDRESS
     
-    const connected = hasClientId && hasClientSecret && hasRefreshToken && hasEmailAddress
-    
+    if (!hasClientId || !hasClientSecret) {
+      return NextResponse.json({
+        connected: false,
+        configured: {
+          clientId: hasClientId,
+          clientSecret: hasClientSecret
+        },
+        message: 'Gmail OAuth client credentials not configured'
+      })
+    }
+
+    // Check if user has Gmail tokens
+    const { data: userTokens, error } = await supabase
+      .from('user_gmail_tokens')
+      .select('gmail_email, created_at, updated_at')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .single()
+
+    const connected = !!userTokens && !error
+
     return NextResponse.json({
       connected,
       configured: {
         clientId: hasClientId,
-        clientSecret: hasClientSecret,
-        refreshToken: hasRefreshToken,
-        emailAddress: hasEmailAddress
+        clientSecret: hasClientSecret
       },
+      userConnected: connected,
+      gmailEmail: userTokens?.gmail_email || null,
+      connectedAt: userTokens?.created_at || null,
+      lastUpdated: userTokens?.updated_at || null,
       message: connected 
-        ? 'Gmail integration is configured and ready' 
-        : 'Gmail integration requires API keys configuration'
+        ? `Gmail connected: ${userTokens.gmail_email}` 
+        : 'User has not connected Gmail account'
     })
     
   } catch (error) {

@@ -286,4 +286,82 @@ export class EmailLeadProcessor {
       return null
     }
   }
+
+  /**
+   * Create a new person record from AI-detected lead data
+   */
+  static async createPersonFromLeadData(leadData: {
+    first_name: string
+    last_name: string
+    email: string[]
+    phone: string[]
+    company?: string
+    position?: string
+    message?: string
+    property_address?: string
+    property_details?: string
+    lead_source: string
+    lead_source_id?: string
+    confidence_score: number
+  }): Promise<Person | null> {
+    try {
+      // Use Round Robin to assign the lead
+      const { getNextRoundRobinUser } = await import('./roundRobin')
+      const assignedUserId = await getNextRoundRobinUser()
+      
+      if (!assignedUserId) {
+        console.error('No user available in Round Robin queue')
+        return null
+      }
+      
+      const personData: Partial<Person> = {
+        first_name: leadData.first_name,
+        last_name: leadData.last_name,
+        email: leadData.email,
+        phone: leadData.phone,
+        client_type: 'lead',
+        lead_source: leadData.lead_source,
+        lead_source_id: leadData.lead_source_id,
+        assigned_to: assignedUserId,
+        notes: leadData.message || `AI-detected lead from ${leadData.lead_source} (Confidence: ${(leadData.confidence_score * 100).toFixed(1)}%)`,
+        // Set default values
+        profile_picture: null,
+        birthday: null,
+        mailing_address: null,
+        relationship_id: null,
+        last_interaction: new Date().toISOString(),
+        next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
+        best_to_reach_by: null,
+        lists: [],
+        company: leadData.company,
+        position: leadData.position,
+        address: leadData.property_address,
+        city: undefined,
+        state: undefined,
+        zip_code: undefined,
+        country: undefined,
+        looking_for: leadData.property_details,
+        selling: undefined,
+        closed: undefined,
+      }
+      
+      const newPerson = await createPerson(personData)
+      
+      // Create an activity log entry
+      const { createActivity } = await import('./database')
+      
+      await createActivity({
+        person_id: newPerson.id,
+        type: 'created',
+        description: `AI-detected lead from ${leadData.lead_source} (${(leadData.confidence_score * 100).toFixed(1)}% confidence)`,
+        created_by: assignedUserId,
+      })
+      
+      return newPerson
+      
+    } catch (error) {
+      console.error('Error creating person from AI lead data:', error)
+      return null
+    }
+  }
 } 

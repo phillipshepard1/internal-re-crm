@@ -5,11 +5,11 @@
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-# Gmail Integration (After Google API approval)
+# Gmail Integration (Multi-user OAuth)
 GMAIL_CLIENT_ID=your_gmail_client_id
 GMAIL_CLIENT_SECRET=your_gmail_client_secret
-GMAIL_REFRESH_TOKEN=your_gmail_refresh_token
-GMAIL_EMAIL_ADDRESS=your_email@gmail.com
+# Note: GMAIL_REFRESH_TOKEN and GMAIL_EMAIL_ADDRESS are no longer needed
+# Each user will connect their own Gmail account through OAuth
 
 # HomeStack Integration
 HOMESTACK_API_KEY=your_homestack_api_key

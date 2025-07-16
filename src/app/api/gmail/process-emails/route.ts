@@ -4,7 +4,14 @@ import { GmailIntegration } from '@/lib/gmailIntegration'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { maxResults = 20 } = body
+    const { maxResults = 20, userId } = body
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
+      )
+    }
 
     if (typeof maxResults !== 'number' || maxResults < 1 || maxResults > 100) {
       return NextResponse.json(
@@ -17,25 +24,25 @@ export async function POST(request: NextRequest) {
     const gmailConfig = {
       clientId: process.env.GMAIL_CLIENT_ID!,
       clientSecret: process.env.GMAIL_CLIENT_SECRET!,
-      refreshToken: process.env.GMAIL_REFRESH_TOKEN!,
-      emailAddress: process.env.GMAIL_EMAIL_ADDRESS!,
+      refreshToken: '', // Will be loaded from user's tokens
+      emailAddress: '', // Will be loaded from user's tokens
     }
     
     // Validate configuration
-    if (!gmailConfig.clientId || !gmailConfig.clientSecret || !gmailConfig.refreshToken) {
+    if (!gmailConfig.clientId || !gmailConfig.clientSecret) {
       return NextResponse.json({ 
-        error: 'Gmail configuration missing',
-        required: ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN']
+        error: 'Gmail OAuth client credentials not configured',
+        required: ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET']
       }, { status: 400 })
     }
 
-    // Initialize Gmail integration
-    const gmail = new GmailIntegration(gmailConfig)
+    // Initialize Gmail integration with user-specific tokens
+    const gmail = new GmailIntegration(gmailConfig, userId)
     const initialized = await gmail.initialize()
 
     if (!initialized) {
       return NextResponse.json({
-        error: 'Failed to initialize Gmail integration' 
+        error: 'Failed to initialize Gmail integration. Please connect your Gmail account first.' 
       }, { status: 500 })
     }
     
