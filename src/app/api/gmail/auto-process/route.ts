@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize and process emails
-    const gmail = new GmailIntegration(gmailConfig)
+    const gmail = new GmailIntegration(gmailConfig, 'auto-process')
     const initialized = await gmail.initialize()
 
     if (!initialized) {
