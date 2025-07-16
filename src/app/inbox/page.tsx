@@ -752,6 +752,10 @@ export default function InboxPage() {
     setCurrentFolder(folderId)
     setLoading(true)
     
+    // Clear selected email and contact when switching folders
+    setSelectedEmail(null)
+    setSelectedContact(null)
+    
     if (gmailConnected) {
       // For Gmail labels, load emails for the specific label
       try {
