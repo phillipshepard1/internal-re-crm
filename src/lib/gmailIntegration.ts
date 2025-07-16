@@ -345,6 +345,12 @@ export class GmailIntegration {
       const from = headers.find((h: Record<string, unknown>) => h.name === 'From')?.value || ''
       const to = headers.find((h: Record<string, unknown>) => h.name === 'To')?.value || ''
       
+      // Check if email is read (has UNREAD label)
+      const isRead = !data.labelIds?.includes('UNREAD')
+      
+      // Check for attachments
+      const hasAttachments = this.hasAttachments(data.payload)
+      
       // Get email body
       const body = this.extractEmailBody(data.payload)
       
@@ -356,6 +362,8 @@ export class GmailIntegration {
         body,
         snippet: data.snippet,
         internalDate: data.internalDate,
+        isRead,
+        hasAttachments,
       }
     } catch (error) {
       console.error(`Error getting email details for ${messageId}:`, error)
@@ -363,6 +371,38 @@ export class GmailIntegration {
     }
   }
   
+  /**
+   * Check if email has attachments
+   */
+  private hasAttachments(payload: Record<string, unknown> | null): boolean {
+    if (!payload) return false
+    
+    // Check if message has parts (multipart)
+    if (payload.parts && Array.isArray(payload.parts)) {
+      for (const part of payload.parts as Record<string, unknown>[]) {
+        // Check if part is an attachment
+        if (part.filename && part.filename !== '') {
+          return true
+        }
+        // Check if part has sub-parts with attachments
+        if (part.parts && Array.isArray(part.parts)) {
+          for (const subPart of part.parts as Record<string, unknown>[]) {
+            if (subPart.filename && subPart.filename !== '') {
+              return true
+            }
+          }
+        }
+      }
+    }
+    
+    // Check if single part message has attachment
+    if (payload.filename && payload.filename !== '') {
+      return true
+    }
+    
+    return false
+  }
+
   /**
    * Extract email body from Gmail API response
    */

@@ -430,8 +430,8 @@ export default function InboxPage() {
             month: 'short', 
             day: 'numeric' 
           }),
-          isRead: false, // Gmail API doesn't provide read status in this endpoint
-          hasAttachments: false, // Would need to check message parts for attachments
+          isRead: gmailEmail.isRead ?? false,
+          hasAttachments: gmailEmail.hasAttachments ?? false,
           body: gmailEmail.body || '',
           to: gmailEmail.to || 'me',
           lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
@@ -784,8 +784,8 @@ export default function InboxPage() {
               month: 'short', 
               day: 'numeric' 
             }),
-            isRead: false, // Gmail API doesn't provide read status in this endpoint
-            hasAttachments: false, // Would need to check message parts for attachments
+            isRead: gmailEmail.isRead ?? false,
+            hasAttachments: gmailEmail.hasAttachments ?? false,
             body: gmailEmail.body || '',
             to: gmailEmail.to || 'me',
             lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
