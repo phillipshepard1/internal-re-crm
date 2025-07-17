@@ -64,7 +64,7 @@ export default function NotesPage() {
     hasPreviousPage,
     startIndex,
     endIndex
-  } = usePagination({
+  } = usePagination<Note>({
     data: notesArray,
     itemsPerPage: 10
   })

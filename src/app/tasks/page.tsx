@@ -70,7 +70,7 @@ function TasksPage() {
     hasPreviousPage,
     startIndex,
     endIndex
-  } = usePagination({
+  } = usePagination<Task>({
     data: tasks || [],
     itemsPerPage: 10
   })
@@ -303,7 +303,7 @@ function TasksPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {paginatedTasks.map((task) => (
+                    {paginatedTasks.map((task: Task) => (
                     <TableRow key={task.id}>
                       <TableCell className="font-medium">{task.title}</TableCell>
                       <TableCell className="max-w-[200px] truncate">

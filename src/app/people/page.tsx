@@ -54,7 +54,7 @@ export default function PeoplePage() {
     }
   )
 
-  const filteredPeople = (people || []).filter(person =>
+  const filteredPeople = (people || []).filter((person: Person) =>
     `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (person.email && person.email[0]?.toLowerCase().includes(searchQuery.toLowerCase()))
   )
@@ -69,7 +69,7 @@ export default function PeoplePage() {
     hasPreviousPage,
     startIndex,
     endIndex
-  } = usePagination({
+  } = usePagination<Person>({
     data: filteredPeople,
     itemsPerPage: 10
   })
@@ -171,7 +171,7 @@ export default function PeoplePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {paginatedPeople.map((person) => (
+                    {paginatedPeople.map((person: Person) => (
                     <TableRow key={person.id}>
                       <TableCell className="font-medium">
                         <Link 
