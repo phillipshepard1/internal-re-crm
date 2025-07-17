@@ -115,15 +115,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRef.current = currentUser
         setUser(currentUser)
 
-        if (currentUser) {
-          // Get user role
-          const role = await getUserRole(currentUser.id)
-          userRoleRef.current = role
-          setUserRole(role)
-        } else {
-          userRoleRef.current = null
-          setUserRole(null)
-        }
+                  if (currentUser) {
+            // Get user role
+            console.log('AuthContext: Getting user role for:', currentUser.id)
+            try {
+              const role = await getUserRole(currentUser.id)
+              console.log('AuthContext: User role assigned:', role)
+              userRoleRef.current = role
+              setUserRole(role)
+            } catch (error) {
+              console.error('AuthContext: Error getting user role:', error)
+              // Set default role if there's an error
+              userRoleRef.current = 'agent'
+              setUserRole('agent')
+            }
+          } else {
+            userRoleRef.current = null
+            setUserRole(null)
+          }
       }
 
       // Update loading state
@@ -186,9 +195,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (currentUser) {
             // Get user role
-            const role = await getUserRole(currentUser.id)
-            userRoleRef.current = role
-            setUserRole(role)
+            console.log('AuthContext: Auth listener - Getting user role for:', currentUser.id)
+            try {
+              const role = await getUserRole(currentUser.id)
+              console.log('AuthContext: Auth listener - User role assigned:', role)
+              userRoleRef.current = role
+              setUserRole(role)
+            } catch (error) {
+              console.error('AuthContext: Auth listener - Error getting user role:', error)
+              // Set default role if there's an error
+              userRoleRef.current = 'agent'
+              setUserRole('agent')
+            }
           } else {
             userRoleRef.current = null
             setUserRole(null)
@@ -258,11 +276,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     try {
+      console.log('AuthContext: Starting Google OAuth flow...')
+      
+      // Check current session first
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        console.log('AuthContext: User already has session, signing out first:', {
+          userId: session.user.id,
+          userEmail: session.user.email
+        })
+        
+        // Sign out first to force fresh OAuth flow
+        await supabase.auth.signOut()
+        
+        // Wait a moment for sign out to complete
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+      
       // Use Supabase's built-in OAuth functionality
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/auth/callback`
+          redirectTo: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/dashboard`,
+          queryParams: {
+            prompt: 'select_account', // Force account selection
+            access_type: 'offline'
+          }
         }
       })
 
@@ -271,7 +310,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: error.message }
       }
 
-      // The redirect will happen automatically
+      console.log('AuthContext: OAuth initiated successfully', {
+        url: data.url,
+        provider: data.provider
+      })
+
+      // Let Supabase handle the redirect automatically
       return { error: null }
     } catch (error) {
       console.error('AuthContext: Google sign in error:', error)

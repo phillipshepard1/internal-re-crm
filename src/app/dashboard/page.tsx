@@ -59,7 +59,9 @@ export default function DashboardPage() {
       userId: user?.id,
       userRole,
       timestamp: new Date().toISOString(),
-      url: window.location.pathname
+      url: window.location.pathname,
+      hasUser: !!user,
+      hasUserRole: !!userRole
     })
 
     return () => {
@@ -77,7 +79,8 @@ export default function DashboardPage() {
     loadDashboardData,
     {
       cacheKey: 'dashboard_data',
-      cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
+      cacheTimeout: 2 * 60 * 1000, // 2 minutes cache
+      enabled: !!user && !!userRole // Only load when both user and role are available
     }
   )
 
@@ -86,13 +89,15 @@ export default function DashboardPage() {
   const myTasks = dashboardData?.tasks || []
   const recentActivities = dashboardData?.activities || []
 
-  // Show loading only when auth is still loading or data is loading
-  if (loading) {
+  // Show loading when auth is still loading, data is loading, or user/role not ready
+  if (!user || !userRole || loading) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading dashboard...</p>
+          <p className="mt-4 text-muted-foreground">
+            {!user || !userRole ? 'Setting up your account...' : 'Loading dashboard...'}
+          </p>
         </div>
       </div>
     )
