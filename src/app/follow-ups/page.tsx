@@ -70,7 +70,7 @@ export default function FollowUpsPage() {
 
   const followUpsArray = followUps || []
 
-  const filteredFollowUps = followUpsArray.filter(fu =>
+  const filteredFollowUps = followUpsArray.filter((fu: FollowUpWithPerson) =>
     filter === 'upcoming'
       ? fu.status !== 'completed' && new Date(fu.scheduled_date) >= new Date()
       : isOverdue(fu)
@@ -86,7 +86,7 @@ export default function FollowUpsPage() {
     hasPreviousPage,
     startIndex,
     endIndex
-  } = usePagination({
+  } = usePagination<FollowUpWithPerson>({
     data: filteredFollowUps,
     itemsPerPage: 10
   })
