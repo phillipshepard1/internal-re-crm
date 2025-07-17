@@ -15,6 +15,7 @@ interface AuthContextType {
   userRole: string | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
+  signInWithGoogle: () => Promise<{ error: string | null }>
   signUp: (email: string, password: string, role: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshSession: () => Promise<void>
@@ -255,6 +256,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const signInWithGoogle = useCallback(async () => {
+    try {
+      // Use Supabase's built-in OAuth functionality
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/auth/callback`
+        }
+      })
+
+      if (error) {
+        console.error('AuthContext: Google sign in error:', error)
+        return { error: error.message }
+      }
+
+      // The redirect will happen automatically
+      return { error: null }
+    } catch (error) {
+      console.error('AuthContext: Google sign in error:', error)
+      return { error: error instanceof Error ? error.message : 'Failed to initiate Google sign in' }
+    }
+  }, [])
+
   const signUp = useCallback(async (email: string, password: string, role: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -320,10 +344,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userRole,
     loading,
     signIn,
+    signInWithGoogle,
     signUp,
     signOut,
     refreshSession
-  }), [user, userRole, loading, signIn, signUp, signOut, refreshSession])
+  }), [user, userRole, loading, signIn, signInWithGoogle, signUp, signOut, refreshSession])
 
   return (
     <AuthContext.Provider value={contextValue}>
