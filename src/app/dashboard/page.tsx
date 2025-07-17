@@ -108,10 +108,10 @@ export default function DashboardPage() {
     )
   }
 
-  const myLeads = myPeople.filter(p => p.client_type === 'lead')
-  const pendingFollowUps = myFollowUps.filter(f => f.status === 'pending')
-  const overdueFollowUps = pendingFollowUps.filter(f => new Date(f.scheduled_date) < new Date())
-  const pendingTasks = myTasks.filter(t => t.status === 'pending')
+  const myLeads = myPeople.filter((p: Person) => p.client_type === 'lead')
+  const pendingFollowUps = myFollowUps.filter((f: FollowUpWithPerson) => f.status === 'pending')
+  const overdueFollowUps = pendingFollowUps.filter((f: FollowUpWithPerson) => new Date(f.scheduled_date) < new Date())
+  const pendingTasks = myTasks.filter((t: Task) => t.status === 'pending')
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -196,7 +196,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentActivities.map((activity) => (
+                {recentActivities.map((activity: ActivityWithDetails) => (
                   <TableRow key={activity.id}>
                     <TableCell>
                       <Badge variant={
@@ -241,7 +241,7 @@ export default function DashboardPage() {
           <CardContent>
             {overdueFollowUps.length > 0 ? (
               <div className="space-y-2">
-                {overdueFollowUps.slice(0, 5).map((followUp) => (
+                {overdueFollowUps.slice(0, 5).map((followUp: FollowUpWithPerson) => (
                   <div key={followUp.id} className="flex items-center justify-between p-2 border rounded">
                     <div>
                       <p className="font-medium">
@@ -273,7 +273,7 @@ export default function DashboardPage() {
           <CardContent>
             {pendingTasks.length > 0 ? (
               <div className="space-y-2">
-                {pendingTasks.slice(0, 5).map((task) => (
+                {pendingTasks.slice(0, 5).map((task: Task) => (
                   <div key={task.id} className="flex items-center justify-between p-2 border rounded">
                     <div>
                       <p className="font-medium">{task.title}</p>
