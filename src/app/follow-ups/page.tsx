@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getFollowUps, updateFollowUp, createFollowUp, createActivity, createNote } from '@/lib/database'
+import { getFollowUps, updateFollowUp, createFollowUp, createActivity, createNote, getPeople } from '@/lib/database'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
+import { useDataLoader } from '@/hooks/useDataLoader'
 import type { FollowUp, Person } from '@/lib/supabase';
 type FollowUpWithPerson = FollowUp & { people?: Person };
 
@@ -35,11 +36,13 @@ function isOverdue(fu: FollowUpWithPerson) {
   return fu.status !== 'completed' && new Date(fu.scheduled_date) < new Date()
 }
 
+// Move loadFunction outside component to prevent recreation on every render
+const loadFollowUpsData = async (userId: string, userRole: string) => {
+  return await getFollowUps(userId, userRole)
+}
+
 export default function FollowUpsPage() {
   const { user, userRole } = useAuth()
-  const [followUps, setFollowUps] = useState<FollowUpWithPerson[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [filter, setFilter] = useState<'upcoming' | 'overdue'>('upcoming')
   const [modalOpen, setModalOpen] = useState(false)
   const [activeFollowUp, setActiveFollowUp] = useState<FollowUpWithPerson | null>(null)
@@ -54,8 +57,20 @@ export default function FollowUpsPage() {
   const [followUpType, setFollowUpType] = useState<'call' | 'email' | 'meeting' | 'task' | 'other'>('call')
   const [scheduleNotes, setScheduleNotes] = useState('')
   const [scheduleSaving, setScheduleSaving] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
 
-  const filteredFollowUps = followUps.filter(fu =>
+  // Use the robust data loader
+  const { data: followUps, loading, error, refetch } = useDataLoader(
+    loadFollowUpsData,
+    {
+      cacheKey: 'followups_data',
+      cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
+    }
+  )
+
+  const followUpsArray = followUps || []
+
+  const filteredFollowUps = followUpsArray.filter(fu =>
     filter === 'upcoming'
       ? fu.status !== 'completed' && new Date(fu.scheduled_date) >= new Date()
       : isOverdue(fu)
@@ -76,32 +91,16 @@ export default function FollowUpsPage() {
     itemsPerPage: 10
   })
 
-  useEffect(() => {
-    async function loadFollowUps() {
-      try {
-        setLoading(true)
-        setError('')
-        const data = await getFollowUps(user?.id, userRole || undefined)
-        setFollowUps(data)
-      } catch {
-        setError('Failed to load follow-ups')
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadFollowUps()
-  }, [])
-
   // Load people for the person selector
   useEffect(() => {
     async function loadPeople() {
       try {
-        const data = await (await import('@/lib/database')).getPeople(user?.id, userRole || undefined)
+        const data = await getPeople(user?.id, userRole || undefined)
         setPeopleOptions(data)
       } catch {}
     }
     if (scheduleModalOpen) loadPeople()
-  }, [scheduleModalOpen])
+  }, [scheduleModalOpen, user?.id, userRole])
 
   const openInteractionModal = (fu: FollowUpWithPerson) => {
     setActiveFollowUp(fu)
@@ -149,11 +148,10 @@ export default function FollowUpsPage() {
         notes: '',
       })
       // 4. Refresh list
-      const data = await getFollowUps(user?.id, userRole || undefined)
-      setFollowUps(data)
+      refetch()
       closeModal()
     } catch {
-      setError('Failed to save interaction')
+      setLocalError('Failed to save interaction')
     } finally {
       setSaving(false)
     }
@@ -181,11 +179,10 @@ export default function FollowUpsPage() {
         type: followUpType,
         notes: scheduleNotes,
       })
-      const data = await getFollowUps(user?.id, userRole || undefined)
-      setFollowUps(data)
+      refetch()
       closeScheduleModal()
     } catch {
-      setError('Failed to schedule follow-up')
+      setLocalError('Failed to schedule follow-up')
     } finally {
       setScheduleSaving(false)
     }
@@ -213,9 +210,9 @@ export default function FollowUpsPage() {
             <Button variant={filter === 'upcoming' ? 'default' : 'outline'} onClick={() => setFilter('upcoming')}>Upcoming/Due</Button>
             <Button variant={filter === 'overdue' ? 'default' : 'outline'} onClick={() => setFilter('overdue')}>Missed/Overdue</Button>
           </div>
-          {error && (
+          {(error || localError) && (
             <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{error || localError}</AlertDescription>
             </Alert>
           )}
           {loading ? (

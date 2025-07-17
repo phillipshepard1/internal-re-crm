@@ -2,6 +2,12 @@ import { createPerson } from './database'
 import { getNextRoundRobinUser } from './roundRobin'
 import type { Person } from './supabase'
 
+export interface HomeStackConfig {
+  apiKey: string
+  baseUrl: string
+  webhookSecret?: string
+}
+
 export interface HomeStackLead {
   id: string
   firstName: string
@@ -14,12 +20,13 @@ export interface HomeStackLead {
   source: 'homestack'
   createdAt: Date
   status: 'new' | 'contacted' | 'qualified' | 'converted'
-}
-
-export interface HomeStackConfig {
-  apiKey: string
-  baseUrl: string
-  webhookSecret?: string
+  // Additional HomeStack specific fields
+  leadSource?: string
+  propertyType?: string
+  budget?: string
+  timeline?: string
+  notes?: string
+  tags?: string[]
 }
 
 export class HomeStackIntegration {
@@ -30,14 +37,47 @@ export class HomeStackIntegration {
   }
   
   /**
-   * Fetch recent leads from HomeStack API
+   * Fetch recent leads from HomeStack API using their private API
    */
   async fetchRecentLeads(limit: number = 50): Promise<HomeStackLead[]> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/api/leads?limit=${limit}`, {
+      // Use the proper HomeStack API endpoint
+      const response = await fetch(`${this.config.baseUrl}/api/v1/leads?limit=${limit}&status=all`, {
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('HomeStack API error:', response.status, errorText)
+        throw new Error(`HomeStack API error: ${response.status} - ${errorText}`)
+      }
+      
+      const data = await response.json()
+      
+      // Handle different response formats
+      const leads = data.leads || data.data || data || []
+      return this.transformLeads(leads)
+      
+    } catch (error) {
+      console.error('Error fetching HomeStack leads:', error)
+      return []
+    }
+  }
+
+  /**
+   * Fetch leads by status
+   */
+  async fetchLeadsByStatus(status: string, limit: number = 50): Promise<HomeStackLead[]> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/api/v1/leads?status=${status}&limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
       })
       
@@ -46,11 +86,39 @@ export class HomeStackIntegration {
       }
       
       const data = await response.json()
-      return this.transformLeads(data.leads || [])
+      const leads = data.leads || data.data || data || []
+      return this.transformLeads(leads)
       
     } catch (error) {
-      console.error('Error fetching HomeStack leads:', error)
+      console.error(`Error fetching HomeStack leads with status ${status}:`, error)
       return []
+    }
+  }
+
+  /**
+   * Fetch a specific lead by ID
+   */
+  async fetchLeadById(leadId: string): Promise<HomeStackLead | null> {
+    try {
+      const response = await fetch(`${this.config.baseUrl}/api/v1/leads/${leadId}`, {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HomeStack API error: ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      const leads = this.transformLeads([data.lead || data])
+      return leads[0] || null
+      
+    } catch (error) {
+      console.error(`Error fetching HomeStack lead ${leadId}:`, error)
+      return null
     }
   }
   
@@ -64,21 +132,47 @@ export class HomeStackIntegration {
         ? status as 'new' | 'contacted' | 'qualified' | 'converted'
         : 'new'
       
+      // Handle different email formats from HomeStack API
+      let emails: string[] = []
+      if (Array.isArray(lead.email)) {
+        emails = lead.email as string[]
+      } else if (lead.email) {
+        emails = [lead.email as string]
+      } else if (lead.email_address) {
+        emails = [lead.email_address as string]
+      }
+      
+      // Handle different phone formats
+      let phones: string[] = []
+      if (Array.isArray(lead.phone)) {
+        phones = lead.phone as string[]
+      } else if (lead.phone) {
+        phones = [lead.phone as string]
+      } else if (lead.phone_number) {
+        phones = [lead.phone_number as string]
+      }
+      
       return {
         id: lead.id as string,
-        firstName: (lead.first_name as string) || (lead.firstName as string) || '',
-        lastName: (lead.last_name as string) || (lead.lastName as string) || '',
-        email: Array.isArray(lead.email) ? lead.email as string[] : [lead.email as string || ''],
-        phone: Array.isArray(lead.phone) ? lead.phone as string[] : [lead.phone as string || ''],
-        message: (lead.message as string) || (lead.notes as string) || (lead.comments as string),
-        propertyAddress: (lead.property_address as string) || (lead.address as string),
-        propertyDetails: (lead.property_details as string) || (lead.listing_details as string),
+        firstName: (lead.first_name as string) || (lead.firstName as string) || (typeof lead.name === 'string' ? lead.name.split(' ')[0] : ''),
+        lastName: (lead.last_name as string) || (lead.lastName as string) || (typeof lead.name === 'string' ? lead.name.split(' ').slice(1).join(' ') : ''),
+        email: emails,
+        phone: phones,
+        message: (lead.message as string) || (lead.notes as string) || (lead.comments as string) || (lead.description as string),
+        propertyAddress: (lead.property_address as string) || (lead.address as string) || (lead.property_address_1 as string),
+        propertyDetails: (lead.property_details as string) || (lead.listing_details as string) || (lead.property_type as string),
         source: 'homestack' as const,
-        createdAt: new Date(lead.created_at as string || lead.createdAt as string || Date.now()),
-        status: validStatus
+        createdAt: new Date(lead.created_at as string || lead.createdAt as string || lead.date_created as string || Date.now()),
+        status: validStatus,
+        // Additional HomeStack specific fields
+        leadSource: lead.lead_source as string,
+        propertyType: lead.property_type as string,
+        budget: lead.budget as string,
+        timeline: lead.timeline as string,
+        notes: lead.notes as string,
+        tags: Array.isArray(lead.tags) ? lead.tags as string[] : []
       }
     })
-    
   }
   
   /**

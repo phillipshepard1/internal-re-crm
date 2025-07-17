@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 
+
 interface Email {
   id: string
   from: string
@@ -68,19 +69,81 @@ interface Contact {
   lastUpdated?: string
 }
 
+type ConnectionStatusType = 'connected' | 'disconnected' | 'expired' | 'checking' | 'error'
+
+const CONNECTION_STATUSES: readonly ConnectionStatusType[] = ['connected', 'disconnected', 'expired', 'checking', 'error'] as const
+
+interface ConnectionStatus {
+  status: ConnectionStatusType
+  message: string
+  requiresReconnect?: boolean
+  tokenRefreshed?: boolean
+}
+
+// Helper function to create connection status objects with proper typing
+const createConnectionStatus = (status: ConnectionStatusType, message: string, options?: { requiresReconnect?: boolean; tokenRefreshed?: boolean }): ConnectionStatus => ({
+  status,
+  message,
+  ...options
+})
+
+// Type guard to ensure TypeScript recognizes all status values
+const isConnectionStatus = (status: string): status is ConnectionStatusType => {
+  return ['connected', 'disconnected', 'expired', 'checking', 'error'].includes(status)
+}
+
+// Move load functions outside component to prevent recreation
+const loadGmailStatus = async (userId: string, userRole: string) => {
+  const response = await fetch(`/api/gmail/status?userId=${userId}`)
+  const data = await response.json()
+  return data
+}
+
+const loadGmailLabels = async (userId: string, userRole: string) => {
+  const response = await fetch('/api/gmail/labels', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ userId })
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to load Gmail labels: ${response.status} ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  return data.labels || []
+}
+
+const loadGmailEmails = async (userId: string, userRole: string) => {
+  const response = await fetch('/api/gmail/fetch-emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ userId })
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to load Gmail emails: ${response.status} ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  return data.emails || []
+}
+
 export default function InboxPage() {
   const { user, userRole } = useAuth()
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [currentFolder, setCurrentFolder] = useState('inbox')
-  const [loading, setLoading] = useState(true)
+  const [currentFolder, setCurrentFolder] = useState('INBOX')
   const [processingEmail, setProcessingEmail] = useState(false)
   const [noteContent, setNoteContent] = useState('')
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [gmailConnected, setGmailConnected] = useState(false)
-  const [loadingEmails, setLoadingEmails] = useState(false)
   const [currentFilter, setCurrentFilter] = useState('all')
   const [gmailLabels, setGmailLabels] = useState<Array<{
     id: string
@@ -89,11 +152,10 @@ export default function InboxPage() {
     messagesTotal?: number
     messagesUnread?: number
   }>>([])
-  const [loadingLabels, setLoadingLabels] = useState(false)
   const [hasMoreEmails, setHasMoreEmails] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [loadingFolder, setLoadingFolder] = useState<string | null>(null)
   const [nextPageToken, setNextPageToken] = useState<string | undefined>(undefined)
-  const [initialFolderSet, setInitialFolderSet] = useState(false)
   const [showDisconnectModal, setShowDisconnectModal] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [showComposeModal, setShowComposeModal] = useState(false)
@@ -106,15 +168,29 @@ export default function InboxPage() {
     body: ''
   })
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
+    status: 'checking' as ConnectionStatusType,
+    message: 'Checking connection...'
+  })
 
-
-
-
-
-  // Check Gmail connection status
+  // Debug component lifecycle
   useEffect(() => {
-    checkGmailConnection()
-  }, [])
+    console.log('InboxPage: Component mounted', {
+      userId: user?.id,
+      userRole,
+      timestamp: new Date().toISOString(),
+      url: window.location.pathname
+    })
+
+    return () => {
+      console.log('InboxPage: Component unmounted', {
+        userId: user?.id,
+        userRole,
+        timestamp: new Date().toISOString(),
+        url: window.location.pathname
+      })
+    }
+  }, [user?.id, userRole])
 
   // Handle OAuth callback parameters
   useEffect(() => {
@@ -130,8 +206,6 @@ export default function InboxPage() {
       })
       // Clear URL parameters
       window.history.replaceState({}, document.title, window.location.pathname)
-      // Refresh Gmail connection status
-    checkGmailConnection()
     } else if (error) {
       const errorMessages: Record<string, string> = {
         'missing_params': 'Missing OAuth parameters',
@@ -148,32 +222,227 @@ export default function InboxPage() {
       // Clear URL parameters
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-  }, [])
+  }, []) // No dependencies to prevent re-runs
 
-  // Load emails and labels when Gmail connection status changes
-  useEffect(() => {
-    if (gmailConnected && user?.id) {
-      // Load real emails and labels when Gmail is connected
-      loadGmailEmails()
-      loadGmailLabels()
-    } else if (!gmailConnected) {
-      // Don't show any data when Gmail is not connected
-      setEmails([])
-      setLoading(false)
-    }
-  }, [gmailConnected, user?.id])
+  // Check Gmail connection status
+  const checkGmailConnection = useCallback(async () => {
+    if (!user?.id) return
 
-  const checkGmailConnection = async () => {
     try {
-      // Check if Gmail environment variables are set
-      const response = await fetch(`/api/gmail/status?userId=${user?.id}`)
-      const data = await response.json()
+      const checkingStatus: ConnectionStatus = {
+        status: 'checking' as ConnectionStatusType,
+        message: 'Checking connection...'
+      }
+      setConnectionStatus(checkingStatus)
+      
+      const data = await loadGmailStatus(user.id, userRole || 'agent')
+      
       setGmailConnected(data.userConnected)
+      
+      // Update connection status
+      if (data.requiresReconnect) {
+        const expiredStatus: ConnectionStatus = {
+          status: 'expired' as ConnectionStatusType,
+          message: 'Connection expired',
+          requiresReconnect: true
+        }
+        setConnectionStatus(expiredStatus)
+        toast.error('Gmail Connection Expired', {
+          description: 'Your Gmail connection has expired. Please reconnect your account to continue.',
+          duration: 8000,
+        })
+      } else if (data.tokenRefreshed) {
+        const refreshedStatus: ConnectionStatus = {
+          status: 'connected' as ConnectionStatusType,
+          message: 'Connected (refreshed)',
+          tokenRefreshed: true
+        }
+        setConnectionStatus(refreshedStatus)
+        toast.success('Gmail Connection Refreshed', {
+          description: 'Your Gmail connection has been automatically refreshed.',
+          duration: 3000,
+        })
+      } else if (data.userConnected) {
+        const connectedStatus: ConnectionStatus = {
+          status: 'connected' as ConnectionStatusType,
+          message: 'Connected'
+        }
+        setConnectionStatus(connectedStatus)
+      } else if (!data.userConnected && data.gmailEmail) {
+        const errorStatus: ConnectionStatus = {
+          status: 'error' as ConnectionStatusType,
+          message: 'Connection invalid',
+          requiresReconnect: true
+        }
+        setConnectionStatus(errorStatus)
+        toast.error('Gmail Connection Invalid', {
+          description: 'Your Gmail connection is no longer valid. Please reconnect your account.',
+          duration: 8000,
+        })
+      } else {
+        const disconnectedStatus: ConnectionStatus = {
+          status: 'disconnected' as ConnectionStatusType,
+          message: 'Not connected'
+        }
+        setConnectionStatus(disconnectedStatus)
+      }
     } catch (error) {
       console.error('Error checking Gmail connection:', error)
       setGmailConnected(false)
+      const errorStatus: ConnectionStatus = {
+        status: 'error' as ConnectionStatusType,
+        message: 'Connection check failed'
+      }
+      setConnectionStatus(errorStatus)
+      toast.error('Connection Check Failed', {
+        description: 'Unable to verify Gmail connection status.',
+        duration: 5000,
+      })
     }
-  }
+  }, [user?.id, userRole])
+
+  // Load emails for a specific folder
+  const loadEmailsForFolder = useCallback(async (folderId: string) => {
+    if (!user?.id || !gmailConnected) return
+
+    setLoadingFolder(folderId)
+    try {
+      const response = await fetch('/api/gmail/fetch-emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          maxResults: 100,
+          labelId: folderId
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch emails')
+      }
+
+      if (data.success && data.emails) {
+        // Transform Gmail API response to our Email interface
+        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
+          id: gmailEmail.id,
+          from: gmailEmail.from,
+          subject: gmailEmail.subject,
+          preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
+          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
+          isRead: gmailEmail.isRead ?? false,
+          hasAttachments: gmailEmail.hasAttachments ?? false,
+          body: gmailEmail.body || '',
+          to: gmailEmail.to || 'me',
+          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+        }))
+
+        setEmails(transformedEmails)
+        setCurrentFolder(folderId)
+        
+        // Store the next page token and check if there are more emails to load
+        setNextPageToken(data.nextPageToken)
+        
+        // For now, just check if there's a next page token to determine if there are more emails
+        // We'll update the hasMoreEmails state when labels are available
+        setHasMoreEmails(!!data.nextPageToken)
+      } else {
+        throw new Error(data.message || 'Failed to load emails')
+      }
+    } catch (error) {
+      console.error('Error loading emails for folder:', error)
+      toast.error('Failed to Load Emails', {
+        description: error instanceof Error ? error.message : 'There was an error loading emails for this folder.',
+        duration: 4000,
+      })
+      // Fallback to empty emails
+      setEmails([])
+    } finally {
+      setLoadingFolder(null)
+    }
+  }, [user?.id, userRole, gmailConnected])
+
+  // Load Gmail labels
+  const loadLabels = useCallback(async () => {
+    if (!user?.id || !gmailConnected) return
+
+    try {
+      const labels = await loadGmailLabels(user.id, userRole || 'agent')
+      setGmailLabels(labels)
+      
+      // After loading labels, automatically load emails for the inbox
+      if (labels.length > 0) {
+        await loadEmailsForFolder('INBOX')
+      }
+    } catch (error) {
+      console.error('Error loading Gmail labels:', error)
+      toast.error('Failed to load Gmail labels')
+    }
+  }, [user?.id, userRole, gmailConnected, loadEmailsForFolder])
+
+  // Load Gmail emails
+  const loadEmails = useCallback(async () => {
+    if (!user?.id || !gmailConnected) return
+
+    try {
+      const emailsData = await loadGmailEmails(user.id, userRole || 'agent')
+      setEmails(emailsData)
+    } catch (error) {
+      console.error('Error loading Gmail emails:', error)
+      toast.error('Failed to load emails')
+    }
+  }, [user?.id, userRole, gmailConnected])
+
+  // Initialize Gmail connection and data
+  useEffect(() => {
+    if (!user?.id) return
+
+    const initializeGmail = async () => {
+      await checkGmailConnection()
+    }
+
+    initializeGmail()
+  }, [user?.id, checkGmailConnection])
+
+  // Load labels and emails when connected
+  useEffect(() => {
+    if (!gmailConnected || !user?.id) return
+
+    const loadData = async () => {
+      await loadLabels()
+      // Emails will be loaded automatically when labels are loaded
+    }
+
+    loadData()
+  }, [gmailConnected, user?.id, loadLabels])
+
+  // Update hasMoreEmails when labels are loaded
+  useEffect(() => {
+    if (gmailLabels.length > 0 && currentFolder) {
+      const currentLabel = gmailLabels.find(label => label.id === currentFolder)
+      if (currentLabel) {
+        const totalEmails = currentLabel.messagesTotal || 0
+        setHasMoreEmails(!!nextPageToken || emails.length < totalEmails)
+      }
+    }
+  }, [gmailLabels, currentFolder, nextPageToken, emails.length])
+
+  // Set up periodic token validation (every 30 minutes)
+  useEffect(() => {
+    if (!gmailConnected || !user?.id) return
+
+    const interval = setInterval(() => {
+      checkGmailConnection()
+    }, 30 * 60 * 1000) // 30 minutes
+    
+    return () => clearInterval(interval)
+  }, [gmailConnected, user?.id, checkGmailConnection])
 
   const connectGmail = async () => {
     if (!user?.id) {
@@ -244,9 +513,15 @@ export default function InboxPage() {
         setSelectedContact(null) // Clear selected contact
         setNextPageToken(undefined)
         setHasMoreEmails(false)
-        setInitialFolderSet(false)
-        setLoading(false) // Immediately stop loading
+        setLoadingMore(false) // Reset loading more state
         setShowDisconnectModal(false) // Close modal
+        
+        // Update connection status to disconnected
+        const disconnectedStatus: ConnectionStatus = {
+          status: 'disconnected' as ConnectionStatusType,
+          message: 'Not connected'
+        }
+        setConnectionStatus(disconnectedStatus)
       } else {
         throw new Error(data.message || 'Failed to disconnect Gmail')
       }
@@ -260,61 +535,6 @@ export default function InboxPage() {
       setDisconnecting(false)
     }
   }
-
-  const loadGmailLabels = useCallback(async () => {
-    if (!user?.id) {
-      return
-    }
-
-    setLoadingLabels(true)
-    try {
-      const response = await fetch('/api/gmail/labels', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: user.id
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        console.log('Gmail Labels received:', data.labels)
-        
-        // Debug: Log the counts for each label
-        console.log('=== Labels received from API ===')
-        data.labels.forEach((label: any) => {
-          console.log(`Label: ${label.name}, Total: ${label.messagesTotal}, Unread: ${label.messagesUnread}`)
-        })
-        
-        // Check for duplicate labels
-        const labelNames = data.labels.map((label: any) => label.name)
-        const duplicates = labelNames.filter((name: string, index: number) => labelNames.indexOf(name) !== index)
-        if (duplicates.length > 0) {
-          console.warn('Duplicate labels found:', duplicates)
-        }
-        
-        setGmailLabels(data.labels)
-        
-        // Set current folder to INBOX if it exists and we haven't set it yet
-        if (data.labels.length > 0 && !initialFolderSet) {
-          const inboxLabel = data.labels.find((label: any) => label.name === 'INBOX')
-          if (inboxLabel) {
-            setCurrentFolder(inboxLabel.id)
-            setInitialFolderSet(true)
-          }
-        }
-      } else {
-        console.error('Failed to load Gmail labels:', data.error)
-      }
-    } catch (error) {
-      console.error('Error loading Gmail labels:', error)
-    } finally {
-      setLoadingLabels(false)
-    }
-  }, [user?.id, initialFolderSet])
 
   const loadMoreEmails = async () => {
     if (!user?.id || !gmailConnected || loadingMore) {
@@ -380,95 +600,6 @@ export default function InboxPage() {
       setLoadingMore(false)
     }
   }
-
-  const loadGmailEmails = useCallback(async () => {
-    if (!user?.id) {
-      toast.error('User not authenticated')
-      return
-    }
-
-    setLoadingEmails(true)
-    setLoading(true) // Also set main loading state
-    try {
-      // Determine if we should load emails for a specific label
-      let requestBody: any = {
-        userId: user.id,
-        maxResults: 100 // Increased from 20 to 100
-      }
-      
-      // If we're on a Gmail label (not a mock folder), include the label ID
-      if (gmailConnected && gmailLabels.length > 0) {
-        const currentLabel = gmailLabels.find(label => label.id === currentFolder)
-        if (currentLabel) {
-          requestBody.labelId = currentFolder
-        }
-      }
-      
-      // Fetch real emails from Gmail API
-      const response = await fetch('/api/gmail/fetch-emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch emails')
-      }
-
-      if (data.success && data.emails) {
-        // Transform Gmail API response to our Email interface
-        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
-          id: gmailEmail.id,
-          from: gmailEmail.from,
-          subject: gmailEmail.subject,
-          preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
-          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric' 
-          }),
-          isRead: gmailEmail.isRead ?? false,
-          hasAttachments: gmailEmail.hasAttachments ?? false,
-          body: gmailEmail.body || '',
-          to: gmailEmail.to || 'me',
-          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
-        }))
-
-        setEmails(transformedEmails)
-        
-        // Get label name for the toast message
-        let labelName = 'your Gmail account'
-        if (requestBody.labelId) {
-          const currentLabel = gmailLabels.find(label => label.id === requestBody.labelId)
-          if (currentLabel) {
-            labelName = currentLabel.name
-          }
-        }
-        
-        toast.success('Gmail Emails Loaded', {
-          description: `Successfully loaded ${transformedEmails.length} emails from ${labelName}.`,
-          duration: 5000,
-        })
-      } else {
-        throw new Error(data.message || 'Failed to load emails')
-      }
-      
-    } catch (error) {
-      console.error('Error loading Gmail emails:', error)
-      toast.error('Failed to Load Emails', {
-        description: error instanceof Error ? error.message : 'There was an error loading emails from Gmail. Please try again.',
-        duration: 6000,
-      })
-      // Fallback to empty emails on error
-      setEmails([])
-    } finally {
-      setLoadingEmails(false)
-      setLoading(false) // Clear main loading state
-    }
-  }, [user?.id, gmailConnected, gmailLabels, currentFolder])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -749,81 +880,21 @@ export default function InboxPage() {
   }
 
   const handleFolderChange = async (folderId: string) => {
-    setCurrentFolder(folderId)
-    setLoading(true)
-    
     // Clear selected email and contact when switching folders
     setSelectedEmail(null)
     setSelectedContact(null)
     
     if (gmailConnected) {
-      // For Gmail labels, load emails for the specific label
-      try {
-        const response = await fetch('/api/gmail/fetch-emails', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: user?.id,
-            maxResults: 100, // Increased from 20 to 100
-            labelId: folderId
-          })
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to fetch emails')
-        }
-
-        if (data.success && data.emails) {
-          // Transform Gmail API response to our Email interface
-          const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
-            id: gmailEmail.id,
-            from: gmailEmail.from,
-            subject: gmailEmail.subject,
-            preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
-            date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric' 
-            }),
-            isRead: gmailEmail.isRead ?? false,
-            hasAttachments: gmailEmail.hasAttachments ?? false,
-            body: gmailEmail.body || '',
-            to: gmailEmail.to || 'me',
-            lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
-          }))
-
-          setEmails(transformedEmails)
-          
-          // Store the next page token and check if there are more emails to load
-          setNextPageToken(data.nextPageToken)
-          const currentLabel = gmailLabels.find(label => label.id === folderId)
-          const totalEmails = currentLabel?.messagesTotal || 0
-          setHasMoreEmails(!!data.nextPageToken || transformedEmails.length < totalEmails)
-          
-          // Find the label name for the toast message
-          const labelName = currentLabel ? currentLabel.name : folderId
-          
-          toast.success('Emails Loaded', {
-            description: `Successfully loaded ${transformedEmails.length} emails from ${labelName}.${totalEmails > transformedEmails.length ? ` ${totalEmails - transformedEmails.length} more available.` : ''}`,
-            duration: 3000,
-          })
-        } else {
-          throw new Error(data.message || 'Failed to load emails')
-        }
-      } catch (error) {
-        console.error('Error loading emails for label:', error)
-        toast.error('Failed to Load Emails', {
-          description: error instanceof Error ? error.message : 'There was an error loading emails for this label.',
-          duration: 4000,
-        })
-        // Fallback to empty emails
-        setEmails([])
-            } finally {
-        setLoading(false)
-      }
+      await loadEmailsForFolder(folderId)
+      
+      // Find the label name for the toast message
+      const currentLabel = gmailLabels.find(label => label.id === folderId)
+      const labelName = currentLabel ? currentLabel.name : folderId
+      
+      toast.success('Folder Changed', {
+        description: `Switched to ${labelName}`,
+        duration: 2000,
+      })
     }
   }
 
@@ -876,12 +947,12 @@ export default function InboxPage() {
 
   const folders = getFolders()
 
-  if (loading) {
+  if (connectionStatus.status === ('checking' as ConnectionStatusType)) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-sm text-muted-foreground">Loading inbox...</p>
+          <p className="mt-4 text-sm text-muted-foreground">Checking Gmail connection...</p>
         </div>
       </div>
     )
@@ -893,14 +964,7 @@ export default function InboxPage() {
       <div className="w-[220px] border-r bg-muted/20 flex-shrink-0">
         <div className="p-4">
           <h2 className="text-lg font-semibold mb-4">
-            {gmailConnected && gmailLabels.length > 0 ? (
-              (() => {
-                const currentLabel = gmailLabels.find(label => label.id === currentFolder)
-                return currentLabel ? `${currentLabel.name} (${currentLabel.messagesTotal || 0})` : 'My Inbox'
-              })()
-            ) : (
-              'Gmail Inbox'
-            )}
+            Gmail Inbox
           </h2>
           
           {/* Gmail Connection Status */}
@@ -910,40 +974,34 @@ export default function InboxPage() {
               <span className="text-sm font-medium">Gmail Integration</span>
             </div>
             <div className="flex items-center gap-2 mb-2">
-              <div className={`w-2 h-2 rounded-full ${gmailConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <div className={`w-2 h-2 rounded-full ${
+                connectionStatus.status === ('connected' as ConnectionStatusType) ? 'bg-green-500' :
+                connectionStatus.status === ('checking' as ConnectionStatusType) ? 'bg-yellow-500' :
+                connectionStatus.status === ('expired' as ConnectionStatusType) ? 'bg-orange-500' :
+                'bg-red-500'
+              }`}></div>
               <span className="text-xs text-muted-foreground">
-                {gmailConnected ? 'Connected' : 'Not Connected'}
+                {connectionStatus.message}
+                {connectionStatus.status === ('checking' as ConnectionStatusType) && (
+                  <div className="animate-spin rounded-full h-2 w-2 border-b border-current ml-1"></div>
+                )}
               </span>
             </div>
-                        {gmailConnected ? (
+                        {connectionStatus.status === 'connected' ? (
               <div className="space-y-2">
                 <Button 
                   size="sm" 
                   variant="outline" 
-                  onClick={loadGmailEmails}
-                  disabled={loadingEmails}
+                  onClick={() => loadEmailsForFolder(currentFolder)}
+                  disabled={loadingMore}
                   className="w-full"
                 >
-                  {loadingEmails ? (
+                  {loadingMore ? (
                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-1"></div>
                   ) : (
                     <Mail className="h-3 w-3 mr-1" />
                   )}
-                  {loadingEmails ? 'Loading...' : 'Load Gmail Emails'}
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={loadGmailLabels}
-                  disabled={loadingLabels}
-                  className="w-full"
-                >
-                  {loadingLabels ? (
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-1"></div>
-                  ) : (
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                  )}
-                  {loadingLabels ? 'Loading...' : 'Refresh Labels'}
+                  {loadingMore ? 'Loading...' : 'Refresh'}
                 </Button>
                 <Button 
                   size="sm" 
@@ -953,6 +1011,39 @@ export default function InboxPage() {
                 >
                   <X className="h-3 w-3 mr-1" />
                   Disconnect Gmail
+                </Button>
+              </div>
+            ) : connectionStatus.status === 'expired' || connectionStatus.requiresReconnect ? (
+              <div className="space-y-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={connectGmail}
+                  className="w-full"
+                >
+                  <Mail className="h-3 w-3 mr-1" />
+                  Reconnect Gmail
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setShowDisconnectModal(true)}
+                  className="w-full"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Remove Connection
+                </Button>
+              </div>
+            ) : connectionStatus.status === ('checking' as ConnectionStatusType) ? (
+              <div className="space-y-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  disabled
+                  className="w-full"
+                >
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-1"></div>
+                  Checking Connection...
                 </Button>
               </div>
             ) : (
@@ -967,8 +1058,12 @@ export default function InboxPage() {
               </Button>
             )}
             <p className="text-xs text-muted-foreground mt-2">
-              {gmailConnected 
+              {connectionStatus.status === ('connected' as ConnectionStatusType)
                 ? 'Your Gmail account is connected and ready to use'
+                : connectionStatus.status === ('expired' as ConnectionStatusType) || connectionStatus.requiresReconnect
+                ? 'Your Gmail connection has expired. Please reconnect to continue.'
+                : connectionStatus.status === ('checking' as ConnectionStatusType)
+                ? 'Verifying your Gmail connection...'
                 : 'Connect your Gmail account to import emails and leads'
               }
             </p>
@@ -978,19 +1073,27 @@ export default function InboxPage() {
             <nav className="space-y-1 max-h-[283px] overflow-y-auto pr-2">
               {folders.map((folder) => {
                 const Icon = folder.icon
+                const isLoading = loadingFolder === folder.id
                 return (
                   <button
                     key={folder.id}
                     onClick={() => handleFolderChange(folder.id)}
+                    disabled={isLoading}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
                       currentFolder === folder.id
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-muted/60 text-muted-foreground'
-                    }`}
+                    } ${isLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center gap-3">
-                      <Icon className="h-4 w-4" />
-                      <span className="flex-1 text-left">{folder.name}</span>
+                      {isLoading ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                      ) : (
+                        <Icon className="h-4 w-4" />
+                      )}
+                      <span className="flex-1 text-left">
+                        {isLoading ? `${folder.name}...` : folder.name}
+                      </span>
                     </div>
                   </button>
                 )
@@ -1076,29 +1179,29 @@ export default function InboxPage() {
               <div
                 key={email.id}
                 onClick={() => handleEmailSelect(email)}
-                className={`p-3 border-b cursor-pointer transition-colors ${
+                className={`p-3 border-b cursor-pointer transition-colors w-full ${
                   selectedEmail?.id === email.id
                     ? 'bg-primary/5 border-primary/20'
                     : 'hover:bg-muted/30 border-transparent'
                 }`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 w-full">
                   <div className="flex-shrink-0">
                     {!email.isRead && (
                       <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`font-medium text-sm ${!email.isRead ? 'font-semibold' : ''}`}>
+                  <div className="flex-1 min-w-0 w-full">
+                    <div className="flex items-center justify-between mb-1 w-full">
+                      <span className={`font-medium text-sm truncate flex-1 ${!email.isRead ? 'font-semibold' : ''}`}>
                         {email.from}
                       </span>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0 ml-2">
                         {email.hasAttachments && <Paperclip className="h-3 w-3" />}
                         {email.date}
                       </div>
                     </div>
-                    <div className={`text-sm mb-1 ${!email.isRead ? 'font-semibold' : ''}`}>
+                    <div className={`text-sm mb-1 truncate ${!email.isRead ? 'font-semibold' : ''}`}>
                       {email.subject}
                     </div>
                     <div className="text-sm text-muted-foreground truncate">

@@ -8,18 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
-import { AlertModal } from '@/components/ui/alert-modal'
+import { useDataLoader } from '@/hooks/useDataLoader'
+
+// Move loadFunction outside component to prevent recreation on every render
+const loadNotesData = async (userId: string, userRole: string) => {
+  return await getNotes()
+}
 
 export default function NotesPage() {
-  const [notes, setNotes] = useState<Note[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  // All hooks must be called at the top level, before any conditional logic
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingNote, setEditingNote] = useState<Note | null>(null)
   const [noteTitle, setNoteTitle] = useState('')
@@ -39,6 +42,18 @@ export default function NotesPage() {
     type: 'info'
   })
 
+  // Use the robust data loader
+  const { data: notes, loading, error, refetch } = useDataLoader(
+    loadNotesData,
+    {
+      cacheKey: 'notes_data',
+      cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
+    }
+  )
+
+  const notesArray = notes || []
+
+  // This hook must be called before any early returns
   const {
     currentData: paginatedNotes,
     currentPage,
@@ -50,26 +65,9 @@ export default function NotesPage() {
     startIndex,
     endIndex
   } = usePagination({
-    data: notes,
+    data: notesArray,
     itemsPerPage: 10
   })
-
-  useEffect(() => {
-    loadNotes()
-  }, [])
-
-  const loadNotes = async () => {
-    try {
-      setLoading(true)
-      const data = await getNotes()
-      setNotes(data)
-    } catch (err) {
-      setError('Failed to load notes')
-      console.error('Error loading notes:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleCreateNote = () => {
     setEditingNote(null)
@@ -92,19 +90,17 @@ export default function NotesPage() {
       setSaving(true)
       
       if (editingNote) {
-        const updatedNote = await updateNote(editingNote.id, {
+        await updateNote(editingNote.id, {
           title: noteTitle,
           content: noteContent,
         })
-        setNotes(notes.map(note => 
-          note.id === editingNote.id ? updatedNote : note
-        ))
+        refetch() // Refetch to update the data in the table
       } else {
-        const newNote = await createNote({
+        await createNote({
           title: noteTitle,
           content: noteContent,
         })
-        setNotes([newNote, ...notes])
+        refetch() // Refetch to update the data in the table
       }
       
       setShowCreateModal(false)
@@ -134,7 +130,7 @@ export default function NotesPage() {
       onConfirm: async () => {
         try {
           await deleteNote(noteId)
-          setNotes(notes.filter(note => note.id !== noteId))
+          refetch() // Refetch to update the data in the table
         } catch (err) {
           console.error('Error deleting note:', err)
           setAlertModal({
@@ -148,6 +144,7 @@ export default function NotesPage() {
     })
   }
 
+  // Now we can have conditional rendering after all hooks are called
   if (loading) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -180,7 +177,7 @@ export default function NotesPage() {
         </div>
         <Alert>
           <AlertDescription className="text-destructive">{error}</AlertDescription>
-          <Button onClick={loadNotes} className="mt-4">
+          <Button onClick={refetch} className="mt-4">
             Try Again
           </Button>
         </Alert>
@@ -260,7 +257,7 @@ export default function NotesPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {notes.length > 0 ? (
+            {notesArray.length > 0 ? (
               <>
                 <Table>
                   <TableHeader>
@@ -343,15 +340,27 @@ export default function NotesPage() {
         </Card>
       </div>
       
-      <AlertModal
-        open={alertModal.open}
-        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
-        title={alertModal.title}
-        message={alertModal.message}
-        type={alertModal.type}
-        onConfirm={alertModal.onConfirm}
-        showCancel={alertModal.showCancel}
-      />
+              <Dialog open={alertModal.open} onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{alertModal.title}</DialogTitle>
+              <DialogDescription>{alertModal.message}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              {alertModal.showCancel && (
+                <Button variant="outline" onClick={() => setAlertModal(prev => ({ ...prev, open: false }))}>
+                  Cancel
+                </Button>
+              )}
+              <Button onClick={() => {
+                alertModal.onConfirm?.()
+                setAlertModal(prev => ({ ...prev, open: false }))
+              }}>
+                {alertModal.showCancel ? 'Confirm' : 'OK'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
     </TooltipProvider>
   )
 } 

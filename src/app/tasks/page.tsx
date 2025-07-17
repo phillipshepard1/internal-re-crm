@@ -1,23 +1,23 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Plus, Calendar, Edit } from 'lucide-react'
-import { getTasks, createTask, updateTask } from '@/lib/database'
-import type { Task } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useState, memo } from 'react'
+import { Plus, Eye, Edit, Trash2, Calendar, Clock, CheckCircle, AlertCircle, Phone, Mail, User } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useAuth } from '@/contexts/AuthContext'
+import { getTasks, createTask, updateTask } from '@/lib/database'
+import type { Task } from '@/lib/supabase'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
-import { AlertModal } from '@/components/ui/alert-modal'
+import { useDataLoader } from '@/hooks/useDataLoader'
 
 const statusOptions = [
   { value: 'pending', label: 'Pending', color: 'bg-yellow-100 text-yellow-800' },
@@ -25,11 +25,13 @@ const statusOptions = [
   { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
 ]
 
-export default function TasksPage() {
+// Move loadFunction outside component to prevent recreation on every render
+const loadTasksData = async (userId: string, userRole: string) => {
+  return await getTasks(undefined, userId, userRole)
+}
+
+function TasksPage() {
   const { user, userRole } = useAuth()
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [taskTitle, setTaskTitle] = useState('')
@@ -49,6 +51,15 @@ export default function TasksPage() {
     type: 'info'
   })
 
+  // Use the robust data loader
+  const { data: tasks = [], loading, error, refetch } = useDataLoader(
+    loadTasksData,
+    {
+      cacheKey: 'tasks_data',
+      cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
+    }
+  )
+
   const {
     currentData: paginatedTasks,
     currentPage,
@@ -60,26 +71,9 @@ export default function TasksPage() {
     startIndex,
     endIndex
   } = usePagination({
-    data: tasks,
+    data: tasks || [],
     itemsPerPage: 10
   })
-
-  const loadTasks = useCallback(async () => {
-    try {
-      setLoading(true)
-      const data = await getTasks(undefined, user?.id, userRole || undefined)
-      setTasks(data)
-    } catch (err) {
-      setError('Failed to load tasks')
-      console.error('Error loading tasks:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [user?.id, userRole])
-
-  useEffect(() => {
-    loadTasks()
-  }, [loadTasks])
 
   const handleCreateTask = () => {
     setEditingTask(null)
@@ -112,9 +106,7 @@ export default function TasksPage() {
           due_date: taskDueDate,
           status: taskStatus as 'pending' | 'in_progress' | 'completed',
         })
-        setTasks(tasks.map(task => 
-          task.id === editingTask.id ? updatedTask : task
-        ))
+        refetch() // Refetch to update the data in the table
       } else {
         const newTask = await createTask({
           title: taskTitle,
@@ -124,7 +116,7 @@ export default function TasksPage() {
           due_date: taskDueDate,
           status: taskStatus as 'pending' | 'in_progress' | 'completed',
         })
-        setTasks([newTask, ...tasks])
+        refetch() // Refetch to update the data in the table
       }
       
       setShowCreateModal(false)
@@ -151,9 +143,7 @@ export default function TasksPage() {
       const updatedTask = await updateTask(taskId, { 
         status: newStatus as 'pending' | 'in_progress' | 'completed' 
       })
-      setTasks(tasks.map(task => 
-        task.id === taskId ? updatedTask : task
-      ))
+      refetch() // Refetch to update the data in the table
     } catch (err) {
       console.error('Error updating task status:', err)
       setAlertModal({
@@ -197,7 +187,7 @@ export default function TasksPage() {
         </div>
         <Alert>
           <AlertDescription className="text-destructive">{error}</AlertDescription>
-          <Button onClick={loadTasks} className="mt-4">
+          <Button onClick={refetch} className="mt-4">
             Try Again
           </Button>
         </Alert>
@@ -300,7 +290,7 @@ export default function TasksPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {tasks.length > 0 ? (
+            {(tasks || []).length > 0 ? (
               <>
               <Table>
                 <TableHeader>
@@ -389,13 +379,21 @@ export default function TasksPage() {
         </Card>
       </div>
       
-      <AlertModal
-        open={alertModal.open}
-        onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
-        title={alertModal.title}
-        message={alertModal.message}
-        type={alertModal.type}
-      />
+              <Dialog open={alertModal.open} onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{alertModal.title}</DialogTitle>
+              <DialogDescription>{alertModal.message}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={() => setAlertModal(prev => ({ ...prev, open: false }))}>
+                OK
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
     </TooltipProvider>
   )
-} 
+}
+
+export default memo(TasksPage) 

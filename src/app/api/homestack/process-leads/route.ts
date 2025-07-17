@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { HomeStackIntegration } from '@/lib/homeStackIntegration'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+})
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,19 +24,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get HomeStack configuration from environment variables
-    const homeStackConfig = {
-      apiKey: process.env.HOMESTACK_API_KEY!,
-      baseUrl: process.env.HOMESTACK_BASE_URL || 'https://api.homestack.com',
-      webhookSecret: process.env.HOMESTACK_WEBHOOK_SECRET,
+    // Get HomeStack configuration from database
+    const { data: configData, error: configError } = await supabase
+      .from('integration_configs')
+      .select('*')
+      .eq('integration_type', 'homestack')
+      .eq('enabled', true)
+      .single()
+    
+    if (configError || !configData) {
+      return NextResponse.json({ 
+        error: 'HomeStack integration not configured or disabled',
+        required: ['API key must be configured in admin panel']
+      }, { status: 400 })
     }
     
-    // Validate configuration
-    if (!homeStackConfig.apiKey) {
-      return NextResponse.json({ 
-        error: 'HomeStack API key missing',
-        required: ['HOMESTACK_API_KEY']
-      }, { status: 400 })
+    const homeStackConfig = {
+      apiKey: configData.api_key,
+      baseUrl: configData.base_url || 'https://api.homestack.com',
+      webhookSecret: configData.webhook_secret,
     }
 
     // Initialize HomeStack integration

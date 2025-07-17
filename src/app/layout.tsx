@@ -9,6 +9,7 @@ import AuthGuard from '@/components/auth/AuthGuard'
 import Header from '@/components/layout/Header'
 import Sidebar from '@/components/layout/Sidebar'
 import { Toaster } from 'sonner'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,7 +19,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const isPublicPage = ['/login', '/privacy-policy', '/terms-of-service'].includes(pathname)
 
   return (
-    <>
+    <ErrorBoundary>
       <AuthGuard>
         {isPublicPage ? (
           // Public pages - no sidebar/header
@@ -38,7 +39,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </AuthGuard>
-    </>
+    </ErrorBoundary>
   )
 }
 

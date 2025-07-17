@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Mail, Home, RefreshCw, Settings, AlertCircle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,28 +36,36 @@ export default function IntegrationsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    // Load saved configurations
-    loadConfigurations()
-  }, [])
-
-  const loadConfigurations = async () => {
+  const loadConfigurations = useCallback(async () => {
     try {
-      // In a real app, you'd load these from your database
-      // For now, we'll use localStorage or environment variables
-      const savedGmail = localStorage.getItem('gmailConfig')
-      const savedHomeStack = localStorage.getItem('homeStackConfig')
+      // Load HomeStack configuration from database
+      const homeStackResponse = await fetch('/api/admin/integrations/homestack')
+      if (homeStackResponse.ok) {
+        const homeStackData = await homeStackResponse.json()
+        if (homeStackData.config) {
+          setHomeStackConfig({
+            apiKey: homeStackData.config.api_key || '',
+            baseUrl: homeStackData.config.base_url || 'https://api.homestack.com',
+            webhookSecret: homeStackData.config.webhook_secret || '',
+            enabled: homeStackData.config.enabled || false
+          })
+        }
+      }
       
+      // Load Gmail configuration from localStorage (for now)
+      const savedGmail = localStorage.getItem('gmailConfig')
       if (savedGmail) {
         setGmailConfig(JSON.parse(savedGmail))
       }
-      if (savedHomeStack) {
-        setHomeStackConfig(JSON.parse(savedHomeStack))
-      }
-    } catch {
-      console.error('Error loading configurations:')
+    } catch (error) {
+      console.error('Error loading configurations:', error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    // Load saved configurations
+    loadConfigurations()
+  }, [loadConfigurations])
 
   const saveGmailConfig = async () => {
     try {
@@ -81,12 +89,25 @@ export default function IntegrationsPage() {
       setProcessing(true)
       setError('')
       
-      // Save to localStorage (in production, save to database)
-      localStorage.setItem('homeStackConfig', JSON.stringify(homeStackConfig))
+      // Save to database via API
+      const response = await fetch('/api/admin/integrations/homestack', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(homeStackConfig)
+      })
       
-      setSuccess('HomeStack configuration saved successfully')
-      setTimeout(() => setSuccess(''), 3000)
-    } catch {
+      const result = await response.json()
+      
+      if (response.ok) {
+        setSuccess('HomeStack configuration saved successfully')
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        setError(result.error || 'Failed to save HomeStack configuration')
+      }
+    } catch (error) {
+      console.error('Error saving HomeStack config:', error)
       setError('Failed to save HomeStack configuration')
     } finally {
       setProcessing(false)
@@ -123,6 +144,36 @@ export default function IntegrationsPage() {
     }
   }
 
+  const testHomeStackConnection = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: homeStackConfig.apiKey,
+          baseUrl: homeStackConfig.baseUrl
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess('HomeStack connection successful! API key is valid.')
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to connect to HomeStack')
+      }
+    } catch (error) {
+      console.error('Error testing HomeStack connection:', error)
+      setError('Failed to test HomeStack connection')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const processHomeStackLeads = async () => {
     try {
       setProcessing(true)
@@ -146,7 +197,8 @@ export default function IntegrationsPage() {
       } else {
         setError(result.error || 'Failed to process HomeStack leads')
       }
-    } catch {
+    } catch (error) {
+      console.error('Error processing HomeStack leads:', error)
       setError('Failed to process HomeStack leads')
     } finally {
       setProcessing(false)
@@ -391,6 +443,14 @@ export default function IntegrationsPage() {
                   </div>
 
                   <div className="flex gap-2">
+                    <Button 
+                      onClick={testHomeStackConnection} 
+                      disabled={processing || !homeStackConfig.apiKey}
+                      variant="outline"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Test Connection
+                    </Button>
                     <Button onClick={saveHomeStackConfig} disabled={processing}>
                       <Settings className="h-4 w-4 mr-2" />
                       Save Configuration

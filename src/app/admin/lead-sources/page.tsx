@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, Save, X, Eye, EyeOff, Settings } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,13 +41,9 @@ export default function LeadSourcesPage() {
   const [tempDomainPattern, setTempDomainPattern] = useState('')
   const [tempKeyword, setTempKeyword] = useState('')
 
-  useEffect(() => {
-    if (userRole === 'admin') {
-      loadLeadSources()
-    }
-  }, [userRole])
-
-  const loadLeadSources = async () => {
+  const loadLeadSources = useCallback(async () => {
+    if (userRole !== 'admin') return
+    
     try {
       setLoading(true)
       const response = await fetch('/api/admin/lead-sources?includeDefaults=true')
@@ -64,7 +60,13 @@ export default function LeadSourcesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userRole])
+
+  useEffect(() => {
+    if (userRole === 'admin') {
+      loadLeadSources()
+    }
+  }, [userRole, loadLeadSources])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

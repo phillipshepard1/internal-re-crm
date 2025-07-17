@@ -106,64 +106,66 @@ export default function PersonDetailPage() {
     closed: '',
   })
 
-  const loadPerson = useCallback(async () => {
-    if (!params.id) return
+  // Apply loading timeout protection
+  useEffect(() => {
+    const loadData = async () => {
+      if (!params.id || !user?.id) return
 
-    try {
-      setLoading(true)
-      const personId = params.id as string
-      const [personData, notesData, tasksData, activitiesData, filesData] = await Promise.all([
-        getPersonById(personId, user?.id, userRole || undefined),
-        getNotes(personId),
-        getTasks(personId, user?.id, userRole || undefined),
-        getActivities(personId),
-        getFiles(personId),
-      ])
-      
-      setPerson(personData)
-      setNotes(notesData)
-      setTasks(tasksData)
-      setActivities(activitiesData)
-      setUploadedFiles(filesData)
-      // setFollowUps(followUpsData.filter(f => f.person_id === personId)) // This line was removed from original, so it's removed here.
-      // setActivities(activitiesData) // This line was removed from original, so it's removed here.
+      try {
+        setLoading(true)
+        setError('')
+        const personId = params.id as string
+        const [personData, notesData, tasksData, activitiesData, filesData] = await Promise.all([
+          getPersonById(personId, user.id, userRole || undefined),
+          getNotes(personId),
+          getTasks(personId, user.id, userRole || undefined),
+          getActivities(personId),
+          getFiles(personId),
+        ])
+        
+        setPerson(personData)
+        setNotes(notesData)
+        setTasks(tasksData)
+        setActivities(activitiesData)
+        setUploadedFiles(filesData)
 
-      // Initialize form data
-      setFormData({
-        first_name: personData.first_name || '',
-        last_name: personData.last_name || '',
-        email: personData.email || [''],
-        phone: personData.phone || [''],
-        company: personData.company || '',
-        position: personData.position || '',
-        address: personData.address || '',
-        city: personData.city || '',
-        state: personData.state || '',
-        zip_code: personData.zip_code || '',
-        country: personData.country || '',
-        client_type: personData.client_type || 'lead',
-        notes: personData.notes || '',
-        profile_picture: personData.profile_picture || '',
-        birthday: personData.birthday || '',
-        mailing_address: personData.mailing_address || '',
-        relationship_id: personData.relationship_id || '',
-        best_to_reach_by: personData.best_to_reach_by || '',
-        lists: personData.lists || [],
-        looking_for: personData.looking_for || '',
-        selling: personData.selling || '',
-        closed: personData.closed || '',
-      })
-    } catch (err) {
-      console.error('Error loading person:', err)
-      setError('Failed to load person')
-    } finally {
-      setLoading(false)
+        // Initialize form data
+        setFormData({
+          first_name: personData.first_name || '',
+          last_name: personData.last_name || '',
+          email: personData.email || [''],
+          phone: personData.phone || [''],
+          company: personData.company || '',
+          position: personData.position || '',
+          address: personData.address || '',
+          city: personData.city || '',
+          state: personData.state || '',
+          zip_code: personData.zip_code || '',
+          country: personData.country || '',
+          client_type: personData.client_type || 'lead',
+          notes: personData.notes || '',
+          profile_picture: personData.profile_picture || '',
+          birthday: personData.birthday || '',
+          mailing_address: personData.mailing_address || '',
+          relationship_id: personData.relationship_id || '',
+          best_to_reach_by: personData.best_to_reach_by || '',
+          lists: personData.lists || [],
+          looking_for: personData.looking_for || '',
+          selling: personData.selling || '',
+          closed: personData.closed || '',
+        })
+      } catch (err) {
+        console.error('Error loading person:', err)
+        setError('Failed to load person')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (user?.id && params.id) {
+      loadData()
     }
   }, [params.id, user?.id, userRole])
-
-  useEffect(() => {
-    loadPerson()
-  }, [loadPerson])
 
   const handleSave = async () => {
     if (!person || !formData.first_name.trim()) return

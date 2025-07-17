@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { User, CheckCircle, AlertCircle, Activity, Clock } from 'lucide-react'
-import { getDashboardStats, getRecentActivities, getPeople, getFollowUps, getTasks } from '@/lib/database'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { User, Clock, CheckCircle, Activity } from 'lucide-react'
+import { getPeople, getFollowUps, getTasks, getRecentActivities } from '@/lib/database'
+import type { Person, FollowUpWithPerson, Task, Activity as ActivityType } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useAuth } from '@/contexts/AuthContext'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useDataLoader } from '@/hooks/useDataLoader'
 
 interface DashboardStats {
   totalPeople: number
@@ -31,42 +33,60 @@ interface ActivityWithDetails {
   }
 }
 
+// Move loadFunction outside component to prevent recreation on every render
+const loadDashboardData = async (userId: string, userRole: string) => {
+  const [people, followUps, tasks, activities] = await Promise.all([
+    getPeople(userId, userRole),
+    getFollowUps(userId, userRole),
+    getTasks(undefined, userId, userRole),
+    getRecentActivities(20)
+  ])
+  
+  return {
+    people,
+    followUps,
+    tasks,
+    activities
+  }
+}
+
 export default function DashboardPage() {
   const { user, userRole } = useAuth()
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [recentActivities, setRecentActivities] = useState<ActivityWithDetails[]>([])
-  const [myPeople, setMyPeople] = useState<any[]>([])
-  const [myFollowUps, setMyFollowUps] = useState<any[]>([])
-  const [myTasks, setMyTasks] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
 
-  const loadDashboardData = useCallback(async () => {
-    try {
-      setLoading(true)
-      const [statsData, activitiesData, peopleData, followUpsData, tasksData] = await Promise.all([
-        getDashboardStats(),
-        getRecentActivities(10),
-        getPeople(user?.id, userRole || undefined),
-        getFollowUps(user?.id, userRole || undefined),
-        getTasks(undefined, user?.id, userRole || undefined)
-      ])
-      setStats(statsData)
-      setRecentActivities(activitiesData)
-      setMyPeople(peopleData)
-      setMyFollowUps(followUpsData)
-      setMyTasks(tasksData)
-    } catch {
-      setError('Failed to load dashboard data')
-    } finally {
-      setLoading(false)
+  // Debug component lifecycle
+  useEffect(() => {
+    console.log('DashboardPage: Component mounted', {
+      userId: user?.id,
+      userRole,
+      timestamp: new Date().toISOString(),
+      url: window.location.pathname
+    })
+
+    return () => {
+      console.log('DashboardPage: Component unmounted', {
+        userId: user?.id,
+        userRole,
+        timestamp: new Date().toISOString(),
+        url: window.location.pathname
+      })
     }
   }, [user?.id, userRole])
 
-  useEffect(() => {
-    loadDashboardData()
-  }, [loadDashboardData])
+  // Use the robust data loader for all dashboard data
+  const { data: dashboardData, loading, error, refetch } = useDataLoader(
+    loadDashboardData,
+    {
+      cacheKey: 'dashboard_data',
+      cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
+    }
+  )
 
+  const myPeople = dashboardData?.people || []
+  const myFollowUps = dashboardData?.followUps || []
+  const myTasks = dashboardData?.tasks || []
+  const recentActivities = dashboardData?.activities || []
+
+  // Show loading only when auth is still loading or data is loading
   if (loading) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -82,7 +102,6 @@ export default function DashboardPage() {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>

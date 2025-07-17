@@ -134,7 +134,18 @@ export class GmailIntegration {
     })
     
     if (!response.ok) {
-      throw new Error(`Failed to refresh token: ${response.statusText}`)
+      // Mark connection as inactive when refresh fails
+      try {
+        await supabase
+          .from('user_gmail_tokens')
+          .update({ is_active: false })
+          .eq('user_id', this.userId)
+          .eq('is_active', true)
+      } catch (error) {
+        console.error('Error deactivating invalid tokens:', error)
+      }
+      
+      throw new Error(`Failed to refresh token: ${response.statusText}. Gmail connection has been deactivated.`)
     }
     
     const data = await response.json()
@@ -188,13 +199,14 @@ export class GmailIntegration {
   }
   
   /**
-   * Get recent emails from Gmail
+   * Get recent emails from Gmail with optimized batch processing
    */
   public async getRecentEmails(maxResults: number): Promise<Record<string, unknown>[]> {
     if (!this.accessToken) {
       throw new Error('No access token available')
     }
 
+    // First, get the list of message IDs
     const response = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
       {
@@ -209,20 +221,19 @@ export class GmailIntegration {
     }
     
     const data = await response.json()
-    const emails: Record<string, unknown>[] = []
+    const messageIds = data.messages?.map((msg: any) => msg.id) || []
     
-    for (const message of data.messages || []) {
-      const emailData = await this.getEmailDetails(message.id)
-      if (emailData) {
-        emails.push(emailData)
-      }
+    if (messageIds.length === 0) {
+      return []
     }
-    
+
+    // Use batch request to get multiple email details at once
+    const emails = await this.getEmailDetailsBatch(messageIds)
     return emails
   }
 
   /**
-   * Get emails by label from Gmail
+   * Get emails by label from Gmail with optimized batch processing
    */
   public async getEmailsByLabel(labelId: string, maxResults: number, pageToken?: string): Promise<{ emails: Record<string, unknown>[], nextPageToken?: string }> {
     if (!this.accessToken) {
@@ -245,14 +256,14 @@ export class GmailIntegration {
     }
     
     const data = await response.json()
-    const emails: Record<string, unknown>[] = []
+    const messageIds = data.messages?.map((msg: any) => msg.id) || []
     
-    for (const message of data.messages || []) {
-      const emailData = await this.getEmailDetails(message.id)
-      if (emailData) {
-        emails.push(emailData)
-      }
+    if (messageIds.length === 0) {
+      return { emails: [], nextPageToken: data.nextPageToken }
     }
+
+    // Use batch request to get multiple email details at once
+    const emails = await this.getEmailDetailsBatch(messageIds)
     
     return {
       emails,
@@ -369,6 +380,39 @@ export class GmailIntegration {
       console.error(`Error getting email details for ${messageId}:`, error)
       return null
     }
+  }
+
+  /**
+   * Get email details in batch to reduce API calls
+   */
+  private async getEmailDetailsBatch(messageIds: string[]): Promise<Record<string, unknown>[]> {
+    const emails: Record<string, unknown>[] = []
+    
+    // Process in batches of 10 to avoid overwhelming the API
+    const batchSize = 10
+    for (let i = 0; i < messageIds.length; i += batchSize) {
+      const batch = messageIds.slice(i, i + batchSize)
+      
+      // Use Promise.all for concurrent requests within the batch
+      const batchPromises = batch.map(async (messageId) => {
+        try {
+          return await this.getEmailDetails(messageId)
+        } catch (error) {
+          console.error(`Error getting email details for ${messageId}:`, error)
+          return null
+        }
+      })
+      
+      const batchResults = await Promise.all(batchPromises)
+      emails.push(...(batchResults.filter((r): r is Record<string, unknown> => !!r)))
+      
+      // Small delay between batches to be respectful to the API
+      if (i + batchSize < messageIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+    
+    return emails
   }
   
   /**

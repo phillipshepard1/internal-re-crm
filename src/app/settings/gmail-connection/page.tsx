@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,15 +29,12 @@ export default function GmailConnectionPage() {
   const [connecting, setConnecting] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
 
-  useEffect(() => {
-    if (user?.id) {
-      checkGmailStatus()
-    }
-  }, [user?.id])
-
-  const checkGmailStatus = async () => {
+  const checkGmailStatus = useCallback(async () => {
+    if (!user?.id) return
+    
     try {
-      const response = await fetch(`/api/gmail/status?userId=${user?.id}`)
+      setLoading(true)
+      const response = await fetch(`/api/gmail/status?userId=${user.id}`)
       const data = await response.json()
       setGmailStatus(data)
     } catch (error) {
@@ -46,7 +43,13 @@ export default function GmailConnectionPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (user?.id) {
+      checkGmailStatus()
+    }
+  }, [user?.id, checkGmailStatus])
 
   const connectGmail = async () => {
     if (!user?.id) {

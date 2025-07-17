@@ -44,6 +44,7 @@ export default function AdminPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
+      setError('')
       
       // Load users data
       let usersData = []

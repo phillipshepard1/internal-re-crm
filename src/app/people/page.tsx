@@ -1,11 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Plus, Search, Calendar, Phone, Mail, Clock, Eye } from 'lucide-react'
-import Link from 'next/link'
-import { getPeople } from '@/lib/database'
-import type { Person } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
+import { useState, useEffect } from 'react'
+import { Plus, Search, Eye, Mail, Phone, Calendar, Clock, User } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,34 +9,52 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useAuth } from '@/contexts/AuthContext'
+import { getPeople } from '@/lib/database'
+import type { Person } from '@/lib/supabase'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
+import { useDataLoader } from '@/hooks/useDataLoader'
+import Link from 'next/link'
+
+// Move loadFunction outside component to prevent recreation on every render
+const loadPeopleData = async (userId: string, userRole: string) => {
+  return await getPeople(userId, userRole)
+}
 
 export default function PeoplePage() {
   const { user, userRole } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
-  const [people, setPeople] = useState<Person[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
 
-  const loadPeople = useCallback(async () => {
-    try {
-      setLoading(true)
-      const data = await getPeople(user?.id, userRole || undefined)
-      setPeople(data)
-    } catch (err) {
-      console.error('Error loading people:', err)
-      setError('Failed to load people')
-    } finally {
-      setLoading(false)
+  // Debug component lifecycle
+  useEffect(() => {
+    console.log('PeoplePage: Component mounted', {
+      userId: user?.id,
+      userRole,
+      timestamp: new Date().toISOString(),
+      url: window.location.pathname
+    })
+
+    return () => {
+      console.log('PeoplePage: Component unmounted', {
+        userId: user?.id,
+        userRole,
+        timestamp: new Date().toISOString(),
+        url: window.location.pathname
+      })
     }
   }, [user?.id, userRole])
 
-  useEffect(() => {
-    loadPeople()
-  }, [loadPeople])
+  // Use the robust data loader
+  const { data: people = [], loading, error, refetch } = useDataLoader(
+    loadPeopleData,
+    {
+      cacheKey: 'people_data',
+      cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
+    }
+  )
 
-  const filteredPeople = people.filter(person =>
+  const filteredPeople = (people || []).filter(person =>
     `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (person.email && person.email[0]?.toLowerCase().includes(searchQuery.toLowerCase()))
   )
@@ -92,7 +106,7 @@ export default function PeoplePage() {
         </div>
         <Alert>
           <AlertDescription className="text-destructive">{error}</AlertDescription>
-          <Button onClick={loadPeople} className="mt-4">
+          <Button onClick={refetch} className="mt-4">
             Try Again
           </Button>
         </Alert>

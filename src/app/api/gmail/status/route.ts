@@ -11,6 +11,57 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   }
 })
 
+// Validate Gmail tokens by making a test API call
+async function validateGmailTokens(accessToken: string): Promise<boolean> {
+  try {
+    const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    })
+    return response.ok
+  } catch (error) {
+    console.error('Token validation error:', error)
+    return false
+  }
+}
+
+// Attempt to refresh access token
+async function refreshAccessToken(refreshToken: string): Promise<{ success: boolean; accessToken?: string; expiresAt?: string }> {
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: process.env.GMAIL_CLIENT_ID!,
+        client_secret: process.env.GMAIL_CLIENT_SECRET!,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    })
+    
+    if (!response.ok) {
+      return { success: false }
+    }
+    
+    const data = await response.json()
+    const expiresAt = data.expires_in 
+      ? new Date(Date.now() + data.expires_in * 1000).toISOString()
+      : undefined
+    
+    return { 
+      success: true, 
+      accessToken: data.access_token, 
+      expiresAt 
+    }
+  } catch (error) {
+    console.error('Token refresh error:', error)
+    return { success: false }
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Get user ID from query parameters or headers
@@ -42,26 +93,92 @@ export async function GET(request: NextRequest) {
     // Check if user has Gmail tokens
     const { data: userTokens, error } = await supabase
       .from('user_gmail_tokens')
-      .select('gmail_email, created_at, updated_at')
+      .select('*')
       .eq('user_id', userId)
       .eq('is_active', true)
       .single()
 
-    const connected = !!userTokens && !error
+    if (error || !userTokens) {
+      return NextResponse.json({
+        connected: false,
+        configured: {
+          clientId: hasClientId,
+          clientSecret: hasClientSecret
+        },
+        userConnected: false,
+        gmailEmail: null,
+        connectedAt: null,
+        lastUpdated: null,
+        message: 'User has not connected Gmail account'
+      })
+    }
+
+    // Validate current access token
+    let isValid = false
+    let needsRefresh = false
+    let refreshedToken = null
+
+    if (userTokens.access_token) {
+      isValid = await validateGmailTokens(userTokens.access_token)
+      
+      // If token is invalid, try to refresh it
+      if (!isValid && userTokens.refresh_token) {
+        const refreshResult = await refreshAccessToken(userTokens.refresh_token)
+        
+        if (refreshResult.success && refreshResult.accessToken) {
+          // Update the database with new token
+          await supabase
+            .from('user_gmail_tokens')
+            .update({
+              access_token: refreshResult.accessToken,
+              expires_at: refreshResult.expiresAt,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', userId)
+            .eq('is_active', true)
+          
+          refreshedToken = refreshResult.accessToken
+          isValid = true
+          needsRefresh = true
+        } else {
+          // Refresh failed, mark connection as inactive
+          await supabase
+            .from('user_gmail_tokens')
+            .update({ is_active: false })
+            .eq('user_id', userId)
+            .eq('is_active', true)
+          
+          return NextResponse.json({
+            connected: false,
+            configured: {
+              clientId: hasClientId,
+              clientSecret: hasClientSecret
+            },
+            userConnected: false,
+            gmailEmail: userTokens.gmail_email,
+            connectedAt: userTokens.created_at,
+            lastUpdated: userTokens.updated_at,
+            message: 'Gmail connection expired. Please reconnect your account.',
+            requiresReconnect: true
+          })
+        }
+      }
+    }
 
     return NextResponse.json({
-      connected,
+      connected: isValid,
       configured: {
         clientId: hasClientId,
         clientSecret: hasClientSecret
       },
-      userConnected: connected,
-      gmailEmail: userTokens?.gmail_email || null,
-      connectedAt: userTokens?.created_at || null,
-      lastUpdated: userTokens?.updated_at || null,
-      message: connected 
-        ? `Gmail connected: ${userTokens.gmail_email}` 
-        : 'User has not connected Gmail account'
+      userConnected: isValid,
+      gmailEmail: userTokens.gmail_email,
+      connectedAt: userTokens.created_at,
+      lastUpdated: userTokens.updated_at,
+      tokenRefreshed: needsRefresh,
+      message: isValid 
+        ? `Gmail connected: ${userTokens.gmail_email}${needsRefresh ? ' (token refreshed)' : ''}` 
+        : 'Gmail connection is invalid'
     })
     
   } catch (error) {
