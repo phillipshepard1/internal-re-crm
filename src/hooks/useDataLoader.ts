@@ -70,29 +70,11 @@ export function useDataLoader(
     return `data_${user.id}_${userRole}_${JSON.stringify(dependencies)}`
   }, [cacheKey, user?.id, userRole, dependencies])
 
-  // Debug component lifecycle
+  // Component lifecycle management
   useEffect(() => {
-    const userId = user?.id
-    const timestamp = new Date().toISOString()
-    const url = window.location.pathname
-    
-    console.log('useDataLoader: Hook mounted', {
-      userId,
-      userRole,
-      timestamp,
-      stack: new Error().stack?.split('\n').slice(1, 3).join('\n')
-    })
-
     mountRef.current = true
 
     return () => {
-      console.log('useDataLoader: Hook unmounted', {
-        userId,
-        userRole,
-        timestamp: new Date().toISOString(),
-        url
-      })
-      
       mountRef.current = false
       
       // Abort any ongoing requests
@@ -101,23 +83,7 @@ export function useDataLoader(
         abortControllerRef.current = null
       }
     }
-  }, [user?.id, userRole])
-
-  // Effect cleanup logging
-  useEffect(() => {
-    return () => {
-      const userId = user?.id
-      const timestamp = new Date().toISOString()
-      const url = window.location.pathname
-      
-      console.log('useDataLoader: Effect cleanup', {
-        userId,
-        userRole,
-        timestamp,
-        url
-      })
-    }
-  }, [user?.id, userRole])
+  }, [])
 
   // Update load function ref when it changes
   useEffect(() => {
@@ -129,15 +95,7 @@ export function useDataLoader(
     const userId = user?.id
     const timestamp = new Date().toISOString()
     
-    console.log('useDataLoader: Effect triggered', {
-      authLoading,
-      userId,
-      userRole,
-      enabled,
-      dependencies,
-      effectiveCacheKey,
-      timestamp
-    })
+    // Main data loading effect triggered
 
     // Don't load if auth is still loading or user is not available
     if (authLoading || !userId || !enabled || !mountRef.current) {
@@ -146,7 +104,6 @@ export function useDataLoader(
 
     // Check if we're already loading
     if (loadingRef.current) {
-      console.log('useDataLoader: Already loading, skipping', { userId, userRole })
       return
     }
 
@@ -156,13 +113,6 @@ export function useDataLoader(
       const isExpired = Date.now() - cached.timestamp > cacheTimeout
       
       if (!isExpired) {
-        console.log('useDataLoader: Using cached data', {
-          userId,
-          userRole,
-          cacheKey: effectiveCacheKey,
-          timestamp
-        })
-        
         setData(cached.data)
         setLoading(false)
         setError(null)
@@ -174,12 +124,7 @@ export function useDataLoader(
       }
     }
 
-    console.log('useDataLoader: Starting data load process', {
-      userId,
-      userRole,
-      timestamp,
-      url: window.location.pathname
-    })
+    // Starting data load process
 
     const loadData = async () => {
       if (!mountRef.current || loadingRef.current) return
@@ -192,39 +137,17 @@ export function useDataLoader(
       abortControllerRef.current = new AbortController()
 
       try {
-        console.log('useDataLoader: Starting data load', {
-          userId,
-          userRole,
-          timestamp: new Date().toISOString(),
-          url: window.location.pathname
-        })
-
         const result = await loadFunctionRef.current(userId, userRole || 'agent')
 
         // Check if component is still mounted
         if (!mountRef.current) {
-          console.log('useDataLoader: Component unmounted during load, discarding result', {
-            userId,
-            userRole
-          })
           return
         }
 
         // Check if request was aborted
         if (abortControllerRef.current?.signal.aborted) {
-          console.log('useDataLoader: Request aborted, discarding result', {
-            userId,
-            userRole
-          })
           return
         }
-
-        console.log('useDataLoader: Data loaded successfully', {
-          userId,
-          userRole,
-          dataType: typeof result,
-          timestamp: new Date().toISOString()
-        })
 
         setData(result)
         setError(null)
@@ -244,30 +167,17 @@ export function useDataLoader(
       } catch (err) {
         // Check if component is still mounted
         if (!mountRef.current) {
-          console.log('useDataLoader: Component unmounted during error, discarding error', {
-            userId,
-            userRole
-          })
           return
         }
 
         // Check if request was aborted
         if (abortControllerRef.current?.signal.aborted) {
-          console.log('useDataLoader: Request aborted, discarding error', {
-            userId,
-            userRole
-          })
           return
         }
 
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
         
-        console.error('useDataLoader: Error loading data', {
-          userId,
-          userRole,
-          error: errorMessage,
-          timestamp: new Date().toISOString()
-        })
+        console.error('useDataLoader: Error loading data', errorMessage)
 
         setError(errorMessage)
         setData(null)

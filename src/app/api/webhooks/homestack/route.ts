@@ -17,17 +17,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const signature = request.headers.get('x-homestack-signature')
     
-    // ADDED: Detailed debug logging
-    console.log('🔍 HomeStack Webhook Debug - Full Request:')
-    console.log('Headers:', Object.fromEntries(request.headers.entries()))
-    console.log('Body:', JSON.stringify(body, null, 2))
-    console.log('Signature:', signature)
-    console.log('Timestamp:', new Date().toISOString())
-    
+    // Log webhook event
     console.log('HomeStack webhook received:', {
       type: body.type,
-      timestamp: new Date().toISOString(),
-      payload: body
+      timestamp: new Date().toISOString()
     })
 
     // Get HomeStack configuration
@@ -104,29 +97,17 @@ export async function POST(request: NextRequest) {
 // Handle new user signup from HomeStack
 async function handleUserCreated(userData: any, homeStack: HomeStackIntegration) {
   try {
-    console.log('🔄 Processing new user from HomeStack:', userData)
-    console.log('📊 User data structure:', {
-      hasId: !!userData.id,
-      hasEmail: !!userData.email,
-      hasFirstName: !!userData.first_name,
-      hasLastName: !!userData.last_name,
-      hasPhone: !!userData.phone,
-      hasCreatedAt: !!userData.created_at,
-      hasUserObject: !!userData.user,
-      dataKeys: Object.keys(userData)
-    })
+    console.log('Processing new user from HomeStack')
 
     // Handle different HomeStack data formats
     let actualUserData = userData
     
     // If data is nested under 'user' object, extract it
     if (userData.user && typeof userData.user === 'object') {
-      console.log('🔄 Detected nested user format, extracting user data...')
       actualUserData = userData.user
     }
     
     // Transform HomeStack format to our expected format
-    console.log('🔄 Transforming HomeStack data format...')
     const transformedData = {
       id: actualUserData.guid || actualUserData.id, // HomeStack uses 'guid'
       email: actualUserData.email,
@@ -136,28 +117,12 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration)
       created_at: actualUserData.created_at,
       agent_guid: actualUserData.agent_guid
     }
-    
-    console.log('📊 Transformed user data:', {
-      hasId: !!transformedData.id,
-      hasEmail: !!transformedData.email,
-      hasFirstName: !!transformedData.first_name,
-      hasLastName: !!transformedData.last_name,
-      hasPhone: !!transformedData.phone,
-      hasCreatedAt: !!transformedData.created_at,
-      originalDataKeys: Object.keys(actualUserData),
-      transformedDataKeys: Object.keys(transformedData)
-    })
 
     // Use the new method for user signup handling
     const person = await homeStack.createPersonFromUserSignup(transformedData)
 
     if (person) {
-      console.log('✅ User successfully created in CRM:', {
-        personId: person.id,
-        assignedTo: person.assigned_to,
-        email: person.email,
-        name: `${person.first_name} ${person.last_name}`
-      })
+      console.log('User successfully created in CRM:', person.id)
       
       return NextResponse.json({
         success: true,
@@ -166,7 +131,7 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration)
         assigned_to: person.assigned_to
       })
     } else {
-      console.log('❌ Failed to create user in CRM')
+      console.error('Failed to create user in CRM')
       return NextResponse.json(
         { error: 'Failed to create user' },
         { status: 500 }

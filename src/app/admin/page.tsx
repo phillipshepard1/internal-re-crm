@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus, Crown } from 'lucide-react'
-import { getUsers, getRoundRobinConfig, addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus, updateUserRole } from '@/lib/database'
+import { addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus, updateUserRole } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,26 +46,15 @@ export default function AdminPage() {
       setLoading(true)
       setError('')
       
-      // Load users data
-      let usersData = []
-      try {
-        usersData = await getUsers()
-      } catch (err) {
-        console.error('Error loading users:', err)
+      // Load data from API
+      const response = await fetch('/api/admin/users')
+      if (!response.ok) {
+        throw new Error('Failed to fetch admin data')
       }
       
-      // Load round robin config data
-      let roundRobinData = []
-      try {
-        roundRobinData = await getRoundRobinConfig()
-      } catch (err) {
-        console.error('Error loading round robin config:', err)
-        // Show a helpful message instead of failing
-        setError('Round Robin configuration is not available. The database table may need to be set up.')
-      }
-      
-      setUsers(usersData)
-      setRoundRobinConfig(roundRobinData)
+      const data = await response.json()
+      setUsers(data.users || [])
+      setRoundRobinConfig(data.roundRobinConfig || [])
     } catch (err) {
       setError('Failed to load admin data')
       console.error('Error loading admin data:', err)
@@ -255,19 +244,7 @@ export default function AdminPage() {
                 <p>Create new user accounts</p>
               </TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" asChild>
-                  <Link href="/admin/test-leads">
-                    <Users className="mr-2 h-4 w-4" />
-                    Test Leads
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Test Round Robin lead assignment</p>
-              </TooltipContent>
-            </Tooltip>
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" asChild>
@@ -337,7 +314,6 @@ export default function AdminPage() {
             <TabsTrigger value="users">User Management</TabsTrigger>
             <TabsTrigger value="roundRobin">Round Robin</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
-            <TabsTrigger value="system">System Settings</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
           </TabsList>
           
@@ -527,6 +503,8 @@ export default function AdminPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+
+                
                 {users.filter(u => u.role !== 'admin').length > 0 ? (
                   <Table>
                     <TableHeader>
@@ -626,55 +604,7 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="system" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>System Settings</CardTitle>
-                <CardDescription>
-                  Configure system-wide settings and integrations
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="p-4 border rounded-lg">
-                    <h3 className="font-semibold mb-2">Authentication Settings</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Google OAuth:</span>
-                        <Badge variant="outline">Enabled</Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Email/Password:</span>
-                        <Badge variant="outline">Enabled</Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Role Assignment:</span>
-                        <Badge variant="outline">Manual</Badge>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="p-4 border rounded-lg">
-                    <h3 className="font-semibold mb-2">Lead Integration Status</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Gmail Integration:</span>
-                        <Badge variant="outline">Available</Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>HomeStack Integration:</span>
-                        <Badge variant="outline">Available</Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Round Robin:</span>
-                        <Badge variant="outline">Active</Badge>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+
 
           <TabsContent value="activity" className="space-y-4">
             <ActivityDashboard users={users} />

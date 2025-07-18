@@ -93,7 +93,15 @@ export const updateUserRole = async (userId: string, newRole: 'admin' | 'agent')
 export async function getPeople(userId?: string, userRole?: string) {
   let query = supabase
     .from('people')
-    .select('*')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
     .order('last_interaction', { ascending: false })
   
   // If user is an agent, only show assigned contacts

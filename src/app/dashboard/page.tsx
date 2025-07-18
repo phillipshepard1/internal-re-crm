@@ -53,26 +53,7 @@ const loadDashboardData = async (userId: string, userRole: string) => {
 export default function DashboardPage() {
   const { user, userRole } = useAuth()
 
-  // Debug component lifecycle
-  useEffect(() => {
-    console.log('DashboardPage: Component mounted', {
-      userId: user?.id,
-      userRole,
-      timestamp: new Date().toISOString(),
-      url: window.location.pathname,
-      hasUser: !!user,
-      hasUserRole: !!userRole
-    })
-
-    return () => {
-      console.log('DashboardPage: Component unmounted', {
-        userId: user?.id,
-        userRole,
-        timestamp: new Date().toISOString(),
-        url: window.location.pathname
-      })
-    }
-  }, [user?.id, userRole])
+  // Component lifecycle management
 
   // Use the robust data loader for all dashboard data
   const { data: dashboardData, loading, error, refetch } = useDataLoader(

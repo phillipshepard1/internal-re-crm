@@ -162,6 +162,7 @@ export default function PeoplePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Assigned To</TableHead>
                     <TableHead>Next Follow-up</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Email</TableHead>
@@ -180,6 +181,18 @@ export default function PeoplePage() {
                         >
                           {person.first_name} {person.last_name}
                         </Link>
+                      </TableCell>
+                      <TableCell>
+                        {person.assigned_user ? (
+                          <div className="flex items-center">
+                            <User className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">
+                              {person.assigned_user.first_name || person.assigned_user.email.split('@')[0]}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {person.next_follow_up ? (

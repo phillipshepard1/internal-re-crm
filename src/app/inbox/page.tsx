@@ -173,24 +173,7 @@ export default function InboxPage() {
     message: 'Checking connection...'
   })
 
-  // Debug component lifecycle
-  useEffect(() => {
-    console.log('InboxPage: Component mounted', {
-      userId: user?.id,
-      userRole,
-      timestamp: new Date().toISOString(),
-      url: window.location.pathname
-    })
-
-    return () => {
-      console.log('InboxPage: Component unmounted', {
-        userId: user?.id,
-        userRole,
-        timestamp: new Date().toISOString(),
-        url: window.location.pathname
-      })
-    }
-  }, [user?.id, userRole])
+  // Component lifecycle management
 
   // Handle OAuth callback parameters
   useEffect(() => {

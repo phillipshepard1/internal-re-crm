@@ -41,26 +41,45 @@ export class HomeStackIntegration {
    */
   async fetchRecentLeads(limit: number = 50): Promise<HomeStackLead[]> {
     try {
-      // Use the proper HomeStack API endpoint
-      const response = await fetch(`${this.config.baseUrl}/api/v1/leads?limit=${limit}&status=all`, {
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      })
+      // Try different possible HomeStack API endpoints
+      const endpoints = [
+        `/api/v1/leads?limit=${limit}&status=all`,
+        `/api/leads?limit=${limit}`,
+        `/api/v1/users?limit=${limit}`,
+        `/api/users?limit=${limit}`,
+        `/api/v1/contacts?limit=${limit}`,
+        `/api/contacts?limit=${limit}`
+      ]
       
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('HomeStack API error:', response.status, errorText)
-        throw new Error(`HomeStack API error: ${response.status} - ${errorText}`)
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`Trying HomeStack endpoint: ${this.config.baseUrl}${endpoint}`)
+          const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            console.log(`✅ Success with endpoint: ${endpoint}`, { dataKeys: Object.keys(data) })
+            
+            // Handle different response formats
+            const leads = data.leads || data.users || data.contacts || data.data || data || []
+            return this.transformLeads(leads)
+          } else {
+            console.log(`❌ Endpoint ${endpoint} failed: ${response.status}`)
+          }
+        } catch (endpointError) {
+          console.log(`❌ Endpoint ${endpoint} error:`, endpointError)
+        }
       }
       
-      const data = await response.json()
-      
-      // Handle different response formats
-      const leads = data.leads || data.data || data || []
-      return this.transformLeads(leads)
+      // If all endpoints fail, return empty array
+      console.error('All HomeStack API endpoints failed')
+      return []
       
     } catch (error) {
       console.error('Error fetching HomeStack leads:', error)
@@ -73,21 +92,37 @@ export class HomeStackIntegration {
    */
   async fetchLeadsByStatus(status: string, limit: number = 50): Promise<HomeStackLead[]> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/api/v1/leads?status=${status}&limit=${limit}`, {
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      })
+      // Try different possible HomeStack API endpoints with status filter
+      const endpoints = [
+        `/api/v1/leads?status=${status}&limit=${limit}`,
+        `/api/leads?status=${status}&limit=${limit}`,
+        `/api/v1/users?status=${status}&limit=${limit}`,
+        `/api/users?status=${status}&limit=${limit}`,
+        `/api/v1/contacts?status=${status}&limit=${limit}`,
+        `/api/contacts?status=${status}&limit=${limit}`
+      ]
       
-      if (!response.ok) {
-        throw new Error(`HomeStack API error: ${response.statusText}`)
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            const leads = data.leads || data.users || data.contacts || data.data || data || []
+            return this.transformLeads(leads)
+          }
+        } catch (endpointError) {
+          console.log(`Endpoint ${endpoint} error:`, endpointError)
+        }
       }
       
-      const data = await response.json()
-      const leads = data.leads || data.data || data || []
-      return this.transformLeads(leads)
+      return []
       
     } catch (error) {
       console.error(`Error fetching HomeStack leads with status ${status}:`, error)
@@ -100,21 +135,37 @@ export class HomeStackIntegration {
    */
   async fetchLeadById(leadId: string): Promise<HomeStackLead | null> {
     try {
-      const response = await fetch(`${this.config.baseUrl}/api/v1/leads/${leadId}`, {
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      })
+      // Try different possible HomeStack API endpoints for individual items
+      const endpoints = [
+        `/api/v1/leads/${leadId}`,
+        `/api/leads/${leadId}`,
+        `/api/v1/users/${leadId}`,
+        `/api/users/${leadId}`,
+        `/api/v1/contacts/${leadId}`,
+        `/api/contacts/${leadId}`
+      ]
       
-      if (!response.ok) {
-        throw new Error(`HomeStack API error: ${response.statusText}`)
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            const leads = this.transformLeads([data.lead || data.user || data.contact || data])
+            return leads[0] || null
+          }
+        } catch (endpointError) {
+          console.log(`Endpoint ${endpoint} error:`, endpointError)
+        }
       }
       
-      const data = await response.json()
-      const leads = this.transformLeads([data.lead || data])
-      return leads[0] || null
+      return null
       
     } catch (error) {
       console.error(`Error fetching HomeStack lead ${leadId}:`, error)

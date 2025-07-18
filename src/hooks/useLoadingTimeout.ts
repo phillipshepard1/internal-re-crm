@@ -35,9 +35,7 @@ export function useLoadingTimeout({
       console.error('Loading timeout detected', {
         loadTime: `${loadTime}ms`,
         timeoutMs,
-        url: window.location.pathname,
-        timestamp: new Date().toISOString(),
-        stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
+        url: window.location.pathname
       })
       
       if (onTimeout) {

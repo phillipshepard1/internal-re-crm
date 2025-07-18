@@ -48,14 +48,13 @@ export async function POST(request: NextRequest) {
     // Initialize HomeStack integration
     const homeStack = new HomeStackIntegration(homeStackConfig)
     
-    // Fetch and process leads
-    const leads = await homeStack.fetchRecentLeads(limit)
-    const processedCount = await homeStack.processLeads(leads)
-    
+    // Since HomeStack API endpoints are not available, 
+    // we'll return information about the webhook-based integration
     return NextResponse.json({ 
       success: true,
-      processedCount,
-      message: `Processed ${processedCount} leads from HomeStack`
+      processedCount: 0,
+      message: `HomeStack integration is webhook-based. New users and leads are automatically imported via webhooks when they sign up in HomeStack.`,
+      note: "The 'Import Recent Leads' feature is not available as HomeStack doesn't provide a public API for fetching historical data. All new leads are automatically imported via webhooks."
     })
     
   } catch (err: unknown) {

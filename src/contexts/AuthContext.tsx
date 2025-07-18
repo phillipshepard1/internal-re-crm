@@ -74,17 +74,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Validate session with debouncing
+  // Validate session and update state
   const validateSession = useCallback(async () => {
     const now = Date.now()
     const timeSinceLastValidation = now - lastValidationRef.current
     
     // Debounce validation calls (minimum 1 second between calls)
     if (timeSinceLastValidation < 1000) {
-      console.log('AuthContext: Session validation debounced', {
-        timeSinceLastValidation,
-        timestamp: new Date().toISOString()
-      })
       return
     }
     
@@ -93,46 +89,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
       
-      if (error) {
-        console.error('AuthContext: Session validation error:', error)
+      // If there's an error or no session, clear the user state
+      if (error || !session) {
+        userRef.current = null
+        setUser(null)
+        userRoleRef.current = null
+        setUserRole(null)
+        
+        if (loadingRef.current) {
+          loadingRef.current = false
+          setLoading(false)
+        }
         return
       }
 
-      const currentUser = session?.user || null
+      const currentUser = session.user
       const currentUserId = currentUser?.id
       const previousUserId = userRef.current?.id
 
       // Only update if user actually changed
       if (currentUserId !== previousUserId) {
-        console.log('AuthContext: Auth state change', {
-          event: currentUser ? 'SIGNED_IN' : 'SIGNED_OUT',
-          userEmail: currentUser?.email,
-          userId: currentUserId,
-          timestamp: new Date().toISOString(),
-          previousUser: previousUserId
-        })
-
         userRef.current = currentUser
         setUser(currentUser)
 
-                  if (currentUser) {
-            // Get user role
-            console.log('AuthContext: Getting user role for:', currentUser.id)
-            try {
-              const role = await getUserRole(currentUser.id)
-              console.log('AuthContext: User role assigned:', role)
-              userRoleRef.current = role
-              setUserRole(role)
-            } catch (error) {
-              console.error('AuthContext: Error getting user role:', error)
-              // Set default role if there's an error
-              userRoleRef.current = 'agent'
-              setUserRole('agent')
-            }
-          } else {
-            userRoleRef.current = null
-            setUserRole(null)
+        if (currentUser) {
+          // Get user role
+          try {
+            const role = await getUserRole(currentUser.id)
+            userRoleRef.current = role
+            setUserRole(role)
+          } catch (error) {
+            console.error('AuthContext: Error getting user role:', error)
+            // Set default role if there's an error
+            userRoleRef.current = 'agent'
+            setUserRole('agent')
           }
+        } else {
+          userRoleRef.current = null
+          setUserRole(null)
+        }
       }
 
       // Update loading state
@@ -141,15 +136,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
       }
 
-      console.log('AuthContext: Auth state updated', {
-        user: currentUserId,
-        userRole: userRoleRef.current,
-        loading: false,
-        timestamp: new Date().toISOString()
-      })
-
     } catch (error) {
       console.error('AuthContext: Session validation failed:', error)
+      
+      // Clear user state on error
+      userRef.current = null
+      setUser(null)
+      userRoleRef.current = null
+      setUserRole(null)
       
       if (loadingRef.current) {
         loadingRef.current = false
@@ -160,45 +154,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Set up auth state listener
   useEffect(() => {
-    console.log('AuthContext: Setting up auth listener', {
-      timestamp: new Date().toISOString()
-    })
-
     // Initial session check
     validateSession()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('AuthContext: Auth state change event', {
-          event,
-          userId: session?.user?.id,
-          timestamp: new Date().toISOString()
-        })
-
         const currentUser = session?.user || null
         const currentUserId = currentUser?.id
         const previousUserId = userRef.current?.id
 
         // Only update if user actually changed
         if (currentUserId !== previousUserId) {
-          console.log('AuthContext: Auth state change', {
-            event,
-            userEmail: currentUser?.email,
-            userId: currentUserId,
-            timestamp: new Date().toISOString(),
-            previousUser: previousUserId
-          })
-
           userRef.current = currentUser
           setUser(currentUser)
 
           if (currentUser) {
             // Get user role
-            console.log('AuthContext: Auth listener - Getting user role for:', currentUser.id)
             try {
               const role = await getUserRole(currentUser.id)
-              console.log('AuthContext: Auth listener - User role assigned:', role)
               userRoleRef.current = role
               setUserRole(role)
             } catch (error) {
@@ -218,20 +192,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           loadingRef.current = false
           setLoading(false)
         }
-
-        console.log('AuthContext: Auth state updated', {
-          user: currentUserId,
-          userRole: userRoleRef.current,
-          loading: false,
-          timestamp: new Date().toISOString()
-        })
       }
     )
 
     return () => {
-      console.log('AuthContext: Cleaning up auth listener', {
-        timestamp: new Date().toISOString()
-      })
       subscription.unsubscribe()
     }
   }, [validateSession, getUserRole])
@@ -276,22 +240,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     try {
-      console.log('AuthContext: Starting Google OAuth flow...')
+      // Force sign out any existing session to ensure clean OAuth flow
+      await supabase.auth.signOut()
       
-      // Check current session first
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        console.log('AuthContext: User already has session, signing out first:', {
-          userId: session.user.id,
-          userEmail: session.user.email
-        })
-        
-        // Sign out first to force fresh OAuth flow
-        await supabase.auth.signOut()
-        
-        // Wait a moment for sign out to complete
-        await new Promise(resolve => setTimeout(resolve, 500))
-      }
+      // Wait a moment for sign out to complete
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Use Supabase's built-in OAuth functionality
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -309,11 +262,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('AuthContext: Google sign in error:', error)
         return { error: error.message }
       }
-
-      console.log('AuthContext: OAuth initiated successfully', {
-        url: data.url,
-        provider: data.provider
-      })
 
       // Let Supabase handle the redirect automatically
       return { error: null }
@@ -362,12 +310,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
+      // Clear Supabase session
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error('AuthContext: Sign out error:', error)
       }
+      
+      // Clear all browser storage
+      if (typeof window !== 'undefined') {
+        // Clear localStorage
+        localStorage.clear()
+        
+        // Clear sessionStorage
+        sessionStorage.clear()
+        
+        // Clear all cookies
+        document.cookie.split(";").forEach((c) => {
+          const eqPos = c.indexOf("=")
+          const name = eqPos > -1 ? c.substr(0, eqPos) : c
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/"
+        })
+        
+        // Clear Google OAuth related cookies and storage
+        const googleCookies = [
+          'G_AUTHUSER_H',
+          'SSID',
+          'SID',
+          'HSID',
+          'APISID',
+          'SAPISID',
+          'NID',
+          '1P_JAR',
+          'AEC',
+          'OTZ'
+        ]
+        
+        googleCookies.forEach(cookieName => {
+          document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.google.com`
+          document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=google.com`
+          document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+        })
+        
+        // Clear any Google OAuth state from localStorage
+        const keysToRemove = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && (key.includes('google') || key.includes('oauth') || key.includes('auth'))) {
+            keysToRemove.push(key)
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key))
+        
+        // Clear any Supabase related storage
+        const supabaseKeys = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.includes('supabase')) {
+            supabaseKeys.push(key)
+          }
+        }
+        supabaseKeys.forEach(key => localStorage.removeItem(key))
+      }
+      
+      // Force clear user state immediately
+      userRef.current = null
+      setUser(null)
+      userRoleRef.current = null
+      setUserRole(null)
+      
+      // Force reload to clear any remaining session state
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
     } catch (error) {
       console.error('AuthContext: Sign out error:', error)
+      
+      // Force clear user state even on error
+      userRef.current = null
+      setUser(null)
+      userRoleRef.current = null
+      setUserRole(null)
+      
+      // Force reload even on error
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
     }
   }, [])
 

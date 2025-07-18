@@ -43,9 +43,10 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const handleLogout = async () => {
     try {
       await signOut()
-      window.location.href = '/login'
+      // signOut now handles the redirect automatically
     } catch (error) {
       console.error('Logout error:', error)
+      // Fallback redirect in case signOut fails
       window.location.href = '/login'
     }
   }

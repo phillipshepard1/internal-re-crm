@@ -47,6 +47,13 @@ export interface Person {
   looking_for?: string
   selling?: string
   closed?: string
+  // Joined user data
+  assigned_user?: {
+    id: string
+    email: string
+    first_name: string | null
+    last_name: string | null
+  }
 }
 
 export interface Note {
