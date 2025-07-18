@@ -112,11 +112,44 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration)
       hasLastName: !!userData.last_name,
       hasPhone: !!userData.phone,
       hasCreatedAt: !!userData.created_at,
+      hasUserObject: !!userData.user,
       dataKeys: Object.keys(userData)
     })
 
+    // Handle different HomeStack data formats
+    let actualUserData = userData
+    
+    // If data is nested under 'user' object, extract it
+    if (userData.user && typeof userData.user === 'object') {
+      console.log('🔄 Detected nested user format, extracting user data...')
+      actualUserData = userData.user
+    }
+    
+    // Transform HomeStack format to our expected format
+    console.log('🔄 Transforming HomeStack data format...')
+    const transformedData = {
+      id: actualUserData.guid || actualUserData.id, // HomeStack uses 'guid'
+      email: actualUserData.email,
+      first_name: actualUserData.name ? actualUserData.name.split(' ')[0] : undefined, // Split 'name' into first_name
+      last_name: actualUserData.name ? actualUserData.name.split(' ').slice(1).join(' ') : undefined, // Split 'name' into last_name
+      phone: actualUserData.phone,
+      created_at: actualUserData.created_at,
+      agent_guid: actualUserData.agent_guid
+    }
+    
+    console.log('📊 Transformed user data:', {
+      hasId: !!transformedData.id,
+      hasEmail: !!transformedData.email,
+      hasFirstName: !!transformedData.first_name,
+      hasLastName: !!transformedData.last_name,
+      hasPhone: !!transformedData.phone,
+      hasCreatedAt: !!transformedData.created_at,
+      originalDataKeys: Object.keys(actualUserData),
+      transformedDataKeys: Object.keys(transformedData)
+    })
+
     // Use the new method for user signup handling
-    const person = await homeStack.createPersonFromUserSignup(userData)
+    const person = await homeStack.createPersonFromUserSignup(transformedData)
 
     if (person) {
       console.log('✅ User successfully created in CRM:', {
