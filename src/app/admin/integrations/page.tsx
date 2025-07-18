@@ -428,6 +428,45 @@ export default function IntegrationsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              
+              {/* Webhook Configuration Section */}
+              <div className="p-4 border rounded-lg bg-muted/20">
+                <h4 className="text-sm font-medium mb-3">Webhook Configuration</h4>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Webhook URL for HomeStack:</Label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Input
+                        value={`${window.location.origin}/api/webhooks/homestack`}
+                        readOnly
+                        className="text-sm font-mono"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/homestack`);
+                          setSuccess('Webhook URL copied to clipboard!');
+                          setTimeout(() => setSuccess(''), 3000);
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="text-xs text-muted-foreground">
+                    <p className="font-medium mb-2">Configure in HomeStack Dashboard:</p>
+                    <ol className="space-y-1 ml-4">
+                      <li>1. Go to your HomeStack dashboard</li>
+                      <li>2. Navigate to Settings → Integrations → Webhooks</li>
+                      <li>3. Add the webhook URL above</li>
+                      <li>4. Enable these events: <code className="bg-background px-1 rounded">user.created</code>, <code className="bg-background px-1 rounded">lead.created</code>, <code className="bg-background px-1 rounded">contact.created</code></li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Switch
                   id="homestack-enabled"
