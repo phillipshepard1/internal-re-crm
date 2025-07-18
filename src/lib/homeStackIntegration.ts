@@ -125,7 +125,7 @@ export class HomeStackIntegration {
   /**
    * Transform HomeStack API response to our lead format
    */
-  private transformLeads(apiLeads: Record<string, unknown>[]): HomeStackLead[] {
+  public transformLeads(apiLeads: Record<string, unknown>[]): HomeStackLead[] {
     return apiLeads.map(lead => {
       const status = (lead.status as string) || 'new'
       const validStatus = ['new', 'contacted', 'qualified', 'converted'].includes(status) 
@@ -199,7 +199,7 @@ export class HomeStackIntegration {
   /**
    * Create a person record from HomeStack lead
    */
-  private async createPersonFromLead(lead: HomeStackLead): Promise<Person | null> {
+  public async createPersonFromLead(lead: HomeStackLead): Promise<Person | null> {
     try {
       // Get next user in Round Robin
       const assignedUserId = await getNextRoundRobinUser()
@@ -296,6 +296,104 @@ export class HomeStackIntegration {
     return true
   }
   
+  /**
+   * Create a person record from HomeStack user signup (assigned to admin first)
+   */
+  async createPersonFromUserSignup(userData: {
+    id: string
+    email: string
+    first_name?: string
+    last_name?: string
+    phone?: string
+    created_at?: string
+    [key: string]: any
+  }): Promise<Person | null> {
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+      
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      })
+
+      // Check if user already exists
+      const { data: existingUser } = await supabase
+        .from('people')
+        .select('*')
+        .eq('email', userData.email)
+        .single()
+
+      if (existingUser) {
+        console.log('User already exists:', userData.email)
+        return existingUser
+      }
+
+      // Get admin user for initial assignment
+      const { data: adminUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .single()
+
+      if (!adminUser) {
+        console.error('No admin user found for assignment')
+        return null
+      }
+
+      const personData: Partial<Person> = {
+        first_name: userData.first_name || userData.email.split('@')[0],
+        last_name: userData.last_name || 'Unknown',
+        email: [userData.email],
+        phone: userData.phone ? [userData.phone] : [],
+        client_type: 'lead',
+        lead_source: 'homestack',
+        assigned_to: adminUser.id, // Assign to admin initially
+        notes: `New user from HomeStack signup\nHomeStack ID: ${userData.id}\nSignup Date: ${userData.created_at || new Date().toISOString()}\nSource: homestack_user_signup`,
+        profile_picture: null,
+        birthday: null,
+        mailing_address: null,
+        relationship_id: null,
+        last_interaction: new Date().toISOString(),
+        next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
+        best_to_reach_by: null,
+        lists: [],
+        company: undefined,
+        position: undefined,
+        address: undefined,
+        city: undefined,
+        state: undefined,
+        zip_code: undefined,
+        country: undefined,
+        looking_for: undefined,
+        selling: undefined,
+        closed: undefined
+      }
+
+      const newPerson = await createPerson(personData)
+
+      // Create activity log
+      const { createActivity } = await import('./database')
+      await createActivity({
+        person_id: newPerson.id,
+        type: 'created',
+        description: 'New user automatically imported from HomeStack signup',
+        created_by: adminUser.id,
+      })
+
+      console.log('Successfully created person from HomeStack user signup:', newPerson.id)
+      return newPerson
+
+    } catch (error) {
+      console.error('Error creating person from HomeStack user signup:', error)
+      return null
+    }
+  }
+
   /**
    * Update lead status in HomeStack
    */

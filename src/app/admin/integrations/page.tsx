@@ -205,6 +205,43 @@ export default function IntegrationsPage() {
     }
   }
 
+  const testHomeStackWebhook = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/test-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          eventType: 'user.created',
+          testData: {
+            id: `test_user_${Date.now()}`,
+            email: `testuser${Date.now()}@example.com`,
+            first_name: 'Test',
+            last_name: 'User',
+            phone: '+1234567890',
+            created_at: new Date().toISOString()
+          }
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess(`Test webhook successful! Created user: ${result.test_data.email} (ID: ${result.person_id})`)
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to test webhook')
+      }
+    } catch (error) {
+      console.error('Error testing webhook:', error)
+      setError('Failed to test webhook')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
@@ -458,6 +495,10 @@ export default function IntegrationsPage() {
                     <Button onClick={processHomeStackLeads} disabled={processing}>
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Import Recent Leads
+                    </Button>
+                    <Button onClick={testHomeStackWebhook} disabled={processing} variant="outline">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Test Webhook
                     </Button>
                   </div>
 
