@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     switch (body.type) {
       case 'new_user':
         console.log('🔄 Processing new_user event (HomeStack format)...')
-        return await handleUserCreated(body.data, homeStack)
+        return await handleUserCreated(body.data, homeStack, body.type)
       
       case 'update_user':
         console.log('🔄 Processing update_user event (HomeStack format)...')
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       case 'app.user.created':
       case 'app.user.registered':
         console.log('📱 Processing mobile app user creation event:', body.type)
-        return await handleUserCreated(body.data, homeStack)
+        return await handleUserCreated(body.data, homeStack, body.type)
       
       case 'mobile.lead.created':
       case 'app.lead.created':
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       case 'user.created':
       case 'user.registered':
         console.log('🔄 Processing user.created event (legacy format)...')
-        return await handleUserCreated(body.data, homeStack)
+        return await handleUserCreated(body.data, homeStack, body.type)
       
       case 'lead.created':
       case 'lead.updated':
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Handle new user signup from HomeStack
-async function handleUserCreated(userData: any, homeStack: HomeStackIntegration) {
+async function handleUserCreated(userData: any, homeStack: HomeStackIntegration, eventType?: string) {
   try {
     console.log('Processing new user from HomeStack')
 
@@ -140,6 +140,16 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration)
     
     console.log('📋 Processing user data:', JSON.stringify(actualUserData, null, 2))
     
+    // Determine source - always HomeStack for this webhook endpoint
+    let source = 'homestack' // This webhook is specifically for HomeStack
+    if (actualUserData.source && actualUserData.source !== 'homestack') {
+      // Only override if it's a different source (not HomeStack)
+      source = actualUserData.source
+    } else if (actualUserData.platform && actualUserData.platform !== 'homestack') {
+      // Only override if it's a different platform (not HomeStack)
+      source = actualUserData.platform
+    }
+    
     // Transform HomeStack format to our expected format
     const transformedData = {
       id: actualUserData.guid || actualUserData.id || actualUserData.user_id || actualUserData.userId, // Handle different ID fields
@@ -149,10 +159,12 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration)
       phone: actualUserData.phone || actualUserData.phone_number || actualUserData.mobile || actualUserData.contact_number,
       created_at: actualUserData.created_at || actualUserData.createdAt || actualUserData.registration_date || actualUserData.signup_date,
       agent_guid: actualUserData.agent_guid || actualUserData.agent_id || actualUserData.assigned_agent,
-      // Mobile app specific fields
-      source: actualUserData.source || actualUserData.platform || 'homestack_mobile',
+      // Use determined source instead of defaulting to mobile
+      source: source,
       device_info: actualUserData.device_info || actualUserData.device || actualUserData.platform_info
     }
+
+    console.log('🎯 Determined source:', source, 'for event type:', eventType)
 
     // Use the new method for user signup handling
     const person = await homeStack.createPersonFromUserSignup(transformedData)

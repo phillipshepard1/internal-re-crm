@@ -10,6 +10,8 @@ export interface User {
   id: string
   email: string
   role: 'admin' | 'agent'
+  first_name?: string | null
+  last_name?: string | null
   created_at: string
   updated_at: string
 }
@@ -43,6 +45,8 @@ export interface Person {
   country?: string
   lead_source?: string
   lead_source_id?: string
+  // Lead management
+  lead_status?: 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost'
   // Properties fields
   looking_for?: string
   selling?: string
@@ -96,7 +100,7 @@ export interface FollowUpWithPerson extends FollowUp {
 export interface Activity {
   id: string
   person_id: string
-  type: 'created' | 'follow_up' | 'note_added' | 'task_added'
+  type: 'created' | 'follow_up' | 'note_added' | 'task_added' | 'assigned' | 'status_changed'
   description: string
   created_by: string
   created_at: string

@@ -228,12 +228,27 @@ export class EmailLeadProcessor {
    */
   static async createPersonFromEmail(lead: EmailLead): Promise<Person | null> {
     try {
-      // Use Round Robin to assign the lead
-      const { getNextRoundRobinUser } = await import('./roundRobin')
-      const assignedUserId = await getNextRoundRobinUser()
+      // Get admin user for initial assignment (leads go to staging first)
+      const { createClient } = await import('@supabase/supabase-js')
       
-      if (!assignedUserId) {
-        console.error('No user available in Round Robin queue')
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+      
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      })
+
+      const { data: adminUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .single()
+
+      if (!adminUser) {
+        console.error('No admin user found for lead assignment')
         return null
       }
       
@@ -244,7 +259,8 @@ export class EmailLeadProcessor {
         phone: lead.phone,
         client_type: 'lead',
         lead_source: lead.source,
-        assigned_to: assignedUserId,
+        lead_status: 'staging', // New leads go to staging
+        assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
         notes: lead.message || `Lead captured from ${lead.source} email on ${lead.timestamp.toLocaleDateString()}`,
         // Set default values
         profile_picture: null,
@@ -274,8 +290,8 @@ export class EmailLeadProcessor {
       await createActivity({
         person_id: newPerson.id,
         type: 'created',
-        description: `Lead captured from ${lead.source} email`,
-        created_by: assignedUserId,
+        description: `Lead captured from ${lead.source} email and placed in staging`,
+        created_by: adminUser.id,
       })
       
   
@@ -305,12 +321,27 @@ export class EmailLeadProcessor {
     confidence_score: number
   }): Promise<Person | null> {
     try {
-      // Use Round Robin to assign the lead
-      const { getNextRoundRobinUser } = await import('./roundRobin')
-      const assignedUserId = await getNextRoundRobinUser()
+      // Get admin user for initial assignment (leads go to staging first)
+      const { createClient } = await import('@supabase/supabase-js')
       
-      if (!assignedUserId) {
-        console.error('No user available in Round Robin queue')
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+      
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      })
+
+      const { data: adminUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .single()
+
+      if (!adminUser) {
+        console.error('No admin user found for lead assignment')
         return null
       }
       
@@ -322,7 +353,8 @@ export class EmailLeadProcessor {
         client_type: 'lead',
         lead_source: leadData.lead_source,
         lead_source_id: leadData.lead_source_id,
-        assigned_to: assignedUserId,
+        lead_status: 'staging', // New leads go to staging
+        assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
         notes: leadData.message || `AI-detected lead from ${leadData.lead_source} (Confidence: ${(leadData.confidence_score * 100).toFixed(1)}%)`,
         // Set default values
         profile_picture: null,
@@ -349,12 +381,11 @@ export class EmailLeadProcessor {
       
       // Create an activity log entry
       const { createActivity } = await import('./database')
-      
       await createActivity({
         person_id: newPerson.id,
         type: 'created',
-        description: `AI-detected lead from ${leadData.lead_source} (${(leadData.confidence_score * 100).toFixed(1)}% confidence)`,
-        created_by: assignedUserId,
+        description: `AI-detected lead from ${leadData.lead_source} and placed in staging`,
+        created_by: adminUser.id,
       })
       
       return newPerson

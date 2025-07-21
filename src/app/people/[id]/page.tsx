@@ -1126,7 +1126,10 @@ export default function PersonDetailPage() {
                         activity.type === 'created' ? 'bg-primary' :
                         activity.type === 'follow_up' ? 'bg-green-500' :
                         activity.type === 'note_added' ? 'bg-blue-500' :
-                        activity.type === 'task_added' ? 'bg-orange-500' : 'bg-gray-500'
+                        activity.type === 'task_added' ? 'bg-orange-500' :
+                        activity.type === 'assigned' ? 'bg-purple-500' :
+                        activity.type === 'status_changed' ? 'bg-yellow-500' :
+                        'bg-gray-500'
                       }`}></div>
                       <div className="flex-1">
                         <p className="text-sm font-medium">{activity.description}</p>

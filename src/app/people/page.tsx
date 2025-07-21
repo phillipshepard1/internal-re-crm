@@ -54,6 +54,17 @@ export default function PeoplePage() {
     }
   )
 
+  // Debug: Log the data being loaded
+  useEffect(() => {
+    console.log('PeoplePage: Data loaded', {
+      peopleCount: people?.length || 0,
+      people: people?.slice(0, 3), // Log first 3 people
+      userId: user?.id,
+      userRole,
+      timestamp: new Date().toISOString()
+    })
+  }, [people, user?.id, userRole])
+
   const filteredPeople = (people || []).filter((person: Person) =>
     `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (person.email && person.email[0]?.toLowerCase().includes(searchQuery.toLowerCase()))

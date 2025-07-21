@@ -102,6 +102,32 @@ export async function getPeople(userId?: string, userRole?: string) {
         last_name
       )
     `)
+    .or('client_type.neq.lead,lead_status.eq.converted') // Include non-leads and converted leads
+    .order('last_interaction', { ascending: false })
+  
+  // If user is an agent, only show assigned contacts
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+// Get all people including leads (for admin purposes)
+export async function getAllPeople(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
     .order('last_interaction', { ascending: false })
   
   // If user is an agent, only show assigned contacts
@@ -638,16 +664,7 @@ export async function getNextRoundRobinUser() {
   return data
 }
 
-export async function assignLeadToUser(leadData: Partial<Person>, userId: string) {
-  const { data, error } = await supabase
-    .from('people')
-    .insert([{ ...leadData, assigned_to: userId }])
-    .select()
-    .single()
-  
-  if (error) throw error
-  return data
-} 
+ 
 
 // Test lead creation for admin testing
 export async function createTestLead(leadData: {
@@ -870,4 +887,210 @@ export async function getAdminDashboardStats(): Promise<{
       userStats: []
     }
   }
+} 
+
+// Lead Management Functions
+export async function getLeads(status?: 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost', userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('client_type', 'lead')
+    .order('created_at', { ascending: false })
+  
+  // Filter by lead status if provided
+  if (status) {
+    query = query.eq('lead_status', status)
+  }
+  
+  // If user is an agent, only show assigned leads
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+export async function getStagingLeads() {
+  const { data, error } = await supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('client_type', 'lead')
+    .eq('lead_status', 'staging')
+    .order('created_at', { ascending: false })
+  
+  if (error) throw error
+  return data || []
+}
+
+export async function getAssignedLeads(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('client_type', 'lead')
+    .in('lead_status', ['assigned', 'contacted', 'qualified', 'lost'])
+    .order('created_at', { ascending: false })
+  
+  // If user is an agent, only show their assigned leads
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+export async function assignLeadToUser(leadId: string, userId: string) {
+  const { data, error } = await supabase
+    .from('people')
+    .update({
+      assigned_to: userId,
+      lead_status: 'assigned',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', leadId)
+    .select()
+    .single()
+  
+  if (error) throw error
+  
+  // Create activity log
+  await createActivity({
+    person_id: leadId,
+    type: 'assigned',
+    description: `Lead assigned to user`,
+    created_by: userId,
+  })
+  
+  return data
+}
+
+export async function updateLeadStatus(leadId: string, status: 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost', userId: string) {
+  const updateData: any = {
+    lead_status: status,
+    updated_at: new Date().toISOString()
+  }
+
+  // If lead is converted, change client_type to 'client'
+  if (status === 'converted') {
+    updateData.client_type = 'client'
+  }
+
+  const { data, error } = await supabase
+    .from('people')
+    .update(updateData)
+    .eq('id', leadId)
+    .select()
+    .single()
+  
+  if (error) throw error
+  
+  // Create activity log
+  await createActivity({
+    person_id: leadId,
+    type: 'status_changed',
+    description: `Lead status changed to ${status}`,
+    created_by: userId,
+  })
+  
+  return data
+}
+
+export async function getUsersForAssignment() {
+  console.log('Getting users for assignment...')
+  
+  // First, let's see ALL users in the database
+  const { data: allUsers, error: allUsersError } = await supabase
+    .from('users')
+    .select('id, email, first_name, last_name, role')
+    .order('first_name', { ascending: true })
+  
+  if (allUsersError) {
+    console.error('Error getting all users:', allUsersError)
+  } else {
+    console.log('All users in database:', allUsers)
+  }
+  
+  // Now get users for assignment (agents and admins)
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, email, first_name, last_name, role')
+    .in('role', ['agent', 'admin'])
+    .order('first_name', { ascending: true })
+  
+  if (error) {
+    console.error('Error getting users for assignment:', error)
+    throw error
+  }
+  
+  console.log('Users for assignment found:', data)
+  console.log('Number of users found:', data?.length || 0)
+  
+  return data || []
+}
+
+export async function getLeadStats(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select('lead_status, client_type')
+    .or('client_type.eq.lead,lead_status.eq.converted')
+    .not('lead_status', 'is', null)
+  
+  // If user is an agent, only show their stats
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  
+  if (error) throw error
+  
+  // Group by status
+  const stats = {
+    staging: 0,
+    assigned: 0,
+    contacted: 0,
+    qualified: 0,
+    converted: 0,
+    lost: 0,
+    total: 0
+  }
+  
+  data?.forEach((item: any) => {
+    if (item.lead_status && stats.hasOwnProperty(item.lead_status)) {
+      stats[item.lead_status as keyof typeof stats]++
+      stats.total++
+    }
+  })
+  
+  // Calculate total active leads (assigned + contacted + qualified + lost)
+  stats.assigned = stats.assigned + stats.contacted + stats.qualified + stats.lost
+  
+  return stats
 } 

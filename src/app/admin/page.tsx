@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus, Crown } from 'lucide-react'
-import { addUserToRoundRobin, removeUserFromRoundRobin, updateRoundRobinStatus, updateUserRole } from '@/lib/database'
+import { updateUserRole } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,6 @@ import Link from 'next/link'
 export default function AdminPage() {
   const { userRole } = useAuth()
   const [users, setUsers] = useState<User[]>([])
-  const [roundRobinConfig, setRoundRobinConfig] = useState<RoundRobinConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [roleUpdateLoading, setRoleUpdateLoading] = useState<string | null>(null)
@@ -54,7 +53,6 @@ export default function AdminPage() {
       
       const data = await response.json()
       setUsers(data.users || [])
-      setRoundRobinConfig(data.roundRobinConfig || [])
     } catch (err) {
       setError('Failed to load admin data')
       console.error('Error loading admin data:', err)
@@ -71,51 +69,6 @@ export default function AdminPage() {
     }
     loadData()
   }, [userRole, loadData])
-
-  const handleAddToRoundRobin = async (userId: string) => {
-    try {
-      await addUserToRoundRobin(userId)
-      await loadData() // Reload data
-    } catch (err) {
-      console.error('Error adding user to Round Robin:', err)
-      setAlertModal({
-        open: true,
-        title: 'Error',
-        message: 'Failed to add user to Round Robin. The Round Robin table may not exist yet.',
-        type: 'error'
-      })
-    }
-  }
-
-  const handleRemoveFromRoundRobin = async (userId: string) => {
-    try {
-      await removeUserFromRoundRobin(userId)
-      await loadData() // Reload data
-    } catch (err) {
-      console.error('Error removing user from Round Robin:', err)
-      setAlertModal({
-        open: true,
-        title: 'Error',
-        message: 'Failed to remove user from Round Robin. The Round Robin table may not exist yet.',
-        type: 'error'
-      })
-    }
-  }
-
-  const handleToggleRoundRobinStatus = async (userId: string, isActive: boolean) => {
-    try {
-      await updateRoundRobinStatus(userId, isActive)
-      await loadData() // Reload data
-    } catch (err) {
-      console.error('Error updating Round Robin status:', err)
-      setAlertModal({
-        open: true,
-        title: 'Error',
-        message: 'Failed to update Round Robin status. The Round Robin table may not exist yet.',
-        type: 'error'
-      })
-    }
-  }
 
   const handleRoleChange = async (userId: string, newRole: 'admin' | 'agent') => {
     try {
@@ -298,7 +251,8 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {roundRobinConfig.filter(c => c.is_active).length}
+                {/* roundRobinConfig.filter(c => c.is_active).length */}
+                N/A
               </div>
               <p className="text-xs text-muted-foreground">
                 Active in lead distribution
@@ -312,7 +266,6 @@ export default function AdminPage() {
         <Tabs defaultValue="users" className="space-y-4">
           <TabsList>
             <TabsTrigger value="users">User Management</TabsTrigger>
-            <TabsTrigger value="roundRobin">Round Robin</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
           </TabsList>
@@ -494,118 +447,6 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
           
-          <TabsContent value="roundRobin" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Round Robin Lead Distribution</CardTitle>
-                <CardDescription>
-                  Configure which users receive leads automatically via Round Robin assignment
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-
-                
-                {users.filter(u => u.role !== 'admin').length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Round Robin Status</TableHead>
-                        <TableHead>Priority</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users
-                        .filter(u => u.role !== 'admin') // Only show non-admin users
-                        .map((user) => {
-                          const roundRobinEntry = roundRobinConfig.find(c => c.user_id === user.id)
-                          const isInRoundRobin = !!roundRobinEntry
-                          const isActive = roundRobinEntry?.is_active ?? false
-                          
-                          return (
-                            <TableRow key={user.id}>
-                              <TableCell className="font-medium">
-                                {user.email.split('@')[0]}
-                              </TableCell>
-                              <TableCell>
-                                {user.email}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  <Switch
-                                    checked={isActive}
-                                    onCheckedChange={(checked) => {
-                                      if (isInRoundRobin) {
-                                        handleToggleRoundRobinStatus(user.id, checked)
-                                      } else {
-                                        handleAddToRoundRobin(user.id)
-                                      }
-                                    }}
-                                  />
-                                  <Badge variant={isActive ? 'default' : 'secondary'}>
-                                    {isActive ? 'Active' : 'Inactive'}
-                                  </Badge>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {isInRoundRobin ? roundRobinEntry.priority : '-'}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  {isInRoundRobin ? (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => handleRemoveFromRoundRobin(user.id)}
-                                          className="text-destructive hover:text-destructive"
-                                        >
-                                          <UserMinus className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Remove from Round Robin</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  ) : (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => handleAddToRoundRobin(user.id)}
-                                        >
-                                          <UserPlus className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Add to Round Robin</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <Alert>
-                    <AlertDescription>
-                      No agent users found. Only agent users can participate in Round Robin lead distribution.
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-
-
           <TabsContent value="activity" className="space-y-4">
             <ActivityDashboard users={users} />
           </TabsContent>

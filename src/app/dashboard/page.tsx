@@ -22,7 +22,7 @@ interface DashboardStats {
 interface ActivityWithDetails {
   id: string
   person_id: string
-  type: 'created' | 'follow_up' | 'note_added' | 'task_added'
+  type: 'created' | 'follow_up' | 'note_added' | 'task_added' | 'assigned' | 'status_changed'
   description: string
   created_by: string
   created_at: string
@@ -193,6 +193,9 @@ export default function DashboardPage() {
                         activity.type === 'created' ? 'default' :
                         activity.type === 'follow_up' ? 'secondary' :
                         activity.type === 'note_added' ? 'outline' :
+                        activity.type === 'task_added' ? 'secondary' :
+                        activity.type === 'assigned' ? 'default' :
+                        activity.type === 'status_changed' ? 'outline' :
                         'secondary'
                       }>
                         {activity.type.replace('_', ' ')}

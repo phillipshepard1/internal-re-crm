@@ -257,11 +257,27 @@ export class HomeStackIntegration {
    */
   public async createPersonFromLead(lead: HomeStackLead): Promise<Person | null> {
     try {
-      // Get next user in Round Robin
-      const assignedUserId = await getNextRoundRobinUser()
+      // Get admin user for initial assignment (leads go to staging first)
+      const { createClient } = await import('@supabase/supabase-js')
       
-      if (!assignedUserId) {
-        console.error('No user available in Round Robin queue')
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+      
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      })
+
+      const { data: adminUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'admin')
+        .single()
+
+      if (!adminUser) {
+        console.error('No admin user found for lead assignment')
         return null
       }
       
@@ -272,7 +288,8 @@ export class HomeStackIntegration {
         phone: lead.phone,
         client_type: 'lead',
         lead_source: 'homestack',
-        assigned_to: assignedUserId,
+        lead_status: 'staging', // New leads go to staging
+        assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
         notes: lead.message || `Lead from HomeStack - ${lead.createdAt.toLocaleDateString()}`,
         // Set default values
         profile_picture: null,
@@ -302,8 +319,8 @@ export class HomeStackIntegration {
       await createActivity({
         person_id: newPerson.id,
         type: 'created',
-        description: `Lead imported from HomeStack`,
-        created_by: assignedUserId,
+        description: `Lead imported from HomeStack and placed in staging`,
+        created_by: adminUser.id,
       })
       
       return newPerson
@@ -408,7 +425,8 @@ export class HomeStackIntegration {
         phone: userData.phone ? [userData.phone] : [],
         client_type: 'lead',
         lead_source: userData.source === 'homestack_mobile' ? 'homestack_mobile' : 'homestack',
-        assigned_to: adminUser.id, // Assign to admin initially
+        lead_status: 'staging', // New user signups go to staging
+        assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
         notes: `New user from HomeStack ${userData.source === 'homestack_mobile' ? 'mobile app' : 'web'} signup\nHomeStack ID: ${userData.id}\nSignup Date: ${userData.created_at || new Date().toISOString()}\nSource: ${userData.source || 'homestack_user_signup'}${userData.device_info ? `\nDevice: ${userData.device_info}` : ''}`,
         profile_picture: null,
         birthday: null,
