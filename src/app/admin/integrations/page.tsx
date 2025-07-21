@@ -158,6 +158,44 @@ export default function IntegrationsPage() {
     }
   }
 
+  const testMobileWebhook = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/test-mobile-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'mobile.user.created',
+          webhookFormat: 'mobile_app',
+          testData: {
+            user_id: `test_mobile_${Date.now()}`,
+            email: `mobiletest${Date.now()}@example.com`,
+            first_name: 'Mobile',
+            last_name: 'Test User',
+            phone_number: '+1234567890',
+            device_info: 'iOS App v2.1.0'
+          }
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess('Mobile webhook test successful! Check logs for details.')
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to test mobile webhook')
+      }
+    } catch (error) {
+      console.error('Error testing mobile webhook:', error)
+      setError('Failed to test mobile webhook')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const processHomeStackLeads = async () => {
     try {
       setProcessing(true)
@@ -424,6 +462,14 @@ export default function IntegrationsPage() {
                     >
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Test SSO
+                    </Button>
+                    <Button 
+                      onClick={testMobileWebhook} 
+                      disabled={processing}
+                      variant="outline"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Test Mobile Webhook
                     </Button>
                     <Button onClick={saveHomeStackConfig} disabled={processing}>
                       <Settings className="h-4 w-4 mr-2" />

@@ -45,131 +45,171 @@ export async function POST(request: NextRequest) {
 
     // Test different mobile app webhook formats
     let testPayload: any = {}
-    
-    switch (webhookFormat) {
-      case 'mobile_app_v1':
-        testPayload = {
-          type: 'mobile.user.created',
-          data: testData || {
-            id: `mobile_user_${Date.now()}`,
-            email: `mobileuser${Date.now()}@example.com`,
-            first_name: 'Mobile',
-            last_name: 'User',
-            phone: '+1234567890',
-            created_at: new Date().toISOString(),
-            source: 'homestack_mobile',
-            platform: 'mobile_app'
-          }
-        }
-        break
-        
-      case 'mobile_app_v2':
-        testPayload = {
-          event: 'user.created',
-          user: testData || {
-            guid: `mobile_guid_${Date.now()}`,
-            email_address: `mobileuser${Date.now()}@example.com`,
-            name: 'Mobile Test User',
-            phone_number: '+1234567890',
-            created_at: new Date().toISOString(),
-            signup_source: 'mobile_app',
-            device_type: 'ios'
-          }
-        }
-        break
-        
-      case 'mobile_app_v3':
-        testPayload = {
-          action: 'registration',
-          data: testData || {
-            user_id: `mobile_user_${Date.now()}`,
-            email: `mobileuser${Date.now()}@example.com`,
-            full_name: 'Mobile Test User',
-            mobile: '+1234567890',
-            registration_date: new Date().toISOString(),
-            source: 'homestack_mobile',
-            platform: 'android'
-          }
-        }
-        break
-        
-      case 'generic_mobile':
-        testPayload = {
-          email: `mobileuser${Date.now()}@example.com`,
-          first_name: 'Mobile',
-          last_name: 'User',
-          phone: '+1234567890',
-          created_at: new Date().toISOString(),
+
+    if (webhookFormat === 'mobile_app') {
+      // Mobile app specific format
+      testPayload = {
+        type: eventType,
+        data: {
+          user_id: testData?.user_id || 'mobile_user_123',
+          email: testData?.email || 'mobileuser@example.com',
+          first_name: testData?.first_name || 'Mobile',
+          last_name: testData?.last_name || 'User',
+          phone_number: testData?.phone_number || '+1234567890',
+          created_at: testData?.created_at || new Date().toISOString(),
           source: 'homestack_mobile',
-          platform: 'mobile_app'
+          device_info: testData?.device_info || 'iOS App v2.1.0',
+          platform: 'mobile'
         }
-        break
-        
-      default:
-        testPayload = {
-          type: 'mobile.user.created',
-          data: testData || {
-            id: `mobile_user_${Date.now()}`,
-            email: `mobileuser${Date.now()}@example.com`,
-            first_name: 'Mobile',
-            last_name: 'User',
-            phone: '+1234567890',
-            created_at: new Date().toISOString(),
-            source: 'homestack_mobile',
-            platform: 'mobile_app'
-          }
+      }
+    } else if (webhookFormat === 'app_specific') {
+      // App-specific format
+      testPayload = {
+        type: eventType,
+        data: {
+          id: testData?.id || 'app_user_456',
+          email_address: testData?.email_address || 'appuser@example.com',
+          firstName: testData?.firstName || 'App',
+          lastName: testData?.lastName || 'User',
+          mobile: testData?.mobile || '+1234567890',
+          registration_date: testData?.registration_date || new Date().toISOString(),
+          platform: 'mobile_app',
+          device: testData?.device || 'Android App v1.5.2'
         }
+      }
+    } else {
+      // Default mobile format
+      testPayload = {
+        type: eventType,
+        data: {
+          guid: testData?.guid || 'mobile_guid_789',
+          email: testData?.email || 'defaultmobile@example.com',
+          name: testData?.name || 'Default Mobile User',
+          phone: testData?.phone || '+1234567890',
+          created_at: testData?.created_at || new Date().toISOString(),
+          source: 'mobile_app',
+          device_info: testData?.device_info || 'Mobile App'
+        }
+      }
     }
 
     console.log('🧪 Test payload:', JSON.stringify(testPayload, null, 2))
 
-    // Simulate the webhook processing
-    const userData = testPayload.data || testPayload.user || testPayload
-    
-    const person = await homeStack.createPersonFromUserSignup({
-      id: userData.id || userData.guid || userData.user_id || `user_${Date.now()}`,
-      email: userData.email || userData.email_address || userData.user_email,
-      first_name: userData.first_name || userData.firstName || 
-                 (userData.name ? userData.name.split(' ')[0] : undefined) ||
-                 (userData.full_name ? userData.full_name.split(' ')[0] : undefined),
-      last_name: userData.last_name || userData.lastName || 
-                (userData.name ? userData.name.split(' ').slice(1).join(' ') : undefined) ||
-                (userData.full_name ? userData.full_name.split(' ').slice(1).join(' ') : undefined),
-      phone: userData.phone || userData.phone_number || userData.mobile || userData.telephone,
-      created_at: userData.created_at || userData.createdAt || userData.date_created || userData.registration_date,
-      source: userData.source || userData.signup_source || 'homestack_mobile',
-      platform: userData.platform || userData.device_type || 'mobile_app'
+    // Process the test webhook
+    const result = await processWebhookPayload(testPayload, homeStack)
+
+    return NextResponse.json({
+      success: true,
+      testPayload,
+      result,
+      message: 'Mobile webhook test completed'
     })
-    
-    if (person) {
-      return NextResponse.json({
-        success: true,
-        message: 'Mobile app webhook test successful',
-        person_id: person.id,
-        assigned_to: person.assigned_to,
-        test_payload: testPayload,
-        processed_data: {
-          id: userData.id || userData.guid || userData.user_id,
-          email: userData.email || userData.email_address || userData.user_email,
-          first_name: userData.first_name || userData.firstName,
-          last_name: userData.last_name || userData.lastName,
-          phone: userData.phone || userData.phone_number || userData.mobile,
-          source: userData.source || userData.signup_source,
-          platform: userData.platform || userData.device_type
-        }
-      })
-    } else {
-      return NextResponse.json(
-        { error: 'Failed to create test user from mobile app webhook' },
-        { status: 500 }
-      )
-    }
 
   } catch (error) {
-    console.error('❌ Mobile app webhook test error:', error)
+    console.error('❌ Error testing mobile webhook:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     )
+  }
+}
+
+// Helper function to process webhook payload
+async function processWebhookPayload(payload: any, homeStack: HomeStackIntegration) {
+  try {
+    console.log('🔄 Processing webhook payload:', payload.type)
+
+    switch (payload.type) {
+      case 'mobile.user.created':
+      case 'mobile.user.registered':
+      case 'app.user.created':
+      case 'app.user.registered':
+        console.log('📱 Processing mobile user creation')
+        return await handleUserCreated(payload.data, homeStack)
+      
+      case 'mobile.lead.created':
+      case 'app.lead.created':
+        console.log('📱 Processing mobile lead creation')
+        return await handleLeadCreated(payload.data, homeStack)
+      
+      default:
+        console.log('⚠️ Unknown event type:', payload.type)
+        return { success: false, error: 'Unknown event type' }
+    }
+  } catch (error) {
+    console.error('❌ Error processing webhook payload:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+// Handle user creation (same as in main webhook handler)
+async function handleUserCreated(userData: any, homeStack: HomeStackIntegration) {
+  try {
+    console.log('📋 Processing user data:', JSON.stringify(userData, null, 2))
+    
+    const transformedData = {
+      id: userData.guid || userData.id || userData.user_id || userData.userId,
+      email: userData.email || userData.email_address || userData.user_email,
+      first_name: userData.first_name || userData.firstName || (userData.name ? userData.name.split(' ')[0] : undefined),
+      last_name: userData.last_name || userData.lastName || (userData.name ? userData.name.split(' ').slice(1).join(' ') : undefined),
+      phone: userData.phone || userData.phone_number || userData.mobile || userData.contact_number,
+      created_at: userData.created_at || userData.createdAt || userData.registration_date || userData.signup_date,
+      agent_guid: userData.agent_guid || userData.agent_id || userData.assigned_agent,
+      source: userData.source || userData.platform || 'homestack_mobile',
+      device_info: userData.device_info || userData.device || userData.platform_info
+    }
+
+    const person = await homeStack.createPersonFromUserSignup(transformedData)
+
+    if (person) {
+      return {
+        success: true,
+        message: 'Mobile user successfully created in CRM',
+        person_id: person.id,
+        assigned_to: person.assigned_to
+      }
+    } else {
+      return {
+        success: false,
+        error: 'Failed to create mobile user in CRM'
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling mobile user creation:', error)
+    return {
+      success: false,
+      error: 'Failed to process mobile user creation'
+    }
+  }
+}
+
+// Handle lead creation (same as in main webhook handler)
+async function handleLeadCreated(leadData: any, homeStack: HomeStackIntegration) {
+  try {
+    console.log('📱 Processing mobile lead:', leadData)
+
+    const lead = homeStack.transformLeads([leadData])[0]
+    const person = await homeStack.createPersonFromLead(lead)
+
+    if (person) {
+      return {
+        success: true,
+        message: 'Mobile lead successfully created in CRM',
+        person_id: person.id
+      }
+    } else {
+      return {
+        success: false,
+        error: 'Failed to create mobile lead in CRM'
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling mobile lead creation:', error)
+    return {
+      success: false,
+      error: 'Failed to process mobile lead creation'
+    }
   }
 } 

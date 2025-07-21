@@ -17,11 +17,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const signature = request.headers.get('x-homestack-signature')
     
-    // Log webhook event
-    console.log('HomeStack webhook received:', {
+    // Enhanced logging for debugging mobile app issues
+    console.log('🔔 HomeStack webhook received:', {
       type: body.type,
-      timestamp: new Date().toISOString()
+      _id: body._id,
+      timestamp: new Date().toISOString(),
+      userAgent: request.headers.get('user-agent'),
+      source: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip')
     })
+    
+    // Log the full payload for debugging
+    console.log('📋 Full webhook payload:', JSON.stringify(body, null, 2))
 
     // Get HomeStack configuration
     const { data: configData, error: configError } = await supabase
@@ -62,6 +68,24 @@ export async function POST(request: NextRequest) {
         console.log('🔄 Processing new_chat_message event (HomeStack format)...')
         return await handleChatMessage(body.data, homeStack)
       
+      // Mobile app specific events
+      case 'mobile.user.created':
+      case 'mobile.user.registered':
+      case 'app.user.created':
+      case 'app.user.registered':
+        console.log('📱 Processing mobile app user creation event:', body.type)
+        return await handleUserCreated(body.data, homeStack)
+      
+      case 'mobile.lead.created':
+      case 'app.lead.created':
+        console.log('📱 Processing mobile app lead creation event:', body.type)
+        return await handleLeadCreated(body.data, homeStack)
+      
+      case 'mobile.contact.created':
+      case 'app.contact.created':
+        console.log('📱 Processing mobile app contact creation event:', body.type)
+        return await handleContactCreated(body.data, homeStack)
+      
       // Keep backward compatibility with old event types
       case 'user.created':
       case 'user.registered':
@@ -81,7 +105,9 @@ export async function POST(request: NextRequest) {
       default:
         console.log('⚠️ Unhandled webhook event:', body.type)
         console.log('Available HomeStack events: new_user, update_user, new_chat_message')
+        console.log('Mobile app events: mobile.user.created, mobile.lead.created, app.user.created')
         console.log('Legacy events: user.created, lead.created, contact.created')
+        console.log('📋 Full webhook payload for debugging:', JSON.stringify(body, null, 2))
         return NextResponse.json({ success: true, message: 'Event ignored' })
     }
 
@@ -107,15 +133,25 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration)
       actualUserData = userData.user
     }
     
+    // Handle the exact format from HomeStack documentation
+    if (userData.guid || userData.name || userData.email) {
+      actualUserData = userData
+    }
+    
+    console.log('📋 Processing user data:', JSON.stringify(actualUserData, null, 2))
+    
     // Transform HomeStack format to our expected format
     const transformedData = {
-      id: actualUserData.guid || actualUserData.id, // HomeStack uses 'guid'
-      email: actualUserData.email,
-      first_name: actualUserData.name ? actualUserData.name.split(' ')[0] : undefined, // Split 'name' into first_name
-      last_name: actualUserData.name ? actualUserData.name.split(' ').slice(1).join(' ') : undefined, // Split 'name' into last_name
-      phone: actualUserData.phone,
-      created_at: actualUserData.created_at,
-      agent_guid: actualUserData.agent_guid
+      id: actualUserData.guid || actualUserData.id || actualUserData.user_id || actualUserData.userId, // Handle different ID fields
+      email: actualUserData.email || actualUserData.email_address || actualUserData.user_email,
+      first_name: actualUserData.first_name || actualUserData.firstName || (actualUserData.name ? actualUserData.name.split(' ')[0] : undefined),
+      last_name: actualUserData.last_name || actualUserData.lastName || (actualUserData.name ? actualUserData.name.split(' ').slice(1).join(' ') : undefined),
+      phone: actualUserData.phone || actualUserData.phone_number || actualUserData.mobile || actualUserData.contact_number,
+      created_at: actualUserData.created_at || actualUserData.createdAt || actualUserData.registration_date || actualUserData.signup_date,
+      agent_guid: actualUserData.agent_guid || actualUserData.agent_id || actualUserData.assigned_agent,
+      // Mobile app specific fields
+      source: actualUserData.source || actualUserData.platform || 'homestack_mobile',
+      device_info: actualUserData.device_info || actualUserData.device || actualUserData.platform_info
     }
 
     // Use the new method for user signup handling

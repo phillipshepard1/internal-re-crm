@@ -407,9 +407,9 @@ export class HomeStackIntegration {
         email: [userData.email],
         phone: userData.phone ? [userData.phone] : [],
         client_type: 'lead',
-        lead_source: 'homestack',
+        lead_source: userData.source === 'homestack_mobile' ? 'homestack_mobile' : 'homestack',
         assigned_to: adminUser.id, // Assign to admin initially
-        notes: `New user from HomeStack signup\nHomeStack ID: ${userData.id}\nSignup Date: ${userData.created_at || new Date().toISOString()}\nSource: homestack_user_signup`,
+        notes: `New user from HomeStack ${userData.source === 'homestack_mobile' ? 'mobile app' : 'web'} signup\nHomeStack ID: ${userData.id}\nSignup Date: ${userData.created_at || new Date().toISOString()}\nSource: ${userData.source || 'homestack_user_signup'}${userData.device_info ? `\nDevice: ${userData.device_info}` : ''}`,
         profile_picture: null,
         birthday: null,
         mailing_address: null,
