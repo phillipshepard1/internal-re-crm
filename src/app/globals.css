@@ -155,3 +155,89 @@
   background: linear-gradient(135deg, hsl(var(--background)), hsl(var(--muted))) !important;
   border-left: 4px solid #f59e0b !important;
 }
+
+/* Email content styles for proper image display */
+.email-content img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+  margin: 8px 0 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  object-fit: contain !important;
+}
+
+.email-content img[src*="data:image"] {
+  /* Ensure embedded images display properly */
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+.email-content {
+  line-height: 1.6 !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+.email-content p {
+  margin-bottom: 12px !important;
+}
+
+.email-content table {
+  border-collapse: collapse !important;
+  width: 100% !important;
+  margin: 12px 0 !important;
+}
+
+.email-content table td,
+.email-content table th {
+  border: 1px solid hsl(var(--border)) !important;
+  padding: 8px !important;
+}
+
+.email-content blockquote {
+  border-left: 4px solid hsl(var(--border)) !important;
+  margin: 12px 0 !important;
+  padding-left: 12px !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Additional email content styling */
+.email-content a {
+  color: hsl(var(--primary)) !important;
+  text-decoration: underline !important;
+}
+
+.email-content a:hover {
+  text-decoration: none !important;
+}
+
+.email-content ul, .email-content ol {
+  margin: 8px 0 !important;
+  padding-left: 20px !important;
+}
+
+.email-content li {
+  margin: 4px 0 !important;
+}
+
+.email-content h1, .email-content h2, .email-content h3, 
+.email-content h4, .email-content h5, .email-content h6 {
+  margin: 16px 0 8px 0 !important;
+  font-weight: 600 !important;
+}
+
+.email-content pre {
+  background: hsl(var(--muted)) !important;
+  padding: 8px !important;
+  border-radius: 4px !important;
+  overflow-x: auto !important;
+  margin: 8px 0 !important;
+}
+
+.email-content code {
+  background: hsl(var(--muted)) !important;
+  padding: 2px 4px !important;
+  border-radius: 2px !important;
+  font-family: monospace !important;
+}

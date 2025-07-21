@@ -453,27 +453,46 @@ export class GmailIntegration {
   private extractEmailBody(payload: Record<string, unknown> | null): string {
     if (!payload) return ''
     
+    let htmlContent = ''
+    let plainTextContent = ''
+    const embeddedImages: Record<string, string> = {}
+    
+    // First pass: collect embedded images
+    this.collectEmbeddedImages(payload, embeddedImages)
+    
     // Handle multipart messages
     if (payload.parts && Array.isArray(payload.parts)) {
       for (const part of payload.parts as Record<string, unknown>[]) {
+        if (part.mimeType === 'text/html') {
+          const body = part.body as Record<string, unknown> | undefined
+          htmlContent = this.decodeBody((body?.data as string) || '')
+        }
         if (part.mimeType === 'text/plain') {
           const body = part.body as Record<string, unknown> | undefined
-          return this.decodeBody((body?.data as string) || '')
-        }
-        if (part.mimeType === 'text/html') {
-          // Fallback to HTML if plain text not available
-          const body = part.body as Record<string, unknown> | undefined
-          return this.decodeBody((body?.data as string) || '')
+          plainTextContent = this.decodeBody((body?.data as string) || '')
         }
       }
     }
     
     // Handle single part messages
     if (payload.body && typeof payload.body === 'object' && 'data' in payload.body) {
-      return this.decodeBody((payload.body as Record<string, unknown>).data as string)
+      const mimeType = payload.mimeType as string
+      const decodedContent = this.decodeBody((payload.body as Record<string, unknown>).data as string)
+      
+      if (mimeType === 'text/html') {
+        htmlContent = decodedContent
+      } else if (mimeType === 'text/plain') {
+        plainTextContent = decodedContent
+      }
     }
     
-    return ''
+    // Process HTML content to replace embedded image references
+    if (htmlContent) {
+      htmlContent = this.processEmbeddedImages(htmlContent, embeddedImages)
+    }
+    
+    // Return HTML content if available, otherwise return plain text
+    return htmlContent || plainTextContent
   }
   
   /**
@@ -486,6 +505,53 @@ export class GmailIntegration {
       console.error('Error decoding email body:', error)
       return ''
     }
+  }
+
+  /**
+   * Collect embedded images from email payload
+   */
+  private collectEmbeddedImages(payload: Record<string, unknown> | null, embeddedImages: Record<string, string>): void {
+    if (!payload) return
+    
+    // Handle multipart messages
+    if (payload.parts && Array.isArray(payload.parts)) {
+      for (const part of payload.parts as Record<string, unknown>[]) {
+        this.collectEmbeddedImages(part, embeddedImages)
+      }
+    }
+    
+    // Check if this part is an embedded image
+    const contentType = payload.mimeType as string
+    const headers = payload.headers as Array<{ name: string; value: string }> | undefined
+    const contentId = headers?.find((h) => h.name === 'Content-ID')?.value
+    
+    if (contentType && contentType.startsWith('image/') && contentId) {
+      const body = payload.body as Record<string, unknown> | undefined
+      if (body?.data) {
+        const imageData = this.decodeBody(body.data as string)
+        const base64Data = Buffer.from(imageData, 'binary').toString('base64')
+        const dataUrl = `data:${contentType};base64,${base64Data}`
+        
+        // Remove angle brackets from Content-ID if present
+        const cleanContentId = contentId.replace(/[<>]/g, '')
+        embeddedImages[cleanContentId] = dataUrl
+      }
+    }
+  }
+
+  /**
+   * Process HTML content to replace embedded image references
+   */
+  private processEmbeddedImages(htmlContent: string, embeddedImages: Record<string, string>): string {
+    let processedHtml = htmlContent
+    
+    // Replace cid: references with data URLs
+    for (const [contentId, dataUrl] of Object.entries(embeddedImages)) {
+      const cidPattern = new RegExp(`cid:${contentId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi')
+      processedHtml = processedHtml.replace(cidPattern, dataUrl)
+    }
+    
+    return processedHtml
   }
   
   /**

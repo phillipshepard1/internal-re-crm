@@ -45,6 +45,29 @@ import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 
 
+// Simple HTML sanitization function to allow safe HTML content
+const sanitizeHtml = (html: string): string => {
+  // Remove potentially dangerous tags and attributes
+  let sanitized = html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+    .replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .replace(/<a\s+href\s*=\s*["']?javascript:/gi, '<a href="#"')
+    .replace(/<img\s+[^>]*src\s*=\s*["']?javascript:/gi, '<img src="#"')
+  
+  // Add error handling for images
+  sanitized = sanitized.replace(
+    /<img([^>]*)>/gi,
+    '<img$1 onerror="this.style.display=\'none\'; console.warn(\'Failed to load email image:\', this.src);">'
+  )
+  
+  return sanitized
+}
+
+
 interface Email {
   id: string
   from: string
@@ -1249,7 +1272,12 @@ export default function InboxPage() {
           {/* Email Body */}
           <div className="flex-1 p-4 overflow-y-auto min-h-0">
             <div className="prose prose-sm max-w-none mb-4 p-4 border rounded-lg bg-background">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed break-words overflow-wrap-anywhere max-w-full">{selectedEmail.body}</p>
+              <div 
+                className="email-content text-sm max-w-full"
+                dangerouslySetInnerHTML={{ 
+                  __html: sanitizeHtml(selectedEmail.body) 
+                }}
+              />
               
               {selectedEmail.hasAttachments && (
                 <div className="mt-4 p-3 border rounded-lg bg-muted/20">
