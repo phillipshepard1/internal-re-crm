@@ -28,7 +28,7 @@ export async function GET() {
       success: true,
       config: data || {
         api_key: '',
-        base_url: 'https://pbapi.homestack.com',
+        base_url: 'https://api.homestack.com',
         webhook_secret: '',
         enabled: false
       }
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     const configData = {
       integration_type: 'homestack',
       api_key: apiKey,
-      base_url: baseUrl || 'https://pbapi.homestack.com',
+      base_url: baseUrl || 'https://api.homestack.com',
       webhook_secret: webhookSecret || null,
       enabled: enabled || false,
       updated_at: new Date().toISOString()

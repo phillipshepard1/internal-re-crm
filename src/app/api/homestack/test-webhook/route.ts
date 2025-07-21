@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
     const homeStackConfig = {
       apiKey: configData.api_key,
-      baseUrl: configData.base_url || 'https://pbapi.homestack.com',
+      baseUrl: configData.base_url || 'https://api.homestack.com',
       webhookSecret: configData.webhook_secret,
     }
 

@@ -357,13 +357,9 @@ export class HomeStackIntegration {
     last_name?: string
     phone?: string
     created_at?: string
-    source?: string
-    platform?: string
     [key: string]: any
   }): Promise<Person | null> {
     try {
-      console.log('🔄 Starting createPersonFromUserSignup with data:', userData)
-      
       const { createClient } = await import('@supabase/supabase-js')
       
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -377,48 +373,38 @@ export class HomeStackIntegration {
       })
 
       // Check if user already exists
-      const { data: existingUser, error: existingError } = await supabase
+      const { data: existingUser } = await supabase
         .from('people')
         .select('*')
         .eq('email', userData.email)
         .single()
 
-      if (existingError && existingError.code !== 'PGRST116') {
-        console.error('❌ Error checking existing user:', existingError)
-      }
-
       if (existingUser) {
-        console.log('ℹ️ User already exists:', userData.email, 'ID:', existingUser.id)
+        console.log('User already exists:', userData.email)
         return existingUser
       }
 
       // Get admin user for initial assignment
-      const { data: adminUser, error: adminError } = await supabase
+      const { data: adminUser } = await supabase
         .from('users')
         .select('id')
         .eq('role', 'admin')
         .single()
 
-      if (adminError || !adminUser) {
-        console.error('❌ No admin user found for assignment:', adminError)
+      if (!adminUser) {
+        console.error('No admin user found for assignment')
         return null
       }
 
-      // Enhanced person data with mobile app support
       const personData: Partial<Person> = {
         first_name: userData.first_name || userData.email.split('@')[0],
         last_name: userData.last_name || 'Unknown',
         email: [userData.email],
         phone: userData.phone ? [userData.phone] : [],
         client_type: 'lead',
-        lead_source: userData.source || 'homestack',
+        lead_source: 'homestack',
         assigned_to: adminUser.id, // Assign to admin initially
-        notes: `New user from HomeStack signup
-HomeStack ID: ${userData.id}
-Signup Date: ${userData.created_at || new Date().toISOString()}
-Source: ${userData.source || 'homestack_user_signup'}
-Platform: ${userData.platform || 'unknown'}
-Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
+        notes: `New user from HomeStack signup\nHomeStack ID: ${userData.id}\nSignup Date: ${userData.created_at || new Date().toISOString()}\nSource: homestack_user_signup`,
         profile_picture: null,
         birthday: null,
         mailing_address: null,
@@ -439,36 +425,22 @@ Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
         closed: undefined
       }
 
-      console.log('🔄 Creating person with data:', personData)
-
       const newPerson = await createPerson(personData)
-
-      if (!newPerson) {
-        console.error('❌ Failed to create person in database')
-        return null
-      }
 
       // Create activity log
       const { createActivity } = await import('./database')
       await createActivity({
         person_id: newPerson.id,
         type: 'created',
-        description: `New user automatically imported from HomeStack signup (${userData.platform || 'web'})`,
+        description: 'New user automatically imported from HomeStack signup',
         created_by: adminUser.id,
       })
 
-      console.log('✅ Successfully created person from HomeStack user signup:', {
-        person_id: newPerson.id,
-        email: userData.email,
-        source: userData.source,
-        platform: userData.platform,
-        assigned_to: adminUser.id
-      })
-      
+      console.log('Successfully created person from HomeStack user signup:', newPerson.id)
       return newPerson
 
     } catch (error) {
-      console.error('❌ Error creating person from HomeStack user signup:', error)
+      console.error('Error creating person from HomeStack user signup:', error)
       return null
     }
   }
@@ -492,190 +464,6 @@ Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
     } catch (error) {
       console.error('Error updating HomeStack lead status:', error)
       return false
-    }
-  }
-
-  /**
-   * Get existing webhooks from HomeStack
-   */
-  async getWebhooks(): Promise<any[]> {
-    try {
-      console.log('🔍 Fetching existing webhooks from HomeStack...')
-      console.log('🔍 Using URL:', `${this.config.baseUrl}/app/webhooks`)
-      
-      const response = await fetch(`${this.config.baseUrl}/app/webhooks`, {
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      })
-      
-      console.log('🔍 Response status:', response.status)
-      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()))
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✅ Webhooks fetched successfully:', data)
-        return data.webhooks || []
-      } else {
-        const errorText = await response.text()
-        console.error('❌ Failed to fetch webhooks:', response.status, response.statusText)
-        console.error('❌ Error response:', errorText)
-        return []
-      }
-    } catch (error) {
-      console.error('❌ Error fetching webhooks:', error)
-      return []
-    }
-  }
-
-  /**
-   * Register a new webhook with HomeStack
-   */
-  async registerWebhook(webhookUrl: string): Promise<boolean> {
-    try {
-      console.log('🔗 Registering webhook with HomeStack:', webhookUrl)
-      console.log('🔗 Using URL:', `${this.config.baseUrl}/app/webhooks`)
-      console.log('🔗 Request body:', JSON.stringify({ url: webhookUrl }))
-      
-      const response = await fetch(`${this.config.baseUrl}/app/webhooks`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          url: webhookUrl
-        })
-      })
-      
-      console.log('🔗 Response status:', response.status)
-      console.log('🔗 Response headers:', Object.fromEntries(response.headers.entries()))
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✅ Webhook registered successfully:', data)
-        return true
-      } else {
-        const errorData = await response.text()
-        console.error('❌ Failed to register webhook:', response.status, response.statusText)
-        console.error('❌ Error response:', errorData)
-        return false
-      }
-    } catch (error) {
-      console.error('❌ Error registering webhook:', error)
-      return false
-    }
-  }
-
-  /**
-   * Delete a webhook from HomeStack
-   */
-  async deleteWebhook(webhookGuid: string): Promise<boolean> {
-    try {
-      console.log('🗑️ Deleting webhook from HomeStack:', webhookGuid)
-      
-      const response = await fetch(`${this.config.baseUrl}/app/webhooks/${webhookGuid}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      
-      if (response.ok) {
-        console.log('✅ Webhook deleted successfully')
-        return true
-      } else {
-        console.error('❌ Failed to delete webhook:', response.status, response.statusText)
-        return false
-      }
-    } catch (error) {
-      console.error('❌ Error deleting webhook:', error)
-      return false
-    }
-  }
-
-  /**
-   * Update an existing webhook URL
-   */
-  async updateWebhook(webhookGuid: string, newUrl: string): Promise<boolean> {
-    try {
-      console.log('🔄 Updating webhook URL:', webhookGuid, '->', newUrl)
-      
-      const response = await fetch(`${this.config.baseUrl}/app/webhooks/${webhookGuid}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: newUrl
-        })
-      })
-      
-      if (response.ok) {
-        console.log('✅ Webhook updated successfully')
-        return true
-      } else {
-        console.error('❌ Failed to update webhook:', response.status, response.statusText)
-        return false
-      }
-    } catch (error) {
-      console.error('❌ Error updating webhook:', error)
-      return false
-    }
-  }
-
-  /**
-   * Ensure webhook is registered (check existing and register if needed)
-   */
-  async ensureWebhookRegistered(webhookUrl: string): Promise<{ success: boolean; message: string; webhookGuid?: string }> {
-    try {
-      console.log('🔍 Ensuring webhook is registered:', webhookUrl)
-      
-      // Get existing webhooks
-      const existingWebhooks = await this.getWebhooks()
-      
-      // Check if our webhook URL is already registered
-      const existingWebhook = existingWebhooks.find(webhook => webhook.url === webhookUrl)
-      
-      if (existingWebhook) {
-        console.log('✅ Webhook already registered:', existingWebhook.guid)
-        return {
-          success: true,
-          message: 'Webhook already registered',
-          webhookGuid: existingWebhook.guid
-        }
-      }
-      
-      // Register new webhook
-      const registered = await this.registerWebhook(webhookUrl)
-      
-      if (registered) {
-        // Get the newly registered webhook to get its GUID
-        const updatedWebhooks = await this.getWebhooks()
-        const newWebhook = updatedWebhooks.find(webhook => webhook.url === webhookUrl)
-        
-        return {
-          success: true,
-          message: 'Webhook registered successfully',
-          webhookGuid: newWebhook?.guid
-        }
-      } else {
-        return {
-          success: false,
-          message: 'Failed to register webhook'
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error ensuring webhook registration:', error)
-      return {
-        success: false,
-        message: 'Error ensuring webhook registration'
-      }
     }
   }
 } 

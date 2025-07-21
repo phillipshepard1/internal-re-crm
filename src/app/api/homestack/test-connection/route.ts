@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     
     const homeStackConfig = {
       apiKey,
-      baseUrl: baseUrl || 'https://pbapi.homestack.com',
+      baseUrl: baseUrl || 'https://api.homestack.com',
     }
     
     // Initialize HomeStack integration
