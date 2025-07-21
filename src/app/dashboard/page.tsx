@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useDataLoader } from '@/hooks/useDataLoader'
+import { HomeStackSSOButton } from '@/components/integrations/HomeStackSSOButton'
 
 interface DashboardStats {
   totalPeople: number
@@ -108,6 +109,9 @@ export default function DashboardPage() {
             Welcome back! Here&apos;s what&apos;s happening with your leads and contacts.
           </p>
         </div>
+        <HomeStackSSOButton variant="outline" size="sm">
+          Go to HomeStack
+        </HomeStackSSOButton>
       </div>
 
       {/* Main Stats */}

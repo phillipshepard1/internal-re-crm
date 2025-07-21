@@ -16,7 +16,12 @@ export default function IntegrationsPage() {
     apiKey: '',
     baseUrl: '',
     webhookSecret: '',
-    enabled: false
+    enabled: false,
+    // SSO configuration
+    ssoEnabled: false,
+    ssoApiKey: '',
+    ssoBaseUrl: 'https://bkapi.homestack.com',
+    ssoBrokerUrl: 'https://broker.homestack.com'
   })
   
   const [processing, setProcessing] = useState(false)
@@ -38,7 +43,12 @@ export default function IntegrationsPage() {
             apiKey: homeStackData.config.api_key || '',
             baseUrl: homeStackData.config.base_url || 'https://api.homestack.com',
             webhookSecret: homeStackData.config.webhook_secret || '',
-            enabled: homeStackData.config.enabled || false
+            enabled: homeStackData.config.enabled || false,
+            // SSO configuration
+            ssoEnabled: homeStackData.config.sso_enabled || false,
+            ssoApiKey: homeStackData.config.sso_api_key || '',
+            ssoBaseUrl: homeStackData.config.sso_base_url || 'https://bkapi.homestack.com',
+            ssoBrokerUrl: homeStackData.config.sso_broker_url || 'https://broker.homestack.com'
           })
         }
       }
@@ -56,6 +66,16 @@ export default function IntegrationsPage() {
     try {
       setProcessing(true)
       setError('')
+      
+      console.log('🔧 Frontend - Saving HomeStack config:', {
+        apiKey: homeStackConfig.apiKey ? '***' : 'MISSING',
+        baseUrl: homeStackConfig.baseUrl,
+        enabled: homeStackConfig.enabled,
+        ssoEnabled: homeStackConfig.ssoEnabled,
+        ssoApiKey: homeStackConfig.ssoApiKey ? '***' : 'MISSING',
+        ssoBaseUrl: homeStackConfig.ssoBaseUrl,
+        ssoBrokerUrl: homeStackConfig.ssoBrokerUrl
+      })
       
       // Save to database via API
       const response = await fetch('/api/admin/integrations/homestack', {
@@ -107,6 +127,32 @@ export default function IntegrationsPage() {
     } catch (error) {
       console.error('Error testing HomeStack connection:', error)
       setError('Failed to test HomeStack connection')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const testHomeStackSSO = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/sso/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess('HomeStack SSO connection successful!')
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.message || 'Failed to test HomeStack SSO')
+      }
+    } catch (error) {
+      console.error('Error testing HomeStack SSO:', error)
+      setError('Failed to test HomeStack SSO')
     } finally {
       setProcessing(false)
     }
@@ -304,6 +350,64 @@ export default function IntegrationsPage() {
                     />
                   </div>
 
+                  {/* SSO Configuration Section */}
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <h4 className="text-sm font-medium mb-3">SSO Configuration</h4>
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="homestack-sso-enabled"
+                          checked={homeStackConfig.ssoEnabled}
+                          onCheckedChange={(checked) => 
+                            setHomeStackConfig(prev => ({ ...prev, ssoEnabled: checked }))
+                          }
+                        />
+                        <Label htmlFor="homestack-sso-enabled">Enable HomeStack SSO</Label>
+                      </div>
+
+                      {homeStackConfig.ssoEnabled && (
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="homestack-sso-api-key">SSO API Key</Label>
+                            <Input
+                              id="homestack-sso-api-key"
+                              type="password"
+                              value={homeStackConfig.ssoApiKey}
+                              onChange={(e) => 
+                                setHomeStackConfig(prev => ({ ...prev, ssoApiKey: e.target.value }))
+                              }
+                              placeholder="HomeStack SSO API Key"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="homestack-sso-base-url">SSO Base URL</Label>
+                            <Input
+                              id="homestack-sso-base-url"
+                              value={homeStackConfig.ssoBaseUrl}
+                              onChange={(e) => 
+                                setHomeStackConfig(prev => ({ ...prev, ssoBaseUrl: e.target.value }))
+                              }
+                              placeholder="https://bkapi.homestack.com"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="homestack-sso-broker-url">SSO Broker URL</Label>
+                            <Input
+                              id="homestack-sso-broker-url"
+                              value={homeStackConfig.ssoBrokerUrl}
+                              onChange={(e) => 
+                                setHomeStackConfig(prev => ({ ...prev, ssoBrokerUrl: e.target.value }))
+                              }
+                              placeholder="https://broker.homestack.com"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex gap-2">
                     <Button 
                       onClick={testHomeStackConnection} 
@@ -312,6 +416,14 @@ export default function IntegrationsPage() {
                     >
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Test Connection
+                    </Button>
+                    <Button 
+                      onClick={testHomeStackSSO} 
+                      disabled={processing || !homeStackConfig.ssoEnabled}
+                      variant="outline"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Test SSO
                     </Button>
                     <Button onClick={saveHomeStackConfig} disabled={processing}>
                       <Settings className="h-4 w-4 mr-2" />

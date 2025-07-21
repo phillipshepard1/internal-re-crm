@@ -6,6 +6,11 @@ export interface HomeStackConfig {
   apiKey: string
   baseUrl: string
   webhookSecret?: string
+  // SSO configuration
+  ssoEnabled?: boolean
+  ssoApiKey?: string
+  ssoBaseUrl?: string
+  ssoBrokerUrl?: string
 }
 
 export interface HomeStackLead {
@@ -686,6 +691,170 @@ export class HomeStackIntegration {
     } catch (error) {
       console.error('Error updating HomeStack webhook:', error)
       return false
+    }
+  }
+
+  /**
+   * Generate SSO access token for user login
+   */
+  async generateSSOToken(userEmail: string): Promise<{ success: boolean; accessToken?: string; error?: string }> {
+    try {
+      if (!this.config.ssoEnabled || !this.config.ssoApiKey) {
+        return {
+          success: false,
+          error: 'SSO is not enabled or SSO API key is missing'
+        }
+      }
+
+      const ssoBaseUrl = this.config.ssoBaseUrl || 'https://bkapi.homestack.com'
+      
+      const form = new FormData()
+      form.append('email', userEmail)
+
+      console.log('🔐 SSO - Making request to:', `${ssoBaseUrl}/getAccessToken`)
+      console.log('🔐 SSO - Using API key:', this.config.ssoApiKey ? '***' : 'MISSING')
+      
+      const response = await fetch(`${ssoBaseUrl}/getAccessToken`, {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': this.config.ssoApiKey,
+        },
+        body: form
+      })
+
+      console.log('🔐 SSO - Response status:', response.status)
+      console.log('🔐 SSO - Response headers:', Object.fromEntries(response.headers.entries()))
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('SSO token generation failed:', response.status, errorText)
+        return {
+          success: false,
+          error: `Failed to generate SSO token: ${response.status} - ${errorText}`
+        }
+      }
+
+      const data = await response.json()
+      
+      if (data.accessToken) {
+        return {
+          success: true,
+          accessToken: data.accessToken
+        }
+      } else {
+        return {
+          success: false,
+          error: 'No access token received from HomeStack'
+        }
+      }
+
+    } catch (error) {
+      console.error('Error generating SSO token:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Generate SSO login URL
+   */
+  async generateSSOLoginURL(userEmail: string): Promise<{ success: boolean; loginUrl?: string; error?: string }> {
+    try {
+      const tokenResult = await this.generateSSOToken(userEmail)
+      
+      if (!tokenResult.success) {
+        return {
+          success: false,
+          error: tokenResult.error
+        }
+      }
+
+      const ssoBrokerUrl = this.config.ssoBrokerUrl || 'https://broker.homestack.com'
+      const loginUrl = `${ssoBrokerUrl}/sso?e=${encodeURIComponent(userEmail)}&a=${tokenResult.accessToken}`
+
+      return {
+        success: true,
+        loginUrl
+      }
+
+    } catch (error) {
+      console.error('Error generating SSO login URL:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
+  /**
+   * Test SSO connection
+   */
+  async testSSOConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      if (!this.config.ssoEnabled || !this.config.ssoApiKey) {
+        return {
+          success: false,
+          message: 'SSO is not enabled or SSO API key is missing'
+        }
+      }
+
+      const ssoBaseUrl = this.config.ssoBaseUrl || 'https://bkapi.homestack.com'
+      
+      console.log('🧪 SSO Test - Making request to:', `${ssoBaseUrl}/getAccessToken`)
+      console.log('🧪 SSO Test - Using API key:', this.config.ssoApiKey ? '***' : 'MISSING')
+      
+      // Test if the endpoint is accessible by checking the response structure
+      const form = new FormData()
+      form.append('email', 'test@example.com')
+
+      const response = await fetch(`${ssoBaseUrl}/getAccessToken`, {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': this.config.ssoApiKey,
+        },
+        body: form
+      })
+
+      console.log('🧪 SSO Test - Response status:', response.status)
+      
+      if (response.ok) {
+        const responseData = await response.json()
+        console.log('🧪 SSO Test - Success response:', responseData)
+        return {
+          success: true,
+          message: 'SSO connection successful'
+        }
+      } else {
+        const errorText = await response.text()
+        console.log('🧪 SSO Test - Error response:', errorText)
+        
+        // Parse the error response
+        try {
+          const errorData = JSON.parse(errorText)
+          if (errorData.message === 'User not found.') {
+            return {
+              success: true,
+              message: 'SSO connection successful - endpoint is working (test user not found, which is expected)'
+            }
+          }
+        } catch (e) {
+          // If we can't parse the error, treat it as a real error
+        }
+        
+        return {
+          success: false,
+          message: `SSO connection failed: ${response.status} - ${errorText}`
+        }
+      }
+
+    } catch (error) {
+      console.error('Error testing SSO connection:', error)
+      return {
+        success: false,
+        message: `SSO connection error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
     }
   }
 } 

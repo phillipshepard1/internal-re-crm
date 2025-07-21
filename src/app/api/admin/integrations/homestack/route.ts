@@ -47,7 +47,27 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { apiKey, baseUrl, webhookSecret, enabled } = body
+    const { 
+      apiKey, 
+      baseUrl, 
+      webhookSecret, 
+      enabled,
+      // SSO configuration
+      ssoEnabled,
+      ssoApiKey,
+      ssoBaseUrl,
+      ssoBrokerUrl
+    } = body
+    
+    console.log('🔧 Saving HomeStack config:', {
+      apiKey: apiKey ? '***' : 'MISSING',
+      baseUrl,
+      enabled,
+      ssoEnabled,
+      ssoApiKey: ssoApiKey ? '***' : 'MISSING',
+      ssoBaseUrl,
+      ssoBrokerUrl
+    })
     
     if (!apiKey) {
       return NextResponse.json(
@@ -69,6 +89,11 @@ export async function POST(request: NextRequest) {
       base_url: baseUrl || 'https://api.homestack.com',
       webhook_secret: webhookSecret || null,
       enabled: enabled || false,
+      // SSO configuration
+      sso_enabled: ssoEnabled || false,
+      sso_api_key: ssoApiKey || null,
+      sso_base_url: ssoBaseUrl || 'https://bkapi.homestack.com',
+      sso_broker_url: ssoBrokerUrl || 'https://broker.homestack.com',
       updated_at: new Date().toISOString()
     }
     
@@ -98,6 +123,12 @@ export async function POST(request: NextRequest) {
       if (error) throw error
       result = data
     }
+    
+    console.log('✅ HomeStack config saved successfully:', {
+      id: result.id,
+      sso_enabled: result.sso_enabled,
+      sso_api_key: result.sso_api_key ? '***' : 'MISSING'
+    })
     
     return NextResponse.json({
       success: true,
