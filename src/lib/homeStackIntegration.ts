@@ -466,4 +466,226 @@ export class HomeStackIntegration {
       return false
     }
   }
+
+  /**
+   * Get existing webhooks from HomeStack
+   */
+  async getWebhooks(): Promise<Array<{ guid: string; url: string; events: string[]; is_active: boolean }>> {
+    try {
+      // Try different possible HomeStack webhook endpoints
+      const endpoints = [
+        '/api/v1/webhooks',
+        '/api/webhooks',
+        '/api/v1/integrations/webhooks',
+        '/api/integrations/webhooks'
+      ]
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            const webhooks = data.webhooks || data.data || data || []
+            return webhooks.map((webhook: any) => ({
+              guid: webhook.guid || webhook.id,
+              url: webhook.url,
+              events: webhook.events || webhook.event_types || [],
+              is_active: webhook.is_active !== false
+            }))
+          }
+        } catch (endpointError) {
+          console.log(`Webhook endpoint ${endpoint} error:`, endpointError)
+        }
+      }
+      
+      console.log('No webhook endpoints found, returning empty array')
+      return []
+      
+    } catch (error) {
+      console.error('Error fetching HomeStack webhooks:', error)
+      return []
+    }
+  }
+
+  /**
+   * Register a new webhook with HomeStack
+   */
+  async registerWebhook(url: string, events: string[] = ['new_user', 'update_user', 'new_chat_message']): Promise<{ success: boolean; webhookGuid?: string; message: string }> {
+    try {
+      const webhookData = {
+        url,
+        events,
+        is_active: true
+      }
+
+      // Try different possible HomeStack webhook registration endpoints
+      const endpoints = [
+        '/api/v1/webhooks',
+        '/api/webhooks',
+        '/api/v1/integrations/webhooks',
+        '/api/integrations/webhooks'
+      ]
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify(webhookData),
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            const webhookGuid = data.guid || data.id || data.webhook_guid
+            return {
+              success: true,
+              webhookGuid,
+              message: 'Webhook registered successfully'
+            }
+          } else {
+            console.log(`Webhook registration failed for ${endpoint}: ${response.status}`)
+          }
+        } catch (endpointError) {
+          console.log(`Webhook registration error for ${endpoint}:`, endpointError)
+        }
+      }
+      
+      return {
+        success: false,
+        message: 'Failed to register webhook - no working endpoints found'
+      }
+      
+    } catch (error) {
+      console.error('Error registering HomeStack webhook:', error)
+      return {
+        success: false,
+        message: `Registration error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    }
+  }
+
+  /**
+   * Ensure webhook is registered (create if not exists)
+   */
+  async ensureWebhookRegistered(url: string): Promise<{ success: boolean; webhookGuid?: string; message: string }> {
+    try {
+      // First, get existing webhooks
+      const webhooks = await this.getWebhooks()
+      const existingWebhook = webhooks.find(webhook => webhook.url === url)
+      
+      if (existingWebhook) {
+        return {
+          success: true,
+          webhookGuid: existingWebhook.guid,
+          message: 'Webhook already registered'
+        }
+      }
+      
+      // If not found, register new webhook
+      return await this.registerWebhook(url)
+      
+    } catch (error) {
+      console.error('Error ensuring webhook registration:', error)
+      return {
+        success: false,
+        message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    }
+  }
+
+  /**
+   * Delete a webhook from HomeStack
+   */
+  async deleteWebhook(webhookGuid: string): Promise<boolean> {
+    try {
+      // Try different possible HomeStack webhook deletion endpoints
+      const endpoints = [
+        `/api/v1/webhooks/${webhookGuid}`,
+        `/api/webhooks/${webhookGuid}`,
+        `/api/v1/integrations/webhooks/${webhookGuid}`,
+        `/api/integrations/webhooks/${webhookGuid}`
+      ]
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          
+          if (response.ok) {
+            return true
+          }
+        } catch (endpointError) {
+          console.log(`Webhook deletion error for ${endpoint}:`, endpointError)
+        }
+      }
+      
+      return false
+      
+    } catch (error) {
+      console.error('Error deleting HomeStack webhook:', error)
+      return false
+    }
+  }
+
+  /**
+   * Update an existing webhook
+   */
+  async updateWebhook(webhookGuid: string, url: string, events: string[] = ['new_user', 'update_user', 'new_chat_message']): Promise<boolean> {
+    try {
+      const webhookData = {
+        url,
+        events,
+        is_active: true
+      }
+
+      // Try different possible HomeStack webhook update endpoints
+      const endpoints = [
+        `/api/v1/webhooks/${webhookGuid}`,
+        `/api/webhooks/${webhookGuid}`,
+        `/api/v1/integrations/webhooks/${webhookGuid}`,
+        `/api/integrations/webhooks/${webhookGuid}`
+      ]
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${this.config.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(webhookData),
+          })
+          
+          if (response.ok) {
+            return true
+          }
+        } catch (endpointError) {
+          console.log(`Webhook update error for ${endpoint}:`, endpointError)
+        }
+      }
+      
+      return false
+      
+    } catch (error) {
+      console.error('Error updating HomeStack webhook:', error)
+      return false
+    }
+  }
 } 
