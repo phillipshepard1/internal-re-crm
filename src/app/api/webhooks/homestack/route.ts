@@ -200,14 +200,60 @@ async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration)
   try {
     console.log('🔄 Processing user update from HomeStack:', userData)
     
-    // For now, just log the update - you can implement update logic later
-    console.log('📝 User update received:', userData)
+    // Check if this is actually a new user signup (recent created_at timestamp)
+    const createdAt = new Date(userData.created_at)
+    const now = new Date()
+    const timeDifference = now.getTime() - createdAt.getTime()
+    const isRecentSignup = timeDifference < 5 * 60 * 1000 // Within 5 minutes
     
-    return NextResponse.json({
-      success: true,
-      message: 'User update received from HomeStack',
-      user_id: userData.id
-    })
+    console.log('📝 User update received:', userData)
+    console.log('⏰ Created at:', userData.created_at)
+    console.log('🕐 Time difference (ms):', timeDifference)
+    console.log('🆕 Is recent signup:', isRecentSignup)
+    
+    // If this is a recent signup, treat it as a new user creation
+    if (isRecentSignup) {
+      console.log('🆕 Detected new user signup from mobile app, creating user in CRM...')
+      
+      // Transform the user data to match our expected format
+      const transformedUserData = {
+        id: userData.guid,
+        email: userData.email,
+        first_name: userData.name?.split(' ')[0] || userData.email.split('@')[0],
+        last_name: userData.name?.split(' ').slice(1).join(' ') || 'Unknown',
+        phone: userData.phone,
+        created_at: userData.created_at,
+        source: 'homestack_mobile', // Mark as mobile signup
+        platform: 'homestack_mobile'
+      }
+      
+      // Create the user in our CRM
+      const person = await homeStack.createPersonFromUserSignup(transformedUserData)
+      
+      if (person) {
+        console.log('✅ New user successfully created in CRM from mobile app:', person.id)
+        return NextResponse.json({
+          success: true,
+          message: 'New user successfully created from mobile app',
+          person_id: person.id
+        })
+      } else {
+        console.error('❌ Failed to create new user from mobile app')
+        return NextResponse.json(
+          { error: 'Failed to create new user from mobile app' },
+          { status: 500 }
+        )
+      }
+    } else {
+      // This is a genuine update, just log it for now
+      console.log('📝 User update received (not a new signup):', userData)
+      
+      return NextResponse.json({
+        success: true,
+        message: 'User update received from HomeStack',
+        user_id: userData.guid
+      })
+    }
 
   } catch (error) {
     console.error('❌ Error handling user update:', error)
