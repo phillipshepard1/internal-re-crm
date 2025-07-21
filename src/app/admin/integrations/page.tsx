@@ -312,42 +312,17 @@ export default function IntegrationsPage() {
       setError('')
       
       console.log('🧪 Testing HomeStack API configuration...')
-      console.log('🧪 Current config:', homeStackConfig)
       
-      // Test with the correct HomeStack API URL from documentation
-      const testUrls = [
-        'https://pbapi.homestack.com/app',
-        'https://api.homestack.com/app',
-        homeStackConfig.baseUrl + '/app'
-      ]
+      // Use server-side API test to avoid CORS issues
+      const response = await fetch('/api/homestack/test-api')
+      const result = await response.json()
       
-      for (const testUrl of testUrls) {
-        try {
-          console.log('🧪 Testing URL:', testUrl)
-          const response = await fetch(testUrl, {
-            headers: {
-              'Authorization': `Bearer ${homeStackConfig.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-          })
-          
-          console.log('🧪 Response status:', response.status)
-          
-          if (response.ok) {
-            const data = await response.json()
-            console.log('✅ API working with URL:', testUrl, data)
-            setSuccess(`✅ HomeStack API working! URL: ${testUrl}`)
-            setTimeout(() => setSuccess(''), 5000)
-            return
-          } else {
-            console.log('❌ API failed with URL:', testUrl, response.status)
-          }
-        } catch (urlError) {
-          console.log('❌ URL error:', testUrl, urlError)
-        }
+      if (result.success) {
+        setSuccess('✅ HomeStack API test completed! Check server logs for details.')
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to test HomeStack API')
       }
-      
-      setError('❌ All HomeStack API URLs failed. Check API key and base URL.')
     } catch (error) {
       console.error('Error testing HomeStack API:', error)
       setError('Failed to test HomeStack API')
