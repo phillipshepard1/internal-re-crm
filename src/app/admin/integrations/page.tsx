@@ -219,6 +219,93 @@ export default function IntegrationsPage() {
     }
   }
 
+  const checkWebhookStatus = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/manage-webhooks')
+      const result = await response.json()
+      
+      if (result.success) {
+        if (result.isRegistered) {
+          setSuccess(`✅ Webhook is registered! GUID: ${result.ourWebhook.guid}, Type: ${result.ourWebhook.type}`)
+          console.log('📋 All registered webhooks:', result.webhooks)
+        } else {
+          setError('❌ Webhook is NOT registered with HomeStack. Click "Register Webhook" to fix this.')
+          console.log('📋 Available webhooks:', result.webhooks)
+        }
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to check webhook status')
+      }
+    } catch (error) {
+      console.error('Error checking webhook status:', error)
+      setError('Failed to check webhook status')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const registerWebhook = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/manage-webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register' })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess(`✅ Webhook registered successfully! GUID: ${result.webhookGuid}`)
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to register webhook')
+      }
+    } catch (error) {
+      console.error('Error registering webhook:', error)
+      setError('Failed to register webhook')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const showWebhookDetails = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/manage-webhooks')
+      const result = await response.json()
+      
+      if (result.success) {
+        console.log('🔍 Webhook Details:')
+        console.log('Our Webhook URL:', result.webhookUrl)
+        console.log('Is Registered:', result.isRegistered)
+        console.log('Our Webhook:', result.ourWebhook)
+        console.log('All Webhooks:', result.webhooks)
+        
+        if (result.isRegistered) {
+          setSuccess(`✅ Webhook registered! Type: ${result.ourWebhook.type}, GUID: ${result.ourWebhook.guid}`)
+        } else {
+          setError('❌ Webhook not registered. Available webhooks: ' + result.webhooks.map((w: any) => `${w.type}:${w.url}`).join(', '))
+        }
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to get webhook details')
+      }
+    } catch (error) {
+      console.error('Error getting webhook details:', error)
+      setError('Failed to get webhook details')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
@@ -368,6 +455,43 @@ export default function IntegrationsPage() {
                       <Smartphone className="h-4 w-4 mr-2" />
                       Test Mobile App
                     </Button>
+                  </div>
+
+                  {/* Webhook Management Section */}
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <h4 className="text-sm font-medium mb-3">Webhook Management</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      HomeStack webhooks must be registered with HomeStack's API for mobile app signups to work.
+                    </p>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button 
+                        onClick={checkWebhookStatus} 
+                        disabled={processing || !homeStackConfig.apiKey}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Check Webhook Status
+                      </Button>
+                      <Button 
+                        onClick={registerWebhook} 
+                        disabled={processing || !homeStackConfig.apiKey}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Register Webhook
+                      </Button>
+                      <Button 
+                        onClick={showWebhookDetails} 
+                        disabled={processing || !homeStackConfig.apiKey}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Show Details
+                      </Button>
+                    </div>
                   </div>
 
                   {lastProcessed.homeStack && (

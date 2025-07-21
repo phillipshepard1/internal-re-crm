@@ -494,4 +494,176 @@ Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
       return false
     }
   }
+
+  /**
+   * Get existing webhooks from HomeStack
+   */
+  async getWebhooks(): Promise<any[]> {
+    try {
+      console.log('🔍 Fetching existing webhooks from HomeStack...')
+      
+      const response = await fetch(`${this.config.baseUrl}/app/webhooks`, {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('✅ Webhooks fetched successfully:', data)
+        return data.webhooks || []
+      } else {
+        console.error('❌ Failed to fetch webhooks:', response.status, response.statusText)
+        return []
+      }
+    } catch (error) {
+      console.error('❌ Error fetching webhooks:', error)
+      return []
+    }
+  }
+
+  /**
+   * Register a new webhook with HomeStack
+   */
+  async registerWebhook(webhookUrl: string): Promise<boolean> {
+    try {
+      console.log('🔗 Registering webhook with HomeStack:', webhookUrl)
+      
+      const response = await fetch(`${this.config.baseUrl}/app/webhooks`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          url: webhookUrl
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('✅ Webhook registered successfully:', data)
+        return true
+      } else {
+        const errorData = await response.text()
+        console.error('❌ Failed to register webhook:', response.status, errorData)
+        return false
+      }
+    } catch (error) {
+      console.error('❌ Error registering webhook:', error)
+      return false
+    }
+  }
+
+  /**
+   * Delete a webhook from HomeStack
+   */
+  async deleteWebhook(webhookGuid: string): Promise<boolean> {
+    try {
+      console.log('🗑️ Deleting webhook from HomeStack:', webhookGuid)
+      
+      const response = await fetch(`${this.config.baseUrl}/app/webhooks/${webhookGuid}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (response.ok) {
+        console.log('✅ Webhook deleted successfully')
+        return true
+      } else {
+        console.error('❌ Failed to delete webhook:', response.status, response.statusText)
+        return false
+      }
+    } catch (error) {
+      console.error('❌ Error deleting webhook:', error)
+      return false
+    }
+  }
+
+  /**
+   * Update an existing webhook URL
+   */
+  async updateWebhook(webhookGuid: string, newUrl: string): Promise<boolean> {
+    try {
+      console.log('🔄 Updating webhook URL:', webhookGuid, '->', newUrl)
+      
+      const response = await fetch(`${this.config.baseUrl}/app/webhooks/${webhookGuid}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: newUrl
+        })
+      })
+      
+      if (response.ok) {
+        console.log('✅ Webhook updated successfully')
+        return true
+      } else {
+        console.error('❌ Failed to update webhook:', response.status, response.statusText)
+        return false
+      }
+    } catch (error) {
+      console.error('❌ Error updating webhook:', error)
+      return false
+    }
+  }
+
+  /**
+   * Ensure webhook is registered (check existing and register if needed)
+   */
+  async ensureWebhookRegistered(webhookUrl: string): Promise<{ success: boolean; message: string; webhookGuid?: string }> {
+    try {
+      console.log('🔍 Ensuring webhook is registered:', webhookUrl)
+      
+      // Get existing webhooks
+      const existingWebhooks = await this.getWebhooks()
+      
+      // Check if our webhook URL is already registered
+      const existingWebhook = existingWebhooks.find(webhook => webhook.url === webhookUrl)
+      
+      if (existingWebhook) {
+        console.log('✅ Webhook already registered:', existingWebhook.guid)
+        return {
+          success: true,
+          message: 'Webhook already registered',
+          webhookGuid: existingWebhook.guid
+        }
+      }
+      
+      // Register new webhook
+      const registered = await this.registerWebhook(webhookUrl)
+      
+      if (registered) {
+        // Get the newly registered webhook to get its GUID
+        const updatedWebhooks = await this.getWebhooks()
+        const newWebhook = updatedWebhooks.find(webhook => webhook.url === webhookUrl)
+        
+        return {
+          success: true,
+          message: 'Webhook registered successfully',
+          webhookGuid: newWebhook?.guid
+        }
+      } else {
+        return {
+          success: false,
+          message: 'Failed to register webhook'
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error ensuring webhook registration:', error)
+      return {
+        success: false,
+        message: 'Error ensuring webhook registration'
+      }
+    }
+  }
 } 
