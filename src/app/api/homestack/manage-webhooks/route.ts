@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     const homeStackConfig = {
       apiKey: configData.api_key,
-      baseUrl: configData.base_url || 'https://api.homestack.com',
+      baseUrl: configData.base_url || 'https://pbapi.homestack.com',
       webhookSecret: configData.webhook_secret,
     }
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     // Get existing webhooks
     const webhooks = await homeStack.getWebhooks()
     
-    const webhookUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/webhooks/homestack`
+    const webhookUrl = 'https://app.stresslesscrm.com/api/webhooks/homestack'
     const ourWebhook = webhooks.find(webhook => webhook.url === webhookUrl)
 
     return NextResponse.json({
@@ -83,29 +83,46 @@ export async function POST(request: NextRequest) {
 
     const homeStackConfig = {
       apiKey: configData.api_key,
-      baseUrl: configData.base_url || 'https://api.homestack.com',
+      baseUrl: configData.base_url || 'https://pbapi.homestack.com',
       webhookSecret: configData.webhook_secret,
     }
 
     // Initialize HomeStack integration
     const homeStack = new HomeStackIntegration(homeStackConfig)
 
-    const webhookUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/webhooks/homestack`
+    // Use the correct webhook URL - hardcode the production URL since we know it works
+    const webhookUrl = 'https://app.stresslesscrm.com/api/webhooks/homestack'
+    
+    console.log('🔗 Using webhook URL:', webhookUrl)
+    console.log('🔗 HomeStack config:', {
+      baseUrl: homeStackConfig.baseUrl,
+      apiKey: homeStackConfig.apiKey ? '***' : 'MISSING',
+      webhookSecret: homeStackConfig.webhookSecret ? '***' : 'MISSING'
+    })
 
     switch (action) {
       case 'register':
         console.log('🔗 Registering webhook with HomeStack...')
-        const result = await homeStack.ensureWebhookRegistered(webhookUrl)
-        
-        if (result.success) {
-          return NextResponse.json({
-            success: true,
-            message: result.message,
-            webhookGuid: result.webhookGuid
-          })
-        } else {
+        try {
+          const result = await homeStack.ensureWebhookRegistered(webhookUrl)
+          console.log('🔗 Registration result:', result)
+          
+          if (result.success) {
+            return NextResponse.json({
+              success: true,
+              message: result.message,
+              webhookGuid: result.webhookGuid
+            })
+          } else {
+            return NextResponse.json(
+              { error: result.message },
+              { status: 500 }
+            )
+          }
+        } catch (registerError) {
+          console.error('❌ Registration error:', registerError)
           return NextResponse.json(
-            { error: result.message },
+            { error: `Registration failed: ${registerError instanceof Error ? registerError.message : 'Unknown error'}` },
             { status: 500 }
           )
         }

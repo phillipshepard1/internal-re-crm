@@ -501,6 +501,7 @@ Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
   async getWebhooks(): Promise<any[]> {
     try {
       console.log('🔍 Fetching existing webhooks from HomeStack...')
+      console.log('🔍 Using URL:', `${this.config.baseUrl}/app/webhooks`)
       
       const response = await fetch(`${this.config.baseUrl}/app/webhooks`, {
         headers: {
@@ -510,12 +511,17 @@ Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
         },
       })
       
+      console.log('🔍 Response status:', response.status)
+      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()))
+      
       if (response.ok) {
         const data = await response.json()
         console.log('✅ Webhooks fetched successfully:', data)
         return data.webhooks || []
       } else {
+        const errorText = await response.text()
         console.error('❌ Failed to fetch webhooks:', response.status, response.statusText)
+        console.error('❌ Error response:', errorText)
         return []
       }
     } catch (error) {
@@ -530,6 +536,8 @@ Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
   async registerWebhook(webhookUrl: string): Promise<boolean> {
     try {
       console.log('🔗 Registering webhook with HomeStack:', webhookUrl)
+      console.log('🔗 Using URL:', `${this.config.baseUrl}/app/webhooks`)
+      console.log('🔗 Request body:', JSON.stringify({ url: webhookUrl }))
       
       const response = await fetch(`${this.config.baseUrl}/app/webhooks`, {
         method: 'POST',
@@ -543,13 +551,17 @@ Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
         })
       })
       
+      console.log('🔗 Response status:', response.status)
+      console.log('🔗 Response headers:', Object.fromEntries(response.headers.entries()))
+      
       if (response.ok) {
         const data = await response.json()
         console.log('✅ Webhook registered successfully:', data)
         return true
       } else {
         const errorData = await response.text()
-        console.error('❌ Failed to register webhook:', response.status, errorData)
+        console.error('❌ Failed to register webhook:', response.status, response.statusText)
+        console.error('❌ Error response:', errorData)
         return false
       }
     } catch (error) {

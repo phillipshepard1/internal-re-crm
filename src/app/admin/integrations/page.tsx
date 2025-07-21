@@ -36,7 +36,7 @@ export default function IntegrationsPage() {
         if (homeStackData.config) {
           setHomeStackConfig({
             apiKey: homeStackData.config.api_key || '',
-            baseUrl: homeStackData.config.base_url || 'https://api.homestack.com',
+            baseUrl: homeStackData.config.base_url || 'https://pbapi.homestack.com',
             webhookSecret: homeStackData.config.webhook_secret || '',
             enabled: homeStackData.config.enabled || false
           })
@@ -306,6 +306,56 @@ export default function IntegrationsPage() {
     }
   }
 
+  const testHomeStackAPI = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      console.log('🧪 Testing HomeStack API configuration...')
+      console.log('🧪 Current config:', homeStackConfig)
+      
+      // Test with the correct HomeStack API URL from documentation
+      const testUrls = [
+        'https://pbapi.homestack.com/app',
+        'https://api.homestack.com/app',
+        homeStackConfig.baseUrl + '/app'
+      ]
+      
+      for (const testUrl of testUrls) {
+        try {
+          console.log('🧪 Testing URL:', testUrl)
+          const response = await fetch(testUrl, {
+            headers: {
+              'Authorization': `Bearer ${homeStackConfig.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          
+          console.log('🧪 Response status:', response.status)
+          
+          if (response.ok) {
+            const data = await response.json()
+            console.log('✅ API working with URL:', testUrl, data)
+            setSuccess(`✅ HomeStack API working! URL: ${testUrl}`)
+            setTimeout(() => setSuccess(''), 5000)
+            return
+          } else {
+            console.log('❌ API failed with URL:', testUrl, response.status)
+          }
+        } catch (urlError) {
+          console.log('❌ URL error:', testUrl, urlError)
+        }
+      }
+      
+      setError('❌ All HomeStack API URLs failed. Check API key and base URL.')
+    } catch (error) {
+      console.error('Error testing HomeStack API:', error)
+      setError('Failed to test HomeStack API')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
@@ -413,7 +463,7 @@ export default function IntegrationsPage() {
                       onChange={(e) => 
                         setHomeStackConfig(prev => ({ ...prev, baseUrl: e.target.value }))
                       }
-                      placeholder="https://api.homestack.com"
+                      placeholder="https://pbapi.homestack.com"
                     />
                   </div>
                   
@@ -454,6 +504,10 @@ export default function IntegrationsPage() {
                     <Button onClick={testMobileAppWebhook} disabled={processing} variant="outline">
                       <Smartphone className="h-4 w-4 mr-2" />
                       Test Mobile App
+                    </Button>
+                    <Button onClick={testHomeStackAPI} disabled={processing} variant="outline">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Test API Configuration
                     </Button>
                   </div>
 
