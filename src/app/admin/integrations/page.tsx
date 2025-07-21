@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Home, RefreshCw, Settings, AlertCircle } from 'lucide-react'
+import { Home, RefreshCw, Settings, AlertCircle, Zap, Smartphone } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -180,6 +180,45 @@ export default function IntegrationsPage() {
     }
   }
 
+  const testMobileAppWebhook = async () => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/test-mobile-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          webhookFormat: 'mobile_app_v1',
+          testData: {
+            id: `mobile_user_${Date.now()}`,
+            email: `mobileuser${Date.now()}@example.com`,
+            first_name: 'Mobile',
+            last_name: 'User',
+            phone: '+1234567890',
+            created_at: new Date().toISOString(),
+            source: 'homestack_mobile',
+            platform: 'mobile_app'
+          }
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess(`Mobile app webhook test successful! Created user: ${result.processed_data.email} (ID: ${result.person_id}, Platform: ${result.processed_data.platform})`)
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || 'Failed to test mobile app webhook')
+      }
+    } catch (error) {
+      console.error('Error testing mobile app webhook:', error)
+      setError('Failed to test mobile app webhook')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
@@ -304,7 +343,7 @@ export default function IntegrationsPage() {
                     />
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button 
                       onClick={testHomeStackConnection} 
                       disabled={processing || !homeStackConfig.apiKey}
@@ -321,7 +360,14 @@ export default function IntegrationsPage() {
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Import Recent Leads
                     </Button>
-
+                    <Button onClick={testHomeStackWebhook} disabled={processing} variant="outline">
+                      <Zap className="h-4 w-4 mr-2" />
+                      Test Webhook
+                    </Button>
+                    <Button onClick={testMobileAppWebhook} disabled={processing} variant="outline">
+                      <Smartphone className="h-4 w-4 mr-2" />
+                      Test Mobile App
+                    </Button>
                   </div>
 
                   {lastProcessed.homeStack && (

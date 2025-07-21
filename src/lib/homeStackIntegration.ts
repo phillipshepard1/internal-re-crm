@@ -357,9 +357,13 @@ export class HomeStackIntegration {
     last_name?: string
     phone?: string
     created_at?: string
+    source?: string
+    platform?: string
     [key: string]: any
   }): Promise<Person | null> {
     try {
+      console.log('🔄 Starting createPersonFromUserSignup with data:', userData)
+      
       const { createClient } = await import('@supabase/supabase-js')
       
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -373,38 +377,48 @@ export class HomeStackIntegration {
       })
 
       // Check if user already exists
-      const { data: existingUser } = await supabase
+      const { data: existingUser, error: existingError } = await supabase
         .from('people')
         .select('*')
         .eq('email', userData.email)
         .single()
 
+      if (existingError && existingError.code !== 'PGRST116') {
+        console.error('❌ Error checking existing user:', existingError)
+      }
+
       if (existingUser) {
-        console.log('User already exists:', userData.email)
+        console.log('ℹ️ User already exists:', userData.email, 'ID:', existingUser.id)
         return existingUser
       }
 
       // Get admin user for initial assignment
-      const { data: adminUser } = await supabase
+      const { data: adminUser, error: adminError } = await supabase
         .from('users')
         .select('id')
         .eq('role', 'admin')
         .single()
 
-      if (!adminUser) {
-        console.error('No admin user found for assignment')
+      if (adminError || !adminUser) {
+        console.error('❌ No admin user found for assignment:', adminError)
         return null
       }
 
+      // Enhanced person data with mobile app support
       const personData: Partial<Person> = {
         first_name: userData.first_name || userData.email.split('@')[0],
         last_name: userData.last_name || 'Unknown',
         email: [userData.email],
         phone: userData.phone ? [userData.phone] : [],
         client_type: 'lead',
-        lead_source: 'homestack',
+        lead_source: userData.source || 'homestack',
         assigned_to: adminUser.id, // Assign to admin initially
-        notes: `New user from HomeStack signup\nHomeStack ID: ${userData.id}\nSignup Date: ${userData.created_at || new Date().toISOString()}\nSource: homestack_user_signup`,
+        notes: `New user from HomeStack signup
+HomeStack ID: ${userData.id}
+Signup Date: ${userData.created_at || new Date().toISOString()}
+Source: ${userData.source || 'homestack_user_signup'}
+Platform: ${userData.platform || 'unknown'}
+Mobile App: ${userData.platform === 'mobile_app' ? 'Yes' : 'No'}`,
         profile_picture: null,
         birthday: null,
         mailing_address: null,
@@ -425,22 +439,36 @@ export class HomeStackIntegration {
         closed: undefined
       }
 
+      console.log('🔄 Creating person with data:', personData)
+
       const newPerson = await createPerson(personData)
+
+      if (!newPerson) {
+        console.error('❌ Failed to create person in database')
+        return null
+      }
 
       // Create activity log
       const { createActivity } = await import('./database')
       await createActivity({
         person_id: newPerson.id,
         type: 'created',
-        description: 'New user automatically imported from HomeStack signup',
+        description: `New user automatically imported from HomeStack signup (${userData.platform || 'web'})`,
         created_by: adminUser.id,
       })
 
-      console.log('Successfully created person from HomeStack user signup:', newPerson.id)
+      console.log('✅ Successfully created person from HomeStack user signup:', {
+        person_id: newPerson.id,
+        email: userData.email,
+        source: userData.source,
+        platform: userData.platform,
+        assigned_to: adminUser.id
+      })
+      
       return newPerson
 
     } catch (error) {
-      console.error('Error creating person from HomeStack user signup:', error)
+      console.error('❌ Error creating person from HomeStack user signup:', error)
       return null
     }
   }

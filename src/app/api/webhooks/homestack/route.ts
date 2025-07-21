@@ -17,10 +17,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const signature = request.headers.get('x-homestack-signature')
     
-    // Log webhook event
-    console.log('HomeStack webhook received:', {
+    // Enhanced logging for debugging mobile app issues
+    console.log('🔔 HomeStack webhook received:', {
       type: body.type,
-      timestamp: new Date().toISOString()
+      event: body.event,
+      action: body.action,
+      timestamp: new Date().toISOString(),
+      fullBody: JSON.stringify(body, null, 2)
     })
 
     // Get HomeStack configuration
@@ -48,40 +51,73 @@ export async function POST(request: NextRequest) {
     // Initialize HomeStack integration
     const homeStack = new HomeStackIntegration(homeStackConfig)
 
-    // Handle different webhook events
-    switch (body.type) {
+    // Enhanced event handling for mobile app compatibility
+    const eventType = body.type || body.event || body.action || 'unknown'
+    
+    // Handle different webhook events with mobile app support
+    switch (eventType) {
+      // New HomeStack format events
       case 'new_user':
-        console.log('🔄 Processing new_user event (HomeStack format)...')
-        return await handleUserCreated(body.data, homeStack)
-      
-      case 'update_user':
-        console.log('🔄 Processing update_user event (HomeStack format)...')
-        return await handleUserUpdated(body.data, homeStack)
-      
-      case 'new_chat_message':
-        console.log('🔄 Processing new_chat_message event (HomeStack format)...')
-        return await handleChatMessage(body.data, homeStack)
-      
-      // Keep backward compatibility with old event types
       case 'user.created':
       case 'user.registered':
-        console.log('🔄 Processing user.created event (legacy format)...')
-        return await handleUserCreated(body.data, homeStack)
+      case 'user.signup':
+      case 'app.user.created':
+      case 'mobile.user.created':
+        console.log('🔄 Processing new user event (HomeStack format)...')
+        return await handleUserCreated(body.data || body.user || body, homeStack)
       
+      case 'update_user':
+      case 'user.updated':
+      case 'user.modified':
+        console.log('🔄 Processing update_user event (HomeStack format)...')
+        return await handleUserUpdated(body.data || body.user || body, homeStack)
+      
+      case 'new_chat_message':
+      case 'chat.message':
+      case 'message.created':
+        console.log('🔄 Processing new_chat_message event (HomeStack format)...')
+        return await handleChatMessage(body.data || body.message || body, homeStack)
+      
+      // Lead events
       case 'lead.created':
       case 'lead.updated':
+      case 'lead.registered':
+      case 'app.lead.created':
+      case 'mobile.lead.created':
         console.log('🔄 Processing lead.created event (legacy format)...')
-        return await handleLeadCreated(body.data, homeStack)
+        return await handleLeadCreated(body.data || body.lead || body, homeStack)
       
+      // Contact events
       case 'contact.created':
       case 'contact.updated':
+      case 'contact.registered':
+      case 'app.contact.created':
+      case 'mobile.contact.created':
         console.log('🔄 Processing contact.created event (legacy format)...')
-        return await handleContactCreated(body.data, homeStack)
+        return await handleContactCreated(body.data || body.contact || body, homeStack)
+      
+      // Generic user events (catch-all for mobile app)
+      case 'user':
+      case 'app_user':
+      case 'mobile_user':
+      case 'registration':
+      case 'signup':
+        console.log('🔄 Processing generic user event (mobile app format)...')
+        return await handleUserCreated(body.data || body.user || body, homeStack)
       
       default:
-        console.log('⚠️ Unhandled webhook event:', body.type)
-        console.log('Available HomeStack events: new_user, update_user, new_chat_message')
-        console.log('Legacy events: user.created, lead.created, contact.created')
+        console.log('⚠️ Unhandled webhook event:', eventType)
+        console.log('📋 Available HomeStack events: new_user, update_user, new_chat_message')
+        console.log('📋 Legacy events: user.created, lead.created, contact.created')
+        console.log('📋 Mobile app events: app.user.created, mobile.user.created, registration')
+        console.log('📋 Full webhook body:', JSON.stringify(body, null, 2))
+        
+        // Try to handle as a user creation if it looks like user data
+        if (body.email || body.user?.email || body.data?.email) {
+          console.log('🔄 Attempting to process as user creation based on email presence...')
+          return await handleUserCreated(body.data || body.user || body, homeStack)
+        }
+        
         return NextResponse.json({ success: true, message: 'Event ignored' })
     }
 
@@ -94,10 +130,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Handle new user signup from HomeStack
+// Enhanced user creation handler for mobile app compatibility
 async function handleUserCreated(userData: any, homeStack: HomeStackIntegration) {
   try {
-    console.log('Processing new user from HomeStack')
+    console.log('🔄 Processing new user from HomeStack:', userData)
 
     // Handle different HomeStack data formats
     let actualUserData = userData
@@ -107,31 +143,58 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration)
       actualUserData = userData.user
     }
     
-    // Transform HomeStack format to our expected format
+    // If data is nested under 'data' object, extract it
+    if (userData.data && typeof userData.data === 'object') {
+      actualUserData = userData.data
+    }
+    
+    console.log('📋 Extracted user data:', actualUserData)
+    
+    // Enhanced data transformation for mobile app compatibility
     const transformedData = {
-      id: actualUserData.guid || actualUserData.id, // HomeStack uses 'guid'
-      email: actualUserData.email,
-      first_name: actualUserData.name ? actualUserData.name.split(' ')[0] : undefined, // Split 'name' into first_name
-      last_name: actualUserData.name ? actualUserData.name.split(' ').slice(1).join(' ') : undefined, // Split 'name' into last_name
-      phone: actualUserData.phone,
-      created_at: actualUserData.created_at,
-      agent_guid: actualUserData.agent_guid
+      id: actualUserData.guid || actualUserData.id || actualUserData.user_id || `user_${Date.now()}`,
+      email: actualUserData.email || actualUserData.email_address || actualUserData.user_email,
+      first_name: actualUserData.first_name || actualUserData.firstName || 
+                 (actualUserData.name ? actualUserData.name.split(' ')[0] : undefined) ||
+                 (actualUserData.full_name ? actualUserData.full_name.split(' ')[0] : undefined),
+      last_name: actualUserData.last_name || actualUserData.lastName || 
+                (actualUserData.name ? actualUserData.name.split(' ').slice(1).join(' ') : undefined) ||
+                (actualUserData.full_name ? actualUserData.full_name.split(' ').slice(1).join(' ') : undefined),
+      phone: actualUserData.phone || actualUserData.phone_number || actualUserData.mobile || actualUserData.telephone,
+      created_at: actualUserData.created_at || actualUserData.createdAt || actualUserData.date_created || actualUserData.registration_date,
+      agent_guid: actualUserData.agent_guid || actualUserData.agent_id || actualUserData.assigned_agent,
+      // Additional mobile app specific fields
+      source: actualUserData.source || actualUserData.signup_source || 'homestack_mobile',
+      platform: actualUserData.platform || actualUserData.device_type || 'mobile_app'
+    }
+
+    console.log('🔄 Transformed data:', transformedData)
+
+    // Validate required fields
+    if (!transformedData.email) {
+      console.error('❌ Missing email in user data')
+      return NextResponse.json(
+        { error: 'Missing email in user data' },
+        { status: 400 }
+      )
     }
 
     // Use the new method for user signup handling
     const person = await homeStack.createPersonFromUserSignup(transformedData)
 
     if (person) {
-      console.log('User successfully created in CRM:', person.id)
+      console.log('✅ User successfully created in CRM:', person.id)
       
       return NextResponse.json({
         success: true,
         message: 'User successfully imported from HomeStack',
         person_id: person.id,
-        assigned_to: person.assigned_to
+        assigned_to: person.assigned_to,
+        source: transformedData.source,
+        platform: transformedData.platform
       })
     } else {
-      console.error('Failed to create user in CRM')
+      console.error('❌ Failed to create user in CRM')
       return NextResponse.json(
         { error: 'Failed to create user' },
         { status: 500 }
