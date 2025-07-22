@@ -32,11 +32,6 @@ export function useLoadingTimeout({
     // Set timeout
     timeoutRef.current = setTimeout(() => {
       const loadTime = Date.now() - startTimeRef.current
-      console.error('Loading timeout detected', {
-        loadTime: `${loadTime}ms`,
-        timeoutMs,
-        url: window.location.pathname
-      })
       
       if (onTimeout) {
         onTimeout()

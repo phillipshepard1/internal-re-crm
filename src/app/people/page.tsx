@@ -28,22 +28,11 @@ export default function PeoplePage() {
 
   // Debug component lifecycle
   useEffect(() => {
-    console.log('PeoplePage: Component mounted', {
-      userId: user?.id,
-      userRole,
-      timestamp: new Date().toISOString(),
-      url: window.location.pathname
-    })
-
+    // Component mounted
     return () => {
-      console.log('PeoplePage: Component unmounted', {
-        userId: user?.id,
-        userRole,
-        timestamp: new Date().toISOString(),
-        url: window.location.pathname
-      })
+      // Component unmounted
     }
-  }, [user?.id, userRole])
+  }, [])
 
   // Use the robust data loader
   const { data: people = [], loading, error, refetch } = useDataLoader(
@@ -56,14 +45,10 @@ export default function PeoplePage() {
 
   // Debug: Log the data being loaded
   useEffect(() => {
-    console.log('PeoplePage: Data loaded', {
-      peopleCount: people?.length || 0,
-      people: people?.slice(0, 3), // Log first 3 people
-      userId: user?.id,
-      userRole,
-      timestamp: new Date().toISOString()
-    })
-  }, [people, user?.id, userRole])
+    if (people) {
+      // Data loaded
+    }
+  }, [people])
 
   const filteredPeople = (people || []).filter((person: Person) =>
     `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||

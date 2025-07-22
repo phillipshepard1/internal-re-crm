@@ -58,7 +58,6 @@ export class HomeStackIntegration {
       
       for (const endpoint of endpoints) {
         try {
-          console.log(`Trying HomeStack endpoint: ${this.config.baseUrl}${endpoint}`)
           const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
             headers: {
               'Authorization': `Bearer ${this.config.apiKey}`,
@@ -69,25 +68,18 @@ export class HomeStackIntegration {
           
           if (response.ok) {
             const data = await response.json()
-            console.log(`✅ Success with endpoint: ${endpoint}`, { dataKeys: Object.keys(data) })
-            
             // Handle different response formats
             const leads = data.leads || data.users || data.contacts || data.data || data || []
             return this.transformLeads(leads)
-          } else {
-            console.log(`❌ Endpoint ${endpoint} failed: ${response.status}`)
           }
         } catch (endpointError) {
-          console.log(`❌ Endpoint ${endpoint} error:`, endpointError)
+          // Continue to next endpoint
         }
       }
       
-      // If all endpoints fail, return empty array
-      console.error('All HomeStack API endpoints failed')
-      return []
+      throw new Error('All HomeStack API endpoints failed')
       
     } catch (error) {
-      console.error('Error fetching HomeStack leads:', error)
       return []
     }
   }
@@ -123,14 +115,13 @@ export class HomeStackIntegration {
             return this.transformLeads(leads)
           }
         } catch (endpointError) {
-          console.log(`Endpoint ${endpoint} error:`, endpointError)
+          // Continue to next endpoint
         }
       }
       
       return []
       
     } catch (error) {
-      console.error(`Error fetching HomeStack leads with status ${status}:`, error)
       return []
     }
   }
@@ -166,14 +157,13 @@ export class HomeStackIntegration {
             return leads[0] || null
           }
         } catch (endpointError) {
-          console.log(`Endpoint ${endpoint} error:`, endpointError)
+          // Continue to next endpoint
         }
       }
       
       return null
       
     } catch (error) {
-      console.error(`Error fetching HomeStack lead ${leadId}:`, error)
       return null
     }
   }
@@ -245,7 +235,7 @@ export class HomeStackIntegration {
       
         }
       } catch (error) {
-        console.error(`Error processing lead ${lead.id}:`, error)
+        return 0
       }
     }
     
@@ -277,7 +267,6 @@ export class HomeStackIntegration {
         .single()
 
       if (!adminUser) {
-        console.error('No admin user found for lead assignment')
         return null
       }
       
@@ -326,7 +315,6 @@ export class HomeStackIntegration {
       return newPerson
       
     } catch (error) {
-      console.error('Error creating person from HomeStack lead:', error)
       return null
     }
   }
@@ -340,7 +328,6 @@ export class HomeStackIntegration {
       if (this.config.webhookSecret && signature) {
         const isValid = this.verifyWebhookSignature()
         if (!isValid) {
-          console.error('Invalid webhook signature')
           return false
         }
       }
@@ -355,7 +342,6 @@ export class HomeStackIntegration {
       return true
       
     } catch (error) {
-      console.error('Error handling HomeStack webhook:', error)
       return false
     }
   }
@@ -402,7 +388,6 @@ export class HomeStackIntegration {
         .single()
 
       if (existingUser) {
-        console.log('User already exists:', userData.email)
         return existingUser
       }
 
@@ -414,7 +399,6 @@ export class HomeStackIntegration {
         .single()
 
       if (!adminUser) {
-        console.error('No admin user found for assignment')
         return null
       }
 
@@ -459,11 +443,9 @@ export class HomeStackIntegration {
         created_by: adminUser.id,
       })
 
-      console.log('Successfully created person from HomeStack user signup:', newPerson.id)
       return newPerson
 
     } catch (error) {
-      console.error('Error creating person from HomeStack user signup:', error)
       return null
     }
   }
@@ -485,7 +467,6 @@ export class HomeStackIntegration {
       return response.ok
       
     } catch (error) {
-      console.error('Error updating HomeStack lead status:', error)
       return false
     }
   }
@@ -524,15 +505,13 @@ export class HomeStackIntegration {
             }))
           }
         } catch (endpointError) {
-          console.log(`Webhook endpoint ${endpoint} error:`, endpointError)
+          // Continue to next endpoint
         }
       }
       
-      console.log('No webhook endpoints found, returning empty array')
       return []
       
     } catch (error) {
-      console.error('Error fetching HomeStack webhooks:', error)
       return []
     }
   }
@@ -577,10 +556,10 @@ export class HomeStackIntegration {
               message: 'Webhook registered successfully'
             }
           } else {
-            console.log(`Webhook registration failed for ${endpoint}: ${response.status}`)
+            // Continue to next endpoint
           }
         } catch (endpointError) {
-          console.log(`Webhook registration error for ${endpoint}:`, endpointError)
+          // Continue to next endpoint
         }
       }
       
@@ -590,7 +569,6 @@ export class HomeStackIntegration {
       }
       
     } catch (error) {
-      console.error('Error registering HomeStack webhook:', error)
       return {
         success: false,
         message: `Registration error: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -619,7 +597,6 @@ export class HomeStackIntegration {
       return await this.registerWebhook(url)
       
     } catch (error) {
-      console.error('Error ensuring webhook registration:', error)
       return {
         success: false,
         message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -654,14 +631,13 @@ export class HomeStackIntegration {
             return true
           }
         } catch (endpointError) {
-          console.log(`Webhook deletion error for ${endpoint}:`, endpointError)
+          // Continue to next endpoint
         }
       }
       
       return false
       
     } catch (error) {
-      console.error('Error deleting HomeStack webhook:', error)
       return false
     }
   }
@@ -700,14 +676,13 @@ export class HomeStackIntegration {
             return true
           }
         } catch (endpointError) {
-          console.log(`Webhook update error for ${endpoint}:`, endpointError)
+          // Continue to next endpoint
         }
       }
       
       return false
       
     } catch (error) {
-      console.error('Error updating HomeStack webhook:', error)
       return false
     }
   }
@@ -729,9 +704,6 @@ export class HomeStackIntegration {
       const form = new FormData()
       form.append('email', userEmail)
 
-      console.log('🔐 SSO - Making request to:', `${ssoBaseUrl}/getAccessToken`)
-      console.log('🔐 SSO - Using API key:', this.config.ssoApiKey ? '***' : 'MISSING')
-      
       const response = await fetch(`${ssoBaseUrl}/getAccessToken`, {
         method: 'POST',
         headers: {
@@ -740,12 +712,8 @@ export class HomeStackIntegration {
         body: form
       })
 
-      console.log('🔐 SSO - Response status:', response.status)
-      console.log('🔐 SSO - Response headers:', Object.fromEntries(response.headers.entries()))
-
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('SSO token generation failed:', response.status, errorText)
         return {
           success: false,
           error: `Failed to generate SSO token: ${response.status} - ${errorText}`
@@ -767,7 +735,6 @@ export class HomeStackIntegration {
       }
 
     } catch (error) {
-      console.error('Error generating SSO token:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -798,7 +765,6 @@ export class HomeStackIntegration {
       }
 
     } catch (error) {
-      console.error('Error generating SSO login URL:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -820,9 +786,6 @@ export class HomeStackIntegration {
 
       const ssoBaseUrl = this.config.ssoBaseUrl || 'https://bkapi.homestack.com'
       
-      console.log('🧪 SSO Test - Making request to:', `${ssoBaseUrl}/getAccessToken`)
-      console.log('🧪 SSO Test - Using API key:', this.config.ssoApiKey ? '***' : 'MISSING')
-      
       // Test if the endpoint is accessible by checking the response structure
       const form = new FormData()
       form.append('email', 'test@example.com')
@@ -835,18 +798,14 @@ export class HomeStackIntegration {
         body: form
       })
 
-      console.log('🧪 SSO Test - Response status:', response.status)
-      
       if (response.ok) {
         const responseData = await response.json()
-        console.log('🧪 SSO Test - Success response:', responseData)
         return {
           success: true,
           message: 'SSO connection successful'
         }
       } else {
         const errorText = await response.text()
-        console.log('🧪 SSO Test - Error response:', errorText)
         
         // Parse the error response
         try {
@@ -868,7 +827,6 @@ export class HomeStackIntegration {
       }
 
     } catch (error) {
-      console.error('Error testing SSO connection:', error)
       return {
         success: false,
         message: `SSO connection error: ${error instanceof Error ? error.message : 'Unknown error'}`

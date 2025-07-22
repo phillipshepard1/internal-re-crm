@@ -52,10 +52,9 @@ export default function LeadsPage() {
   const loadStats = async () => {
     try {
       const stats = await getLeadStats(user?.id, user?.role)
-      console.log('Lead stats loaded:', stats)
       setLeadStats(stats)
     } catch (error) {
-      console.error('Error loading stats:', error)
+      // Error loading stats
     }
   }
 
@@ -91,17 +90,17 @@ export default function LeadsPage() {
   // Debug assigned leads
   useEffect(() => {
     if (assignedLeads) {
-      console.log('📋 Assigned leads loaded:', {
-        totalLeads: assignedLeads.length,
-        userRole: userRole,
-        userId: user?.id,
-        leads: assignedLeads.map((lead: Person) => ({
-          id: lead.id,
-          name: `${lead.first_name} ${lead.last_name}`,
-          assigned_to: lead.assigned_to,
-          assigned_user: lead.assigned_user
-        }))
-      })
+      // console.log('📋 Assigned leads loaded:', {
+      //   totalLeads: assignedLeads.length,
+      //   userRole: userRole,
+      //   userId: user?.id,
+      //   leads: assignedLeads.map((lead: Person) => ({
+      //     id: lead.id,
+      //     name: `${lead.first_name} ${lead.last_name}`,
+      //     assigned_to: lead.assigned_to,
+      //     assigned_user: lead.assigned_user
+      //   }))
+      // })
     }
   }, [assignedLeads, userRole, user?.id])
 
@@ -114,19 +113,19 @@ export default function LeadsPage() {
   useEffect(() => {
     loadStats()
     if (assignmentUsers) {
-      console.log('Users for assignment loaded:', assignmentUsers)
+      // console.log('Users for assignment loaded:', assignmentUsers)
       setUsers(assignmentUsers)
     }
   }, [assignmentUsers])
 
   // Debug logging
-  console.log('🔍 Current user info:', {
-    userId: user?.id,
-    userEmail: user?.email,
-    userRole: userRole,
-    isAdmin: userRole === 'admin',
-    isAgent: userRole === 'agent'
-  })
+  // console.log('🔍 Current user info:', {
+  //   userId: user?.id,
+  //   userEmail: user?.email,
+  //   userRole: userRole,
+  //   isAdmin: userRole === 'admin',
+  //   isAgent: userRole === 'agent'
+  // })
 
   // Check if user has access to leads page
   if (!user || !userRole) {
@@ -187,10 +186,10 @@ export default function LeadsPage() {
         // Refresh the page to reload users
         window.location.reload()
       } else {
-        console.error('Failed to create test agent:', result.error)
+        // console.error('Failed to create test agent:', result.error)
       }
     } catch (error) {
-      console.error('Error creating test agent:', error)
+      // console.error('Error creating test agent:', error)
     }
   }
 
@@ -205,10 +204,10 @@ export default function LeadsPage() {
         // Refresh the page to reload users
         window.location.reload()
       } else {
-        console.error('Failed to create missing users:', result.error)
+        // console.error('Failed to create missing users:', result.error)
       }
     } catch (error) {
-      console.error('Error creating missing users:', error)
+      // console.error('Error creating missing users:', error)
     }
   }
 
@@ -216,10 +215,10 @@ export default function LeadsPage() {
     try {
       const response = await fetch('/api/admin/check-users-table')
       const result = await response.json()
-      console.log('Users table check:', result)
-      alert(`Users table status: ${JSON.stringify(result, null, 2)}`)
+      // console.log('Users table check:', result)
+      // alert(`Users table status: ${JSON.stringify(result, null, 2)}`)
     } catch (error) {
-      console.error('Error checking users table:', error)
+      // console.error('Error checking users table:', error)
     }
   }
 
@@ -234,7 +233,7 @@ export default function LeadsPage() {
       refetchAssigned()
       loadStats()
     } catch (error) {
-      console.error('Error assigning lead:', error)
+      // console.error('Error assigning lead:', error)
     } finally {
       setAssigningLead(null)
     }
@@ -252,7 +251,7 @@ export default function LeadsPage() {
       refetchAssigned()
       loadStats()
     } catch (error) {
-      console.error('Error updating status:', error)
+      // console.error('Error updating status:', error)
     } finally {
       setUpdatingStatus(null)
     }

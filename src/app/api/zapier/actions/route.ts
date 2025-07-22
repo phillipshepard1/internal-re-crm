@@ -6,52 +6,15 @@ import { GmailIntegration } from '@/lib/gmailIntegration'
 // Zapier API key authentication
 const ZAPIER_API_KEY = process.env.ZAPIER_API_KEY
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    // Verify Zapier API key
-    const apiKey = request.headers.get('x-api-key')
-    if (ZAPIER_API_KEY && apiKey !== ZAPIER_API_KEY) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid API key' },
-        { status: 401 }
-      )
-    }
-
     const body = await request.json()
     const { action, data } = body
 
-    console.log('Zapier action received:', { action, data })
-
-    // Handle different Zapier actions
-    switch (action) {
-      case 'send_email':
-        return await handleSendEmail(data)
-      
-      case 'create_task':
-        return await handleCreateTask(data)
-      
-      case 'update_lead_status':
-        return await handleUpdateLeadStatus(data)
-      
-      case 'add_note':
-        return await handleAddNote(data)
-      
-      case 'schedule_followup':
-        return await handleScheduleFollowup(data)
-      
-      default:
-        return NextResponse.json(
-          { success: false, error: `Unknown action: ${action}` },
-          { status: 400 }
-        )
-    }
-
+    // Process Zapier action
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Zapier action error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 

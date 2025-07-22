@@ -126,7 +126,6 @@ function TasksPage() {
       setTaskDueDate('')
       setTaskStatus('pending')
     } catch (err) {
-      console.error('Error saving task:', err)
       setAlertModal({
         open: true,
         title: 'Error',
@@ -145,7 +144,6 @@ function TasksPage() {
       })
       refetch() // Refetch to update the data in the table
     } catch (err) {
-      console.error('Error updating task status:', err)
       setAlertModal({
         open: true,
         title: 'Error',

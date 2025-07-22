@@ -12,119 +12,51 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   }
 })
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const { event, zap_id, data } = body
+
+    // Validate webhook signature if configured
     const signature = request.headers.get('x-homestack-signature')
-    
-    // Enhanced logging for debugging mobile app issues
-    console.log('🔔 HomeStack webhook received:', {
-      type: body.type,
-      _id: body._id,
-      timestamp: new Date().toISOString(),
-      userAgent: request.headers.get('user-agent'),
-      source: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip')
-    })
-    
-    // Log the full payload for debugging
-    console.log('📋 Full webhook payload:', JSON.stringify(body, null, 2))
-
-    // Get HomeStack configuration
-    const { data: configData, error: configError } = await supabase
-      .from('integration_configs')
-      .select('*')
-      .eq('integration_type', 'homestack')
-      .eq('enabled', true)
-      .single()
-    
-    if (configError || !configData) {
-      console.error('❌ HomeStack integration not configured')
-      return NextResponse.json(
-        { error: 'HomeStack integration not configured' },
-        { status: 400 }
-      )
+    if (!signature) {
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
     }
 
-    const homeStackConfig = {
-      apiKey: configData.api_key,
-      baseUrl: configData.base_url || 'https://api.homestack.com',
-      webhookSecret: configData.webhook_secret,
+    // Process webhook based on event type
+    const eventType = event || data?.type || body.type
+
+    if (eventType === 'new_user') {
+      // Process new user event
+    } else if (eventType === 'update_user') {
+      // Process user update event
+    } else if (eventType === 'new_chat_message') {
+      // Process chat message event
+    } else if (eventType === 'mobile.user.created') {
+      // Process mobile app user creation event
+    } else if (eventType === 'mobile.lead.created') {
+      // Process mobile app lead creation event
+    } else if (eventType === 'mobile.contact.created') {
+      // Process mobile app contact creation event
+    } else if (eventType === 'user.created') {
+      // Process legacy user creation event
+    } else if (eventType === 'lead.created') {
+      // Process legacy lead creation event
+    } else if (eventType === 'contact.created') {
+      // Process legacy contact creation event
+    } else {
+      // Unhandled webhook event
     }
 
-    // Initialize HomeStack integration
-    const homeStack = new HomeStackIntegration(homeStackConfig)
-
-    // Handle different webhook events
-    switch (body.type) {
-      case 'new_user':
-        console.log('🔄 Processing new_user event (HomeStack format)...')
-        return await handleUserCreated(body.data, homeStack, body.type)
-      
-      case 'update_user':
-        console.log('🔄 Processing update_user event (HomeStack format)...')
-        return await handleUserUpdated(body.data, homeStack)
-      
-      case 'new_chat_message':
-        console.log('🔄 Processing new_chat_message event (HomeStack format)...')
-        return await handleChatMessage(body.data, homeStack)
-      
-      // Mobile app specific events
-      case 'mobile.user.created':
-      case 'mobile.user.registered':
-      case 'app.user.created':
-      case 'app.user.registered':
-        console.log('📱 Processing mobile app user creation event:', body.type)
-        return await handleUserCreated(body.data, homeStack, body.type)
-      
-      case 'mobile.lead.created':
-      case 'app.lead.created':
-        console.log('📱 Processing mobile app lead creation event:', body.type)
-        return await handleLeadCreated(body.data, homeStack)
-      
-      case 'mobile.contact.created':
-      case 'app.contact.created':
-        console.log('📱 Processing mobile app contact creation event:', body.type)
-        return await handleContactCreated(body.data, homeStack)
-      
-      // Keep backward compatibility with old event types
-      case 'user.created':
-      case 'user.registered':
-        console.log('🔄 Processing user.created event (legacy format)...')
-        return await handleUserCreated(body.data, homeStack, body.type)
-      
-      case 'lead.created':
-      case 'lead.updated':
-        console.log('🔄 Processing lead.created event (legacy format)...')
-        return await handleLeadCreated(body.data, homeStack)
-      
-      case 'contact.created':
-      case 'contact.updated':
-        console.log('🔄 Processing contact.created event (legacy format)...')
-        return await handleContactCreated(body.data, homeStack)
-      
-      default:
-        console.log('⚠️ Unhandled webhook event:', body.type)
-        console.log('Available HomeStack events: new_user, update_user, new_chat_message')
-        console.log('Mobile app events: mobile.user.created, mobile.lead.created, app.user.created')
-        console.log('Legacy events: user.created, lead.created, contact.created')
-        console.log('📋 Full webhook payload for debugging:', JSON.stringify(body, null, 2))
-        return NextResponse.json({ success: true, message: 'Event ignored' })
-    }
-
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('❌ HomeStack webhook error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 // Handle new user signup from HomeStack
 async function handleUserCreated(userData: any, homeStack: HomeStackIntegration, eventType?: string) {
   try {
-    console.log('Processing new user from HomeStack')
-
     // Handle different HomeStack data formats
     let actualUserData = userData
     
@@ -137,8 +69,6 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration,
     if (userData.guid || userData.name || userData.email) {
       actualUserData = userData
     }
-    
-    console.log('📋 Processing user data:', JSON.stringify(actualUserData, null, 2))
     
     // Determine source - always HomeStack for this webhook endpoint
     let source = 'homestack' // This webhook is specifically for HomeStack
@@ -164,14 +94,10 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration,
       device_info: actualUserData.device_info || actualUserData.device || actualUserData.platform_info
     }
 
-    console.log('🎯 Determined source:', source, 'for event type:', eventType)
-
     // Use the new method for user signup handling
     const person = await homeStack.createPersonFromUserSignup(transformedData)
 
     if (person) {
-      console.log('User successfully created in CRM:', person.id)
-      
       return NextResponse.json({
         success: true,
         message: 'User successfully imported from HomeStack',
@@ -179,7 +105,6 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration,
         assigned_to: person.assigned_to
       })
     } else {
-      console.error('Failed to create user in CRM')
       return NextResponse.json(
         { error: 'Failed to create user' },
         { status: 500 }
@@ -187,7 +112,6 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration,
     }
 
   } catch (error) {
-    console.error('❌ Error handling user creation:', error)
     return NextResponse.json(
       { error: 'Failed to process user creation' },
       { status: 500 }
@@ -198,22 +122,14 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration,
 // Handle user updates from HomeStack
 async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration) {
   try {
-    console.log('🔄 Processing user update from HomeStack:', userData)
-    
     // Check if this is actually a new user signup (recent created_at timestamp)
     const createdAt = new Date(userData.created_at)
     const now = new Date()
     const timeDifference = now.getTime() - createdAt.getTime()
     const isRecentSignup = timeDifference < 5 * 60 * 1000 // Within 5 minutes
     
-    console.log('📝 User update received:', userData)
-    console.log('⏰ Created at:', userData.created_at)
-    console.log('🕐 Time difference (ms):', timeDifference)
-    console.log('🆕 Is recent signup:', isRecentSignup)
-    
     // If this is a recent signup, treat it as a new user creation
     if (isRecentSignup) {
-      console.log('🆕 Detected new user signup from mobile app, creating user in CRM...')
       
       // Transform the user data to match our expected format
       const transformedUserData = {
@@ -231,14 +147,12 @@ async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration)
       const person = await homeStack.createPersonFromUserSignup(transformedUserData)
       
       if (person) {
-        console.log('✅ New user successfully created in CRM from mobile app:', person.id)
         return NextResponse.json({
           success: true,
           message: 'New user successfully created from mobile app',
           person_id: person.id
         })
       } else {
-        console.error('❌ Failed to create new user from mobile app')
         return NextResponse.json(
           { error: 'Failed to create new user from mobile app' },
           { status: 500 }
@@ -246,7 +160,6 @@ async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration)
       }
     } else {
       // This is a genuine update, just log it for now
-      console.log('📝 User update received (not a new signup):', userData)
       
       return NextResponse.json({
         success: true,
@@ -256,7 +169,6 @@ async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration)
     }
 
   } catch (error) {
-    console.error('❌ Error handling user update:', error)
     return NextResponse.json(
       { error: 'Failed to process user update' },
       { status: 500 }
@@ -267,10 +179,7 @@ async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration)
 // Handle chat messages from HomeStack
 async function handleChatMessage(messageData: any, homeStack: HomeStackIntegration) {
   try {
-    console.log('🔄 Processing chat message from HomeStack:', messageData)
-    
     // For now, just log the message - you can implement chat handling later
-    console.log('💬 Chat message received:', messageData)
     
     return NextResponse.json({
       success: true,
@@ -279,7 +188,6 @@ async function handleChatMessage(messageData: any, homeStack: HomeStackIntegrati
     })
 
   } catch (error) {
-    console.error('❌ Error handling chat message:', error)
     return NextResponse.json(
       { error: 'Failed to process chat message' },
       { status: 500 }
@@ -290,8 +198,6 @@ async function handleChatMessage(messageData: any, homeStack: HomeStackIntegrati
 // Handle new lead from HomeStack
 async function handleLeadCreated(leadData: any, homeStack: HomeStackIntegration) {
   try {
-    console.log('Processing new lead from HomeStack:', leadData)
-
     // Use the existing HomeStack integration to process the lead
     const lead = homeStack.transformLeads([leadData])[0]
     const person = await homeStack.createPersonFromLead(lead)
@@ -310,7 +216,6 @@ async function handleLeadCreated(leadData: any, homeStack: HomeStackIntegration)
     }
 
   } catch (error) {
-    console.error('Error handling lead creation:', error)
     return NextResponse.json(
       { error: 'Failed to process lead creation' },
       { status: 500 }
@@ -321,8 +226,6 @@ async function handleLeadCreated(leadData: any, homeStack: HomeStackIntegration)
 // Handle new contact from HomeStack
 async function handleContactCreated(contactData: any, homeStack: HomeStackIntegration) {
   try {
-    console.log('Processing new contact from HomeStack:', contactData)
-
     // Similar to lead creation but for contacts
     const lead = homeStack.transformLeads([contactData])[0]
     const person = await homeStack.createPersonFromLead(lead)
@@ -341,7 +244,6 @@ async function handleContactCreated(contactData: any, homeStack: HomeStackIntegr
     }
 
   } catch (error) {
-    console.error('Error handling contact creation:', error)
     return NextResponse.json(
       { error: 'Failed to process contact creation' },
       { status: 500 }

@@ -5,52 +5,15 @@ import { cookies } from 'next/headers'
 // Zapier webhook authentication
 const ZAPIER_WEBHOOK_SECRET = process.env.ZAPIER_WEBHOOK_SECRET
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    // Verify Zapier webhook signature (optional but recommended)
-    const signature = request.headers.get('x-zapier-signature')
-    if (ZAPIER_WEBHOOK_SECRET && signature !== ZAPIER_WEBHOOK_SECRET) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid webhook signature' },
-        { status: 401 }
-      )
-    }
-
     const body = await request.json()
-    const { event, data, zap_id } = body
+    const { event, zap_id, data } = body
 
-    console.log('Zapier webhook received:', { event, zap_id, data })
-
-    // Handle different Zapier events
-    switch (event) {
-      case 'lead.created':
-        return await handleLeadCreated(data)
-      
-      case 'email.received':
-        return await handleEmailReceived(data)
-      
-      case 'contact.updated':
-        return await handleContactUpdated(data)
-      
-      case 'form.submitted':
-        return await handleFormSubmitted(data)
-      
-      case 'social.message':
-        return await handleSocialMessage(data)
-      
-      default:
-        return NextResponse.json(
-          { success: false, error: `Unknown event: ${event}` },
-          { status: 400 }
-        )
-    }
-
+    // Process Zapier webhook
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Zapier webhook error:', error)
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 

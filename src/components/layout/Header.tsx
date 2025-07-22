@@ -28,6 +28,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const router = useRouter()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [alertModal, setAlertModal] = useState<{
     open: boolean
     title: string
@@ -42,12 +43,56 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
 
   const handleLogout = async () => {
     try {
+      // Clear all browser storage before calling signOut
+      if (typeof window !== 'undefined') {
+        // Clear localStorage completely
+        localStorage.clear()
+        
+        // Clear sessionStorage completely
+        sessionStorage.clear()
+        
+        // Clear all cookies
+        document.cookie.split(";").forEach((c) => {
+          const eqPos = c.indexOf("=")
+          const name = eqPos > -1 ? c.substr(0, eqPos) : c
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/"
+        })
+        
+        // Clear Google OAuth related cookies specifically
+        const googleCookies = [
+          'G_AUTHUSER_H', 'SSID', 'SID', 'HSID', 'APISID', 'SAPISID', 
+          'NID', '1P_JAR', 'AEC', 'OTZ'
+        ]
+        
+        googleCookies.forEach(cookieName => {
+          document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=.google.com`
+          document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=google.com`
+          document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+        })
+        
+        // Clear any remaining auth-related localStorage items
+        const authKeys = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && (key.includes('auth') || key.includes('user') || key.includes('role') || key.includes('supabase'))) {
+            authKeys.push(key)
+          }
+        }
+        authKeys.forEach(key => localStorage.removeItem(key))
+      }
+      
+      // Call the enhanced signOut function from AuthContext
       await signOut()
-      // signOut now handles the redirect automatically
+      
     } catch (error) {
-      console.error('Logout error:', error)
-      // Fallback redirect in case signOut fails
-      window.location.href = '/login'
+      // Force clear everything even if signOut fails
+      if (typeof window !== 'undefined') {
+        localStorage.clear()
+        sessionStorage.clear()
+        
+        // Force redirect to login
+        window.location.href = '/login'
+      }
     }
   }
 
@@ -222,7 +267,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                       variant="destructive" 
                       onClick={() => {
                         setProfileOpen(false)
-                        handleLogout()
+                        setLogoutConfirmOpen(true)
                       }}
                     >
                       <LogOut className="mr-2 h-4 w-4" />
@@ -234,21 +279,51 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
             </Dialog>
             
             {/* Logout (standalone for quick access) */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleLogout}
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span className="sr-only">Logout</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Logout</p>
-              </TooltipContent>
-            </Tooltip>
+            <Dialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+              <DialogTrigger asChild>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setLogoutConfirmOpen(true)}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span className="sr-only">Logout</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Logout</p>
+                  </TooltipContent>
+                </Tooltip>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Confirm Logout</DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to logout? This will clear all your session data and redirect you to the login page.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end space-x-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setLogoutConfirmOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => {
+                      setLogoutConfirmOpen(false)
+                      handleLogout()
+                    }}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </header>

@@ -164,42 +164,12 @@ export function useDataLoader(
 
         onSuccess?.(result)
 
-      } catch (err) {
-        // Check if component is still mounted
-        if (!mountRef.current) {
-          return
-        }
-
-        // Check if request was aborted
-        if (abortControllerRef.current?.signal.aborted) {
-          return
-        }
-
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
-        
-        console.error('useDataLoader: Error loading data', errorMessage)
-
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         setError(errorMessage)
         setData(null)
-
-        // Cache the error
-        if (effectiveCacheKey) {
-          globalDataCache.set(effectiveCacheKey, {
-            data: null,
-            timestamp: Date.now(),
-            loading: false,
-            error: errorMessage
-          })
-        }
-
-        onError?.(errorMessage)
-
       } finally {
-        if (mountRef.current) {
-          loadingRef.current = false
-          setLoading(false)
-        }
-        abortControllerRef.current = null
+        setLoading(false)
       }
     }
 

@@ -66,9 +66,6 @@ export function decodeBase64Safely(base64String: string): Uint8Array {
     
     return bytes
   } catch (error) {
-    console.error('Base64 decode error:', error)
-    console.log('Base64 string length:', base64String.length)
-    console.log('Base64 string sample:', base64String.substring(0, 100))
     throw new Error('Invalid base64 data format')
   }
 }

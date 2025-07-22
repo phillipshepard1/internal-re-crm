@@ -55,7 +55,6 @@ export default function AdminPage() {
       setUsers(data.users || [])
     } catch (err) {
       setError('Failed to load admin data')
-      console.error('Error loading admin data:', err)
     } finally {
       setLoading(false)
     }
@@ -76,7 +75,6 @@ export default function AdminPage() {
       await updateUserRole(userId, newRole)
       await loadData() // Reload data
     } catch (err) {
-      console.error('Error updating user role:', err)
       setAlertModal({
         open: true,
         title: 'Error',
@@ -118,7 +116,6 @@ export default function AdminPage() {
         type: 'success'
       })
     } catch (err) {
-      console.error('Error deleting user:', err)
       setAlertModal({
         open: true,
         title: 'Error',

@@ -16,10 +16,8 @@ export async function testDatabaseConnection(): Promise<{ connected: boolean; er
       return { connected: false, error: error.message }
     }
     
-    console.log(`Database connection test: ${responseTime}ms`)
     return { connected: true }
   } catch (error) {
-    console.error('Database connection test failed:', error)
     return { connected: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
@@ -44,7 +42,7 @@ export async function getUserRole(userId: string): Promise<'admin' | 'agent'> {
       })
     
     if (upsertError) {
-      console.error('Error creating user:', upsertError)
+      // Error creating user
     }
     
     return 'agent'
@@ -67,7 +65,7 @@ export const assignUserRole = async (userId: string, email: string): Promise<'ag
     })
   
   if (error) {
-    console.error('Error assigning user role:', error)
+    // Error assigning user role
     throw error
   }
   
@@ -84,7 +82,7 @@ export const updateUserRole = async (userId: string, newRole: 'admin' | 'agent')
     .eq('id', userId)
   
   if (error) {
-    console.error('Error updating user role:', error)
+    // Error updating user role
     throw error
   }
 }
@@ -175,7 +173,7 @@ export async function deletePerson(id: string) {
     .eq('person_id', id)
   
   if (activitiesError) {
-    console.error('Error deleting activities:', activitiesError)
+    // Error deleting activities
     throw activitiesError
   }
 
@@ -185,7 +183,7 @@ export async function deletePerson(id: string) {
     .eq('person_id', id)
   
   if (notesError) {
-    console.error('Error deleting notes:', notesError)
+    // Error deleting notes
     throw notesError
   }
 
@@ -195,7 +193,7 @@ export async function deletePerson(id: string) {
     .eq('person_id', id)
   
   if (tasksError) {
-    console.error('Error deleting tasks:', tasksError)
+    // Error deleting tasks
     throw tasksError
   }
 
@@ -205,7 +203,7 @@ export async function deletePerson(id: string) {
     .eq('person_id', id)
   
   if (followUpsError) {
-    console.error('Error deleting follow-ups:', followUpsError)
+    // Error deleting follow-ups
     throw followUpsError
   }
 
@@ -215,7 +213,7 @@ export async function deletePerson(id: string) {
     .eq('person_id', id)
   
   if (filesError) {
-    console.error('Error deleting files:', filesError)
+    // Error deleting files
     throw filesError
   }
 
@@ -402,8 +400,7 @@ export async function updateFollowUp(id: string, updates: Partial<FollowUp>) {
     try {
       await createTaskFromFollowUp(data)
     } catch (taskError) {
-      console.error('Failed to create task from follow-up:', taskError)
-      // Don't fail the follow-up update if task creation fails
+      // Failed to create task from follow-up
     }
   }
   
@@ -726,7 +723,7 @@ export async function createTestLead(leadData: {
     }
     
   } catch (error) {
-    console.error('Error creating test lead:', error)
+    // Error creating test lead
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create test lead'
@@ -791,7 +788,7 @@ export async function getDashboardStats(): Promise<{
       totalTasks: tasks.length
     }
   } catch (error) {
-    console.error('Error getting dashboard stats:', error)
+    // Error getting dashboard stats
     return {
       totalPeople: 0,
       totalLeads: 0,
@@ -874,7 +871,7 @@ export async function getAdminDashboardStats(): Promise<{
       userStats
     }
   } catch (error) {
-    console.error('Error getting admin dashboard stats:', error)
+    // Error getting admin dashboard stats
     return {
       totalPeople: 0,
       totalLeads: 0,
@@ -1023,8 +1020,6 @@ export async function updateLeadStatus(leadId: string, status: 'staging' | 'assi
 }
 
 export async function getUsersForAssignment() {
-  console.log('Getting users for assignment...')
-  
   // First, let's see ALL users in the database
   const { data: allUsers, error: allUsersError } = await supabase
     .from('users')
@@ -1032,9 +1027,7 @@ export async function getUsersForAssignment() {
     .order('first_name', { ascending: true })
   
   if (allUsersError) {
-    console.error('Error getting all users:', allUsersError)
-  } else {
-    console.log('All users in database:', allUsers)
+    // Error getting all users
   }
   
   // Now get users for assignment (agents and admins)
@@ -1045,12 +1038,9 @@ export async function getUsersForAssignment() {
     .order('first_name', { ascending: true })
   
   if (error) {
-    console.error('Error getting users for assignment:', error)
+    // Error getting users for assignment
     throw error
   }
-  
-  console.log('Users for assignment found:', data)
-  console.log('Number of users found:', data?.length || 0)
   
   return data || []
 }

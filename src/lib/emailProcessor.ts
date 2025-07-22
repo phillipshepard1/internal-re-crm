@@ -41,7 +41,6 @@ export class EmailLeadProcessor {
         timestamp: new Date()
       }
     } catch (error) {
-      console.error('Error processing email:', error)
       return null
     }
   }
@@ -248,7 +247,6 @@ export class EmailLeadProcessor {
         .single()
 
       if (!adminUser) {
-        console.error('No admin user found for lead assignment')
         return null
       }
       
@@ -298,7 +296,6 @@ export class EmailLeadProcessor {
       return newPerson
       
     } catch (error) {
-      console.error('Error creating person from email lead:', error)
       return null
     }
   }
@@ -341,7 +338,6 @@ export class EmailLeadProcessor {
         .single()
 
       if (!adminUser) {
-        console.error('No admin user found for lead assignment')
         return null
       }
       
@@ -391,7 +387,6 @@ export class EmailLeadProcessor {
       return newPerson
       
     } catch (error) {
-      console.error('Error creating person from AI lead data:', error)
       return null
     }
   }

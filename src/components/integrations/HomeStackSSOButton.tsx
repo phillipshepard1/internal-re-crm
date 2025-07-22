@@ -33,30 +33,13 @@ export function HomeStackSSOButton({
 
   const checkSSOAvailability = async () => {
     try {
-      const response = await fetch('/api/homestack/sso/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      
-      const result = await response.json()
-      
-      // If SSO is configured and user exists in HomeStack, they can use it
-      if (result.success && result.ssoEnabled && result.ssoConfigured) {
-        // Try to generate a token to see if user exists in HomeStack
-        const tokenResponse = await fetch('/api/homestack/sso/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userEmail: user?.email })
-        })
-        
-        const tokenResult = await tokenResponse.json()
-        setCanUseSSO(tokenResult.success)
-      } else {
-        setCanUseSSO(false)
+      const response = await fetch('/api/homestack/sso/test')
+      if (response.ok) {
+        const data = await response.json()
+        setCanUseSSO(data.success)
       }
     } catch (error) {
-      console.error('Error checking SSO availability:', error)
-      setCanUseSSO(false)
+      // Error checking SSO availability
     }
   }
 

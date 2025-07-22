@@ -39,53 +39,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   
   // Debug component lifecycle
   useEffect(() => {
-    console.log('AuthContext: Provider mounted', {
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV,
-      isProduction: process.env.NODE_ENV === 'production'
-    })
-
-    // Test database connection with production-specific timeout
-    const testConnection = async () => {
-      try {
-        const timeoutMs = process.env.NODE_ENV === 'production' ? 3000 : 5000
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Database connection timeout')), timeoutMs)
-        })
-
-        const connectionPromise = supabase
-          .from('users')
-          .select('count')
-          .limit(1)
-
-        const { data, error } = await Promise.race([connectionPromise, timeoutPromise])
-        
-        if (error) {
-          console.error('AuthContext: Database connection test failed:', error)
-        } else {
-          console.log('AuthContext: Database connection test successful')
-        }
-      } catch (error) {
-        console.error('AuthContext: Database connection test error:', error)
-      }
-    }
-    
-    testConnection()
-
     // Set a timeout to prevent infinite loading (shorter in production)
     const timeoutMs = process.env.NODE_ENV === 'production' ? 8000 : 10000
     authTimeoutRef.current = setTimeout(() => {
       if (loadingRef.current) {
-        console.warn('AuthContext: Loading timeout reached, forcing completion', {
-          environment: process.env.NODE_ENV,
-          timeoutMs
-        })
         loadingRef.current = false
         setLoading(false)
         
         // If we have a user but no role, set a default role
         if (userRef.current && !userRoleRef.current) {
-          console.log('AuthContext: Setting default role due to timeout')
           userRoleRef.current = 'agent'
           setUserRole('agent')
         }
@@ -93,10 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, timeoutMs)
 
     return () => {
-      console.log('AuthContext: Provider unmounted', {
-        timestamp: new Date().toISOString()
-      })
-      
       // Clear any pending timeouts
       if (sessionValidationTimeoutRef.current) {
         clearTimeout(sessionValidationTimeoutRef.current)
@@ -123,7 +81,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const cacheValidMs = process.env.NODE_ENV === 'production' ? 5 * 60 * 1000 : 10 * 60 * 1000 // 5 min in prod, 10 min in dev
         
         if (cacheAge < cacheValidMs) {
-          console.log(`AuthContext: Using cached user role: ${cachedRole}`)
           return cachedRole
         } else {
           // Clear expired cache
@@ -135,10 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`AuthContext: Getting user role (attempt ${attempt}/${maxRetries})`, {
-          environment: process.env.NODE_ENV,
-          timeoutMs
-        })
         
         // Add timeout to prevent hanging (shorter in production)
         const timeoutPromise = new Promise<never>((_, reject) => {
@@ -154,7 +107,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data, error } = await Promise.race([rolePromise, timeoutPromise])
 
         if (error) {
-          console.error(`AuthContext: Error fetching user role (attempt ${attempt}):`, error)
           lastError = new Error(error.message)
           
           if (attempt === maxRetries) {
@@ -162,7 +114,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (typeof window !== 'undefined') {
               const fallbackRole = localStorage.getItem(`user_role_${userId}`)
               if (fallbackRole) {
-                console.log(`AuthContext: Using expired cached role as fallback: ${fallbackRole}`)
                 return fallbackRole
               }
             }
@@ -176,7 +127,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const role = data?.role || null
-        console.log(`AuthContext: Successfully got user role: ${role}`)
         
         // Cache the successful result
         if (typeof window !== 'undefined' && role) {
@@ -187,7 +137,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return role
 
       } catch (error) {
-        console.error(`AuthContext: Error fetching user role (attempt ${attempt}):`, error)
         lastError = error instanceof Error ? error : new Error('Unknown error')
         
         if (attempt === maxRetries) {
@@ -195,7 +144,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (typeof window !== 'undefined') {
             const fallbackRole = localStorage.getItem(`user_role_${userId}`)
             if (fallbackRole) {
-              console.log(`AuthContext: Using expired cached role as fallback: ${fallbackRole}`)
               return fallbackRole
             }
           }
@@ -208,7 +156,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    console.error('AuthContext: Failed to get user role after all retries:', lastError)
     return null
   }, [])
 
@@ -262,8 +209,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             userRoleRef.current = role
             setUserRole(role)
           } catch (error) {
-            console.error('AuthContext: Error getting user role:', error)
-            // Set default role if there's an error
             userRoleRef.current = 'agent'
             setUserRole('agent')
           }
@@ -285,7 +230,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
     } catch (error) {
-      console.error('AuthContext: Session validation failed:', error)
       
       // Clear user state on error
       userRef.current = null
@@ -329,8 +273,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               userRoleRef.current = role
               setUserRole(role)
             } catch (error) {
-              console.error('AuthContext: Auth listener - Error getting user role:', error)
-              // Set default role if there's an error
               userRoleRef.current = 'agent'
               setUserRole('agent')
             }
@@ -385,13 +327,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
-        console.error('AuthContext: Sign in error:', error)
         return { error: error.message }
       }
 
       return { error: null }
     } catch (error) {
-      console.error('AuthContext: Sign in error:', error)
       return { error: 'An unexpected error occurred' }
     }
   }, [])
@@ -417,14 +357,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
-        console.error('AuthContext: Google sign in error:', error)
         return { error: error.message }
       }
 
       // Let Supabase handle the redirect automatically
       return { error: null }
     } catch (error) {
-      console.error('AuthContext: Google sign in error:', error)
       return { error: error instanceof Error ? error.message : 'Failed to initiate Google sign in' }
     }
   }, [])
@@ -437,7 +375,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
-        console.error('AuthContext: Sign up error:', error)
         return { error: error.message }
       }
 
@@ -454,14 +391,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ])
 
         if (roleError) {
-          console.error('AuthContext: Role insertion error:', roleError)
           return { error: 'Failed to set user role' }
         }
       }
 
       return { error: null }
     } catch (error) {
-      console.error('AuthContext: Sign up error:', error)
       return { error: 'An unexpected error occurred' }
     }
   }, [])
@@ -577,7 +512,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!userRef.current?.id) return
     
     try {
-      console.log('AuthContext: Refreshing user role...')
       
       // Clear cached role to force fresh fetch
       if (typeof window !== 'undefined') {
@@ -590,9 +524,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userRoleRef.current = role
       setUserRole(role)
       
-      console.log('AuthContext: User role refreshed:', role)
     } catch (error) {
-      console.error('AuthContext: Error refreshing user role:', error)
+      // Error handling for role refresh
     }
   }, [getUserRole])
 

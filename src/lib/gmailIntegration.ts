@@ -63,7 +63,6 @@ export class GmailIntegration {
 
       return data
     } catch (error) {
-      console.error('Error getting user Gmail tokens:', error)
       return null
     }
   }
@@ -83,7 +82,7 @@ export class GmailIntegration {
         .eq('user_id', this.userId)
         .eq('is_active', true)
     } catch (error) {
-      console.error('Error updating access token:', error)
+      //
     }
   }
   
@@ -111,7 +110,6 @@ export class GmailIntegration {
       await this.refreshAccessToken(userTokens.refresh_token || '')
       return true
     } catch (error) {
-      console.error('Failed to initialize Gmail integration:', error)
       return false
     }
   }
@@ -142,7 +140,7 @@ export class GmailIntegration {
           .eq('user_id', this.userId)
           .eq('is_active', true)
       } catch (error) {
-        console.error('Error deactivating invalid tokens:', error)
+        //
       }
       
       throw new Error(`Failed to refresh token: ${response.statusText}. Gmail connection has been deactivated.`)
@@ -186,14 +184,12 @@ export class GmailIntegration {
           const person = await EmailLeadProcessor.createPersonFromLeadData(leadResult.lead_data)
           if (person) {
             processedCount++
-            console.log(`Processed lead: ${leadResult.lead_data.first_name} ${leadResult.lead_data.last_name} (${leadResult.lead_data.lead_source}) - Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%`)
           }
         }
       }
       
       return processedCount
     } catch (error) {
-      console.error('Error processing recent emails:', error)
       return 0
     }
   }
@@ -317,12 +313,6 @@ export class GmailIntegration {
       threadsUnread: parseInt(label.threadsUnread) || 0,
     }))
 
-    // Log the counts from Gmail API for debugging
-    console.log('Gmail API label counts:')
-    labels.forEach((label: { name: any; messagesTotal: any; messagesUnread: any }) => {
-      console.log(`${label.name}: Total=${label.messagesTotal}, Unread=${label.messagesUnread}`)
-    })
-
     return labels
   }
   
@@ -378,7 +368,6 @@ export class GmailIntegration {
         attachments: attachmentInfo.attachments,
       }
     } catch (error) {
-      console.error(`Error getting email details for ${messageId}:`, error)
       return null
     }
   }
@@ -399,7 +388,6 @@ export class GmailIntegration {
         try {
           return await this.getEmailDetails(messageId)
         } catch (error) {
-          console.error(`Error getting email details for ${messageId}:`, error)
           return null
         }
       })
@@ -523,7 +511,6 @@ export class GmailIntegration {
     try {
       return Buffer.from(encodedData, 'base64').toString('utf-8')
     } catch (error) {
-      console.error('Error decoding email body:', error)
       return ''
     }
   }
@@ -606,7 +593,6 @@ export class GmailIntegration {
       const data = await response.json()
       return true
     } catch (error) {
-      console.error('Error setting up push notifications:', error)
       return false
     }
   }
@@ -636,7 +622,6 @@ export class GmailIntegration {
       
       return true
     } catch (error) {
-      console.error('Error stopping push notifications:', error)
       return false
     }
   }
@@ -686,7 +671,6 @@ export class GmailIntegration {
 
       return true
     } catch (error) {
-      console.error('Error sending email:', error)
       throw error
     }
   }
@@ -767,7 +751,6 @@ export class GmailIntegration {
         size: data.size || 0
       }
     } catch (error) {
-      console.error(`Error downloading attachment ${attachmentId} from message ${messageId}:`, error)
       throw error
     }
   }
@@ -796,7 +779,6 @@ export class GmailIntegration {
 
       return revokeResponse.ok
     } catch (error) {
-      console.error('Error revoking Gmail access:', error)
       return false
     }
   }

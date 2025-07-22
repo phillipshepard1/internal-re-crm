@@ -38,8 +38,7 @@ export default function GmailConnectionPage() {
       const data = await response.json()
       setGmailStatus(data)
     } catch (error) {
-      console.error('Error checking Gmail status:', error)
-      toast.error('Failed to check Gmail status')
+      // Error checking Gmail status
     } finally {
       setLoading(false)
     }
@@ -78,7 +77,6 @@ export default function GmailConnectionPage() {
       window.location.href = data.authUrl
 
     } catch (error) {
-      console.error('Error connecting Gmail:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to connect Gmail')
     } finally {
       setConnecting(false)
@@ -121,7 +119,6 @@ export default function GmailConnectionPage() {
         throw new Error(data.message || 'Failed to disconnect Gmail')
       }
     } catch (error) {
-      console.error('Error disconnecting Gmail:', error)
       toast.error('Failed to Disconnect Gmail', {
         description: error instanceof Error ? error.message : 'There was an error disconnecting your Gmail account.',
         duration: 6000,

@@ -152,7 +152,6 @@ export default function LoginPage() {
                   const result = await signInWithGoogle()
                   
                   if (result.error) {
-                    console.error('Login page: OAuth error:', result.error)
                     setError(result.error)
                     setIsGoogleLoading(false)
                   } else {

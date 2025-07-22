@@ -32,30 +32,17 @@ export default function IntegrationsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const loadConfigurations = useCallback(async () => {
+  const loadConfigurations = async () => {
     try {
-      // Load HomeStack configuration from database
-      const homeStackResponse = await fetch('/api/admin/integrations/homestack')
-      if (homeStackResponse.ok) {
-        const homeStackData = await homeStackResponse.json()
-        if (homeStackData.config) {
-          setHomeStackConfig({
-            apiKey: homeStackData.config.api_key || '',
-            baseUrl: homeStackData.config.base_url || 'https://api.homestack.com',
-            webhookSecret: homeStackData.config.webhook_secret || '',
-            enabled: homeStackData.config.enabled || false,
-            // SSO configuration
-            ssoEnabled: homeStackData.config.sso_enabled || false,
-            ssoApiKey: homeStackData.config.sso_api_key || '',
-            ssoBaseUrl: homeStackData.config.sso_base_url || 'https://bkapi.homestack.com',
-            ssoBrokerUrl: homeStackData.config.sso_broker_url || 'https://broker.homestack.com'
-          })
-        }
+      const response = await fetch('/api/admin/integrations/homestack')
+      if (response.ok) {
+        const data = await response.json()
+        setHomeStackConfig(data)
       }
     } catch (error) {
-      console.error('Error loading configurations:', error)
+      // Error loading configurations
     }
-  }, [])
+  }
 
   useEffect(() => {
     // Load saved configurations
@@ -66,16 +53,6 @@ export default function IntegrationsPage() {
     try {
       setProcessing(true)
       setError('')
-      
-      console.log('🔧 Frontend - Saving HomeStack config:', {
-        apiKey: homeStackConfig.apiKey ? '***' : 'MISSING',
-        baseUrl: homeStackConfig.baseUrl,
-        enabled: homeStackConfig.enabled,
-        ssoEnabled: homeStackConfig.ssoEnabled,
-        ssoApiKey: homeStackConfig.ssoApiKey ? '***' : 'MISSING',
-        ssoBaseUrl: homeStackConfig.ssoBaseUrl,
-        ssoBrokerUrl: homeStackConfig.ssoBrokerUrl
-      })
       
       // Save to database via API
       const response = await fetch('/api/admin/integrations/homestack', {
@@ -95,7 +72,6 @@ export default function IntegrationsPage() {
         setError(result.error || 'Failed to save HomeStack configuration')
       }
     } catch (error) {
-      console.error('Error saving HomeStack config:', error)
       setError('Failed to save HomeStack configuration')
     } finally {
       setProcessing(false)
@@ -125,7 +101,6 @@ export default function IntegrationsPage() {
         setError(result.error || 'Failed to connect to HomeStack')
       }
     } catch (error) {
-      console.error('Error testing HomeStack connection:', error)
       setError('Failed to test HomeStack connection')
     } finally {
       setProcessing(false)
@@ -151,7 +126,6 @@ export default function IntegrationsPage() {
         setError(result.message || 'Failed to test HomeStack SSO')
       }
     } catch (error) {
-      console.error('Error testing HomeStack SSO:', error)
       setError('Failed to test HomeStack SSO')
     } finally {
       setProcessing(false)
@@ -189,7 +163,6 @@ export default function IntegrationsPage() {
         setError(result.error || 'Failed to test mobile webhook')
       }
     } catch (error) {
-      console.error('Error testing mobile webhook:', error)
       setError('Failed to test mobile webhook')
     } finally {
       setProcessing(false)
@@ -220,7 +193,6 @@ export default function IntegrationsPage() {
         setError(result.error || 'Failed to process HomeStack leads')
       }
     } catch (error) {
-      console.error('Error processing HomeStack leads:', error)
       setError('Failed to process HomeStack leads')
     } finally {
       setProcessing(false)
@@ -257,7 +229,6 @@ export default function IntegrationsPage() {
         setError(result.error || 'Failed to test webhook')
       }
     } catch (error) {
-      console.error('Error testing webhook:', error)
       setError('Failed to test webhook')
     } finally {
       setProcessing(false)

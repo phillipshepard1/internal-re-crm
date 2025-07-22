@@ -87,7 +87,6 @@ export class LeadDetectionService {
       }
       
     } catch (error) {
-      console.error('Error analyzing email:', error)
       return {
         is_lead: false,
         confidence_score: 0,
@@ -157,7 +156,6 @@ export class LeadDetectionService {
       }
       
     } catch (error) {
-      console.error('Error extracting lead data:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -438,7 +436,6 @@ export class LeadDetectionService {
       if (error) throw error
       return data || []
     } catch (error) {
-      console.error('Error fetching lead sources:', error)
       return []
     }
   }
@@ -457,7 +454,6 @@ export class LeadDetectionService {
       if (error) throw error
       return data || []
     } catch (error) {
-      console.error('Error fetching detection rules:', error)
       return []
     }
   }

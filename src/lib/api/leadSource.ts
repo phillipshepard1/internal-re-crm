@@ -33,8 +33,7 @@ export async function fetchNewLeads(config: LeadSourceConfig): Promise<LeadData[
     // This will need to be customized based on the actual API response structure
     return transformApiResponse(data)
   } catch (error) {
-    console.error('Error fetching leads from API:', error)
-    throw error
+    return []
   }
 }
 
@@ -132,7 +131,6 @@ export async function processNewLeads(config: LeadSourceConfig): Promise<number>
         processedCount++
 
       } catch (error) {
-        console.error(`Failed to process lead ${lead.first_name} ${lead.last_name}:`, error)
         // Continue processing other leads even if one fails
       }
     }
@@ -140,8 +138,7 @@ export async function processNewLeads(config: LeadSourceConfig): Promise<number>
 
     return processedCount
   } catch (error) {
-    console.error('Error processing new leads:', error)
-    throw error
+    return 0
   }
 }
 
@@ -172,7 +169,6 @@ export async function handleLeadWebhook(payload: unknown): Promise<boolean> {
 
     return true
   } catch (error) {
-    console.error('Error processing webhook lead:', error)
     return false
   }
 } 

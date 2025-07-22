@@ -16,32 +16,20 @@ export interface LeadData {
  */
 export async function getNextRoundRobinUser(): Promise<string | null> {
   try {
-    // Get active users in Round Robin, ordered by priority
     const { data, error } = await supabase
-      .from('round_robin_config')
-      .select('user_id, priority')
+      .from('users')
+      .select('id, email, role, is_active, round_robin_priority')
       .eq('is_active', true)
-      .order('priority', { ascending: true })
+      .eq('role', 'agent')
+      .order('round_robin_priority', { ascending: true })
       .limit(1)
 
     if (error) {
-      console.error('Error getting next Round Robin user:', error)
-      return null
+      throw error
     }
 
-    if (!data || data.length === 0) {
-  
-      return null
-    }
-
-    const nextUser = data[0]
-    
-    // Update the priority to move this user to the end of the queue
-    await updateRoundRobinPriority(nextUser.user_id)
-    
-    return nextUser.user_id
+    return data?.[0]?.id || null
   } catch (error) {
-    console.error('Error in getNextRoundRobinUser:', error)
     return null
   }
 }
@@ -80,7 +68,6 @@ export async function assignLeadToRoundRobin(leadData: LeadData): Promise<boolea
     const assignedUserId = await getNextRoundRobinUser()
     
     if (!assignedUserId) {
-      console.error('No user available in Round Robin queue')
       return false
     }
 
@@ -122,7 +109,6 @@ export class RoundRobinService {
       const nextUserId = await getNextRoundRobinUser()
       
       if (!nextUserId) {
-        console.warn('No active users found in Round Robin queue')
         return false
       }
       

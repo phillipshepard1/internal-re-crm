@@ -43,7 +43,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
-import { getStagingLeads, getAssignedLeads, getUsersForAssignment, assignLeadToUser, updateLeadStatus, getLeadStats } from '@/lib/database'
+import { getStagingLeads, getAssignedLeads, getUsersForAssignment, assignLeadToUser, updateLeadStatus, getLeadStats, createNote } from '@/lib/database'
 import type { Person } from '@/lib/supabase'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -119,6 +119,7 @@ interface Email {
 }
 
 interface Contact {
+  id: string
   name: string
   email: string
   phone: string
@@ -676,23 +677,10 @@ export default function InboxPage() {
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
-    if (query.trim()) {
-      console.log(`Searching for: "${query}"`)
-    }
   }
 
   const handleFilterChange = (filter: string) => {
     setCurrentFilter(filter)
-    const filterNames = {
-      all: 'All emails',
-      unread: 'Unread emails',
-      attachments: 'Emails with attachments'
-    }
-    toast.info('Filter Applied', {
-      description: `Showing ${filterNames[filter as keyof typeof filterNames]}`,
-      duration: 3000,
-    })
-    console.log(`Filter changed to: ${filter}`)
   }
 
   const filteredEmails = emails.filter(email => {
@@ -729,6 +717,7 @@ export default function InboxPage() {
     
     // Generate dynamic contact info from email
     const contact: Contact = {
+      id: '',
       name: displayName,
       email: emailAddress,
       phone: 'Not provided',
@@ -850,31 +839,29 @@ export default function InboxPage() {
     }
   }
 
-  const createNote = async () => {
+  const handleCreateNote = async () => {
     if (!noteContent.trim() || !selectedContact) return
-    
+
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // In a real implementation, this would save to the database
-      console.log('Creating note for contact:', selectedContact.name)
-      console.log('Note content:', noteContent)
-      
-      // Show success message
+      const noteData = {
+        person_id: selectedContact.id,
+        content: noteContent,
+        created_by: user?.id || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      await createNote(noteData)
+      setNoteContent('')
+      setShowNoteModal(false)
       toast.success('Note Created', {
-        description: `Note added to ${selectedContact.name}'s profile successfully.`,
+        description: 'Note has been added successfully',
         duration: 3000,
       })
-      
-      // Clear the note content
-      setNoteContent('')
-      
     } catch (error) {
-      console.error('Error creating note:', error)
       toast.error('Failed to Create Note', {
-        description: 'There was an error saving the note. Please try again.',
-        duration: 6000,
+        description: 'There was an error creating the note',
+        duration: 5000,
       })
     }
   }
@@ -1012,11 +999,6 @@ export default function InboxPage() {
       const uniqueLabels = importantLabels.filter((label, index, self) => 
         index === self.findIndex(l => l.name === label.name)
       )
-
-      console.log('=== Filtered Labels for Display ===')
-      uniqueLabels.forEach(label => {
-        console.log(`${label.name}: Total=${label.messagesTotal}, Unread=${label.messagesUnread}`)
-      })
 
       return uniqueLabels.map(label => ({
         id: label.id,
@@ -1472,7 +1454,6 @@ export default function InboxPage() {
                                 onClick={async () => {
                                   try {
                                     setPreviewLoading(true)
-                                    console.log('Starting preview for attachment:', attachment)
                                     
                                     const response = await fetch('/api/gmail/download-attachment', {
                                       method: 'POST',
@@ -1487,7 +1468,6 @@ export default function InboxPage() {
                                     })
 
                                     const data = await response.json()
-                                    console.log('Preview API response:', data)
 
                                     if (response.ok && data.success && data.attachment) {
                                       // Convert base64 to blob for better handling of large files
@@ -1498,8 +1478,6 @@ export default function InboxPage() {
                                         })
                                         const previewUrl = URL.createObjectURL(blob)
                                         
-                                        console.log('Created blob URL for preview:', data.attachment.mimeType)
-                                        
                                         // Show preview in modal
                                         setPreviewAttachment({
                                           filename: attachment.filename,
@@ -1508,15 +1486,12 @@ export default function InboxPage() {
                                         })
                                         setShowAttachmentPreview(true)
                                       } catch (decodeError) {
-                                        console.error('Preview decode error:', decodeError)
                                         throw new Error('Invalid attachment data format')
                                       }
                                     } else {
-                                      console.error('Preview failed - API response:', data)
                                       throw new Error(data.error || 'Failed to load preview')
                                     }
                                   } catch (error) {
-                                    console.error('Error opening preview:', error)
                                     toast.error('Preview Failed', {
                                       description: error instanceof Error ? error.message : 'Failed to open preview',
                                       duration: 5000,
@@ -1666,7 +1641,7 @@ export default function InboxPage() {
                 className="text-sm"
                 rows={2}
               />
-              <Button size="sm" onClick={createNote} disabled={!noteContent.trim()}>
+              <Button size="sm" onClick={handleCreateNote} disabled={!noteContent.trim()}>
                 Create Note
               </Button>
             </div>
@@ -2059,7 +2034,7 @@ export default function InboxPage() {
                       })
                     }}
                     onLoad={() => {
-                      console.log('Image preview loaded successfully')
+                      // Image preview loaded successfully
                     }}
                   />
                 ) : previewAttachment.mimeType === 'application/pdf' ? (
