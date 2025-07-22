@@ -425,10 +425,10 @@ export default function LeadsPage() {
         <TabsList>
           {/* Only admins can see staging leads */}
           {userRole === 'admin' && (
-            <TabsTrigger value="staging">Staging ({leadStats?.staging || 0})</TabsTrigger>
+            <TabsTrigger value="staging">Staging ({stagingLeads?.length || 0})</TabsTrigger>
           )}
           <TabsTrigger value="assigned">
-            {userRole === 'admin' ? 'Assigned Leads' : 'My Leads'} ({leadStats?.assigned || 0})
+            {userRole === 'admin' ? 'Assigned Leads' : 'My Leads'} ({assignedLeads?.length || 0})
           </TabsTrigger>
         </TabsList>
 

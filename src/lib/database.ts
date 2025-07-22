@@ -1079,8 +1079,5 @@ export async function getLeadStats(userId?: string, userRole?: string) {
     }
   })
   
-  // Calculate total active leads (assigned + contacted + qualified + lost)
-  stats.assigned = stats.assigned + stats.contacted + stats.qualified + stats.lost
-  
   return stats
 } 
