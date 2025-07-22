@@ -9,8 +9,8 @@ const globalDataCache = new Map<string, {
   error: string | null
 }>()
 
-// Cache cleanup interval (5 minutes)
-const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000
+// Cache cleanup interval (1 minute)
+const CACHE_CLEANUP_INTERVAL = 1 * 60 * 1000
 
 // Clean up old cache entries periodically
 setInterval(() => {
@@ -46,7 +46,7 @@ export function useDataLoader(
   const {
     enabled = true,
     cacheKey,
-    cacheTimeout = 2 * 60 * 1000, // 2 minutes default
+    cacheTimeout = 0, // No caching by default - always fetch fresh data
     dependencies = [],
     onSuccess,
     onError
@@ -73,6 +73,11 @@ export function useDataLoader(
   // Component lifecycle management
   useEffect(() => {
     mountRef.current = true
+    
+    // Clear cache on mount to ensure fresh data
+    if (effectiveCacheKey) {
+      globalDataCache.delete(effectiveCacheKey)
+    }
 
     return () => {
       mountRef.current = false
@@ -83,7 +88,7 @@ export function useDataLoader(
         abortControllerRef.current = null
       }
     }
-  }, [])
+  }, [effectiveCacheKey])
 
   // Update load function ref when it changes
   useEffect(() => {
