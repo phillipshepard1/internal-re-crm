@@ -15,6 +15,8 @@ import { AlertModal } from '@/components/ui/alert-modal'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ActivityDashboard } from '@/components/admin/ActivityDashboard'
+import { LeadStaging } from '@/components/admin/LeadStaging'
+import { FollowUpPlanManagement } from '@/components/admin/FollowUpPlanManagement'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -212,7 +214,7 @@ export default function AdminPage() {
         </div>
 
         {/* Admin Stats */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -241,21 +243,7 @@ export default function AdminPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Round Robin Users</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {/* roundRobinConfig.filter(c => c.is_active).length */}
-                N/A
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Active in lead distribution
-              </p>
-            </CardContent>
-          </Card>
+
 
 
         </div>
@@ -264,6 +252,8 @@ export default function AdminPage() {
           <TabsList>
             <TabsTrigger value="users">User Management</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
+            <TabsTrigger value="leads">Lead Staging</TabsTrigger>
+            <TabsTrigger value="plans">Follow-up Plans</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
           </TabsList>
           
@@ -446,6 +436,14 @@ export default function AdminPage() {
           
           <TabsContent value="activity" className="space-y-4">
             <ActivityDashboard users={users} />
+          </TabsContent>
+
+          <TabsContent value="leads" className="space-y-4">
+            <LeadStaging users={users} />
+          </TabsContent>
+
+          <TabsContent value="plans" className="space-y-4">
+            <FollowUpPlanManagement users={users} />
           </TabsContent>
         </Tabs>
       </div>

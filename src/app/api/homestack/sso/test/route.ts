@@ -12,6 +12,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   }
 })
 
+export async function GET(request: Request) {
+  return await POST(request)
+}
+
 export async function POST(request: Request) {
   try {
     // Get HomeStack configuration from database

@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Person, Note, Task, FollowUp, FollowUpWithPerson, Activity, File } from './supabase'
+import type { Person, Note, Task, FollowUp, FollowUpWithPerson, Activity, File, LeadTag, FollowUpPlanTemplate, FollowUpPlanStep } from './supabase'
 
 // Database connection test
 export async function testDatabaseConnection(): Promise<{ connected: boolean; error?: string }> {
@@ -152,7 +152,32 @@ export async function getPerson(id: string) {
 export async function getPersonById(id: string, userId?: string, userRole?: string) {
   let query = supabase
     .from('people')
-    .select('*')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      ),
+      lead_tag:lead_tag_id (
+        id,
+        name,
+        color,
+        description
+      ),
+      follow_up_plan:follow_up_plan_id (
+        id,
+        name,
+        description
+      ),
+      assigned_by_user:users!assigned_by (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
     .eq('id', id)
   
   // If user is an agent, only show assigned contacts
@@ -947,6 +972,12 @@ export async function getAssignedLeads(userId?: string, userRole?: string) {
         email,
         first_name,
         last_name
+      ),
+      assigned_by_user:users!assigned_by (
+        id,
+        email,
+        first_name,
+        last_name
       )
     `)
     .eq('client_type', 'lead')
@@ -963,12 +994,14 @@ export async function getAssignedLeads(userId?: string, userRole?: string) {
   return data || []
 }
 
-export async function assignLeadToUser(leadId: string, userId: string) {
+export async function assignLeadToUser(leadId: string, userId: string, assignedBy?: string) {
   const { data, error } = await supabase
     .from('people')
     .update({
       assigned_to: userId,
       lead_status: 'assigned',
+      assigned_by: assignedBy || userId, // Use assignedBy if provided, otherwise fallback to userId
+      assigned_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
     .eq('id', leadId)
@@ -1049,7 +1082,7 @@ export async function getLeadStats(userId?: string, userRole?: string) {
   let query = supabase
     .from('people')
     .select('lead_status, client_type')
-    .or('client_type.eq.lead,lead_status.eq.converted')
+    .eq('client_type', 'lead')
     .not('lead_status', 'is', null)
   
   // If user is an agent, only show their stats
@@ -1076,6 +1109,403 @@ export async function getLeadStats(userId?: string, userRole?: string) {
     if (item.lead_status && stats.hasOwnProperty(item.lead_status)) {
       stats[item.lead_status as keyof typeof stats]++
       stats.total++
+    }
+  })
+  
+  return stats
+} 
+
+// Lead Tag Management Functions
+export async function getLeadTags(): Promise<LeadTag[]> {
+  const { data, error } = await supabase
+    .from('lead_tags')
+    .select('*')
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+  
+  if (error) throw error
+  return data || []
+}
+
+export async function createLeadTag(tagData: Partial<LeadTag>): Promise<LeadTag> {
+  const { data, error } = await supabase
+    .from('lead_tags')
+    .insert([tagData])
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function updateLeadTag(id: string, updates: Partial<LeadTag>): Promise<LeadTag> {
+  const { data, error } = await supabase
+    .from('lead_tags')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function deleteLeadTag(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('lead_tags')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+// Follow-up Plan Template Management Functions
+export async function getFollowUpPlanTemplates(): Promise<(FollowUpPlanTemplate & { steps?: FollowUpPlanStep[] })[]> {
+  const { data, error } = await supabase
+    .from('follow_up_plan_templates')
+    .select(`
+      *,
+      steps:follow_up_plan_steps(*)
+    `)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+  
+  if (error) throw error
+  
+  // Sort steps by order for each plan
+  const plansWithSteps = (data || []).map((plan: any) => ({
+    ...plan,
+    steps: plan.steps ? plan.steps.sort((a: FollowUpPlanStep, b: FollowUpPlanStep) => a.step_order - b.step_order) : []
+  }))
+  
+  return plansWithSteps
+}
+
+export async function getFollowUpPlanTemplate(id: string): Promise<FollowUpPlanTemplate & { steps: FollowUpPlanStep[] }> {
+  const { data, error } = await supabase
+    .from('follow_up_plan_templates')
+    .select(`
+      *,
+      steps:follow_up_plan_steps(*)
+    `)
+    .eq('id', id)
+    .single()
+  
+  if (error) throw error
+  
+  // Sort steps by order
+  const sortedSteps = (data.steps || []).sort((a: FollowUpPlanStep, b: FollowUpPlanStep) => a.step_order - b.step_order)
+  
+  return {
+    ...data,
+    steps: sortedSteps
+  }
+}
+
+export async function createFollowUpPlanTemplate(planData: Partial<FollowUpPlanTemplate>): Promise<FollowUpPlanTemplate> {
+  const { data, error } = await supabase
+    .from('follow_up_plan_templates')
+    .insert([planData])
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function updateFollowUpPlanTemplate(id: string, updates: Partial<FollowUpPlanTemplate>): Promise<FollowUpPlanTemplate> {
+  const { data, error } = await supabase
+    .from('follow_up_plan_templates')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function deleteFollowUpPlanTemplate(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('follow_up_plan_templates')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+// Follow-up Plan Steps Management
+export async function createFollowUpPlanStep(stepData: Partial<FollowUpPlanStep>): Promise<FollowUpPlanStep> {
+  const { data, error } = await supabase
+    .from('follow_up_plan_steps')
+    .insert([stepData])
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function updateFollowUpPlanStep(id: string, updates: Partial<FollowUpPlanStep>): Promise<FollowUpPlanStep> {
+  const { data, error } = await supabase
+    .from('follow_up_plan_steps')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
+}
+
+export async function deleteFollowUpPlanStep(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('follow_up_plan_steps')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+// Apply follow-up plan to a lead
+export async function applyFollowUpPlanToLead(leadId: string, planId: string, assignedUserId: string): Promise<void> {
+  try {
+    // Get the plan with steps
+    const plan = await getFollowUpPlanTemplate(planId)
+    
+    // Update the lead with the plan
+    await updatePerson(leadId, {
+      follow_up_plan_id: planId,
+      assigned_at: new Date().toISOString()
+    })
+    
+    // Create follow-ups for each step in the plan
+    const assignmentDate = new Date()
+    
+    for (const step of plan.steps) {
+      const scheduledDate = new Date(assignmentDate)
+      scheduledDate.setDate(scheduledDate.getDate() + step.days_after_assignment)
+      
+      await createFollowUp({
+        person_id: leadId,
+        scheduled_date: scheduledDate.toISOString(),
+        status: 'pending',
+        type: step.type,
+        notes: step.notes || step.description,
+      })
+    }
+    
+    // Create activity log
+    await createActivity({
+      person_id: leadId,
+      type: 'follow_up',
+      description: `Follow-up plan "${plan.name}" applied with ${plan.steps.length} steps`,
+      created_by: assignedUserId,
+    })
+    
+  } catch (error) {
+    throw error
+  }
+}
+
+// Update lead tag for a specific lead
+export async function updateLeadTagForLead(leadId: string, tagId: string | null, userId: string): Promise<void> {
+  const updateData: any = {
+    lead_tag_id: tagId,
+    updated_at: new Date().toISOString()
+  }
+  
+  const { error } = await supabase
+    .from('people')
+    .update(updateData)
+    .eq('id', leadId)
+  
+  if (error) throw error
+  
+  // Get tag name for activity log
+  let tagName = 'None'
+  if (tagId) {
+    const { data: tag } = await supabase
+      .from('lead_tags')
+      .select('name')
+      .eq('id', tagId)
+      .single()
+    tagName = tag?.name || 'Unknown'
+  }
+  
+  // Create activity log
+  await createActivity({
+    person_id: leadId,
+    type: 'status_changed',
+    description: `Lead tag updated to: ${tagName}`,
+    created_by: userId,
+  })
+}
+
+// Enhanced lead functions with new fields
+export async function getLeadsWithTags(status?: 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost', userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      ),
+      lead_tag:lead_tag_id (
+        id,
+        name,
+        color,
+        description
+      ),
+      follow_up_plan:follow_up_plan_id (
+        id,
+        name,
+        description
+      ),
+      assigned_by_user:users!assigned_by (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('client_type', 'lead')
+    .order('created_at', { ascending: false })
+  
+  // Filter by lead status if provided
+  if (status) {
+    query = query.eq('lead_status', status)
+  }
+  
+  // For "My Leads" page, both agents and admins should only see leads assigned to them
+  // and exclude staging leads (they should only be in admin panel)
+  if (userId) {
+    query = query.eq('assigned_to', userId).neq('lead_status', 'staging')
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+// Get leads by tag
+export async function getLeadsByTag(tagName: string, userId?: string, userRole?: string): Promise<Person[]> {
+  // First, get the tag ID for the given tag name
+  const { data: tagData, error: tagError } = await supabase
+    .from('lead_tags')
+    .select('id')
+    .eq('name', tagName)
+    .eq('is_active', true)
+    .single()
+  
+  if (tagError || !tagData) {
+    return []
+  }
+  
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      ),
+      lead_tag:lead_tag_id (
+        id,
+        name,
+        color,
+        description
+      ),
+      follow_up_plan:follow_up_plan_id (
+        id,
+        name,
+        description
+      ),
+      assigned_by_user:users!assigned_by (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('client_type', 'lead')
+    .eq('lead_tag_id', tagData.id)
+    .order('created_at', { ascending: false })
+  
+  // For "My Leads" page, both agents and admins should only see leads assigned to them
+  // and exclude staging leads (they should only be in admin panel)
+  if (userId) {
+    query = query.eq('assigned_to', userId).neq('lead_status', 'staging')
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+// Enhanced lead stats with tags
+export async function getLeadStatsWithTags(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      lead_status,
+      client_type,
+      lead_tag:lead_tag_id (
+        id,
+        name,
+        color
+      )
+    `)
+    .eq('client_type', 'lead')
+    .not('lead_status', 'is', null)
+  
+  // For "My Leads" page, both agents and admins should only show their stats
+  // and exclude staging leads (they should only be in admin panel)
+  if (userId) {
+    query = query.eq('assigned_to', userId).neq('lead_status', 'staging')
+  }
+  
+  const { data, error } = await query
+  
+  if (error) throw error
+  
+  // Group by status and tags
+  const stats = {
+    staging: 0,
+    assigned: 0,
+    contacted: 0,
+    qualified: 0,
+    converted: 0,
+    lost: 0,
+    total: 0,
+    tags: {
+      hot: 0,
+      warm: 0,
+      cold: 0,
+      dead: 0,
+      untagged: 0
+    }
+  }
+  
+  data?.forEach((item: any) => {
+    if (item.lead_status && stats.hasOwnProperty(item.lead_status)) {
+      stats[item.lead_status as keyof typeof stats]++
+      stats.total++
+    }
+    
+    // Count by tags
+    if (item.lead_tag) {
+      const tagName = item.lead_tag.name.toLowerCase()
+      if (stats.tags.hasOwnProperty(tagName)) {
+        stats.tags[tagName as keyof typeof stats.tags]++
+      }
+    } else {
+      stats.tags.untagged++
     }
   })
   

@@ -16,6 +16,39 @@ export interface User {
   updated_at: string
 }
 
+export interface LeadTag {
+  id: string
+  name: string
+  color: string
+  description?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface FollowUpPlanTemplate {
+  id: string
+  name: string
+  description?: string | null
+  is_active: boolean
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FollowUpPlanStep {
+  id: string
+  plan_id: string
+  step_order: number
+  type: 'call' | 'email' | 'meeting' | 'task' | 'other'
+  title: string
+  description?: string | null
+  days_after_assignment: number
+  notes?: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Person {
   id: string
   first_name: string
@@ -47,12 +80,28 @@ export interface Person {
   lead_source_id?: string
   // Lead management
   lead_status?: 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost'
+  // New fields for lead tagging and follow-up plans
+  lead_tag_id?: string | null
+  follow_up_plan_id?: string | null
+  assigned_by?: string | null
+  assigned_at?: string | null
   // Properties fields
   looking_for?: string
   selling?: string
   closed?: string
   // Joined user data
   assigned_user?: {
+    id: string
+    email: string
+    first_name: string | null
+    last_name: string | null
+  }
+  // Joined tag data
+  lead_tag?: LeadTag
+  // Joined plan data
+  follow_up_plan?: FollowUpPlanTemplate
+  // Joined assigned by user data
+  assigned_by_user?: {
     id: string
     email: string
     first_name: string | null

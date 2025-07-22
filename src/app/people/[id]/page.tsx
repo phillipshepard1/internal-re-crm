@@ -3,16 +3,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare } from 'lucide-react'
-import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles } from '@/lib/database'
+import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare, Target } from 'lucide-react'
+import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles, getFollowUpPlanTemplates, applyFollowUpPlanToLead, getLeadTags, updateLeadTagForLead } from '@/lib/database'
 import { supabase } from '@/lib/supabase'
-import type { Person, Note, Task, Activity as ActivityType, File } from '@/lib/supabase'
+import type { Person, Note, Task, Activity as ActivityType, File, FollowUpPlanTemplate, LeadTag } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -80,6 +81,16 @@ export default function PersonDetailPage() {
     message: '',
     type: 'info'
   })
+  
+  // Follow-up plan management
+  const [followUpPlans, setFollowUpPlans] = useState<FollowUpPlanTemplate[]>([])
+  const [leadTags, setLeadTags] = useState<LeadTag[]>([])
+  const [showPlanDialog, setShowPlanDialog] = useState(false)
+  const [showTagDialog, setShowTagDialog] = useState(false)
+  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [selectedTagId, setSelectedTagId] = useState('')
+  const [updatingPlan, setUpdatingPlan] = useState(false)
+  const [updatingTag, setUpdatingTag] = useState(false)
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -115,12 +126,14 @@ export default function PersonDetailPage() {
         setLoading(true)
         setError('')
         const personId = params.id as string
-        const [personData, notesData, tasksData, activitiesData, filesData] = await Promise.all([
+        const [personData, notesData, tasksData, activitiesData, filesData, plansData, tagsData] = await Promise.all([
           getPersonById(personId, user.id, userRole || undefined),
           getNotes(personId),
           getTasks(personId, user.id, userRole || undefined),
           getActivities(personId),
           getFiles(personId),
+          getFollowUpPlanTemplates(),
+          getLeadTags()
         ])
         
         setPerson(personData)
@@ -128,6 +141,8 @@ export default function PersonDetailPage() {
         setTasks(tasksData)
         setActivities(activitiesData)
         setUploadedFiles(filesData)
+        setFollowUpPlans(plansData)
+        setLeadTags(tagsData)
 
         // Initialize form data
         setFormData({
@@ -439,6 +454,96 @@ export default function PersonDetailPage() {
       ...prev,
       phone: prev.phone.map((phone, i) => i === index ? value : phone)
     }))
+  }
+
+  // Follow-up plan management functions
+  const handleUpdateFollowUpPlan = async () => {
+    if (!person || !user?.id) return
+
+    try {
+      setUpdatingPlan(true)
+      
+      // Update the lead's follow-up plan
+      const updateData: any = {
+        follow_up_plan_id: selectedPlanId === 'none' ? null : selectedPlanId,
+        updated_at: new Date().toISOString()
+      }
+      
+      await updatePerson(person.id, updateData)
+      
+      // If a plan is selected, apply it to create follow-up tasks
+      if (selectedPlanId && selectedPlanId !== 'none') {
+        await applyFollowUpPlanToLead(person.id, selectedPlanId, user.id)
+      }
+      
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: 'Follow-up plan updated successfully',
+        type: 'success'
+      })
+      
+      setShowPlanDialog(false)
+      setSelectedPlanId('')
+      
+      // Reload person data to get updated plan
+      const updatedPerson = await getPersonById(person.id, user.id, userRole || undefined)
+      setPerson(updatedPerson)
+      
+    } catch (error) {
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to update follow-up plan',
+        type: 'error'
+      })
+    } finally {
+      setUpdatingPlan(false)
+    }
+  }
+
+  const handleUpdateLeadTag = async () => {
+    if (!person || !user?.id) return
+
+    try {
+      setUpdatingTag(true)
+      const tagId = selectedTagId === 'none' ? null : selectedTagId
+      await updateLeadTagForLead(person.id, tagId, user.id)
+      
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: 'Lead tag updated successfully',
+        type: 'success'
+      })
+      
+      setShowTagDialog(false)
+      setSelectedTagId('')
+      
+      // Reload person data to get updated tag
+      const updatedPerson = await getPersonById(person.id, user.id, userRole || undefined)
+      setPerson(updatedPerson)
+      
+    } catch (error) {
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to update lead tag',
+        type: 'error'
+      })
+    } finally {
+      setUpdatingTag(false)
+    }
+  }
+
+  const openPlanDialog = () => {
+    setSelectedPlanId(person?.follow_up_plan_id || 'none')
+    setShowPlanDialog(true)
+  }
+
+  const openTagDialog = () => {
+    setSelectedTagId(person?.lead_tag_id || '')
+    setShowTagDialog(true)
   }
 
   if (loading) {
@@ -1014,6 +1119,113 @@ export default function PersonDetailPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Lead Management - Only show for leads */}
+              {person.client_type === 'lead' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Target className="mr-2 h-5 w-5" />
+                      Lead Management
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Lead Status */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Status:</span>
+                      <Badge variant="outline">
+                        {person.lead_status || 'staging'}
+                      </Badge>
+                    </div>
+
+                    {/* Lead Tag */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Tag:</span>
+                      <div className="flex items-center space-x-2">
+                        {person.lead_tag ? (
+                          <Badge 
+                            variant="outline" 
+                            style={{ 
+                              borderColor: person.lead_tag.color, 
+                              color: person.lead_tag.color,
+                              backgroundColor: `${person.lead_tag.color}10`
+                            }}
+                          >
+                            {person.lead_tag.name}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">Untagged</Badge>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={openTagDialog}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Follow-up Plan */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Follow-up Plan:</span>
+                      <div className="flex items-center space-x-2">
+                        {person.follow_up_plan ? (
+                          <Badge variant="outline">
+                            {person.follow_up_plan.name}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">No plan</Badge>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={openPlanDialog}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Assigned Information */}
+                    {person.assigned_user && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Assigned To:</span>
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {person.assigned_user.first_name || person.assigned_user.email.split('@')[0]}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {person.assigned_by_user && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Assigned By:</span>
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {person.assigned_by_user.first_name || person.assigned_by_user.email.split('@')[0]}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {person.assigned_at && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Assigned Date:</span>
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">
+                            {new Date(person.assigned_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Activity Information */}
@@ -1488,6 +1700,107 @@ export default function PersonDetailPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Follow-up Plan Dialog */}
+      <Dialog open={showPlanDialog} onOpenChange={setShowPlanDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Follow-up Plan</DialogTitle>
+            <DialogDescription>
+              Change the follow-up plan for {person?.first_name} {person?.last_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="plan">Follow-up Plan</Label>
+              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a follow-up plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No plan</SelectItem>
+                  {followUpPlans.map((plan) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedPlanId && (
+                <p className="text-sm text-muted-foreground">
+                  This will replace the current plan and create new follow-up tasks
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowPlanDialog(false)}
+                disabled={updatingPlan}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleUpdateFollowUpPlan}
+                disabled={updatingPlan}
+              >
+                {updatingPlan ? 'Updating...' : 'Update Plan'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lead Tag Dialog */}
+      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Lead Tag</DialogTitle>
+            <DialogDescription>
+              Change the tag for {person?.first_name} {person?.last_name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tag">Lead Tag</Label>
+              <Select value={selectedTagId} onValueChange={setSelectedTagId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Untagged</SelectItem>
+                  {leadTags.map((tag) => (
+                    <SelectItem key={tag.id} value={tag.id}>
+                      <div className="flex items-center space-x-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: tag.color }}
+                        />
+                        <span>{tag.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowTagDialog(false)}
+                disabled={updatingTag}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleUpdateLeadTag}
+                disabled={updatingTag}
+              >
+                {updatingTag ? 'Updating...' : 'Update Tag'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       
       <AlertModal
         open={alertModal.open}
