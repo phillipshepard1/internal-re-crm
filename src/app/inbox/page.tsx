@@ -43,6 +43,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
+import { getStagingLeads, getAssignedLeads, getUsersForAssignment, assignLeadToUser, updateLeadStatus, getLeadStats } from '@/lib/database'
+import type { Person } from '@/lib/supabase'
+import { usePagination } from '@/hooks/usePagination'
+import { DataTablePagination } from '@/components/ui/data-table-pagination'
+import { useDataLoader } from '@/hooks/useDataLoader'
+import { decodeBase64Safely } from '@/lib/utils'
+import Link from 'next/link'
 
 
 // Simple HTML sanitization function to allow safe HTML content
@@ -58,10 +65,34 @@ const sanitizeHtml = (html: string): string => {
     .replace(/<a\s+href\s*=\s*["']?javascript:/gi, '<a href="#"')
     .replace(/<img\s+[^>]*src\s*=\s*["']?javascript:/gi, '<img src="#"')
   
-  // Add error handling for images
+  // Enhance button styling and functionality
+  sanitized = sanitized.replace(
+    /<button([^>]*)>/gi,
+    '<button$1 class="email-button" style="display: inline-block; padding: 8px 16px; margin: 4px; background-color: #007bff; color: white; border: none; border-radius: 4px; text-decoration: none; cursor: pointer; font-size: 14px; line-height: 1.4;">'
+  )
+  
+  // Enhance link styling to look like buttons when they have button-like text
+  sanitized = sanitized.replace(
+    /<a\s+([^>]*href\s*=\s*["']([^"']+)["'][^>]*)>([^<]*?(?:verify|confirm|sign|login|register|subscribe|download|view|open|click)[^<]*?)<\/a>/gi,
+    '<a $1 class="email-button-link" style="display: inline-block; padding: 8px 16px; margin: 4px; background-color: #007bff; color: white; border: none; border-radius: 4px; text-decoration: none; cursor: pointer; font-size: 14px; line-height: 1.4;">$3</a>'
+  )
+  
+  // Add error handling for images with better fallback
   sanitized = sanitized.replace(
     /<img([^>]*)>/gi,
-    '<img$1 onerror="this.style.display=\'none\'; console.warn(\'Failed to load email image:\', this.src);">'
+    '<img$1 onerror="this.style.display=\'none\'; console.warn(\'Failed to load email image:\', this.src);" onload="this.style.opacity=\'1\';" style="opacity: 0; transition: opacity 0.3s ease;">'
+  )
+  
+  // Enhance table styling for better email display
+  sanitized = sanitized.replace(
+    /<table([^>]*)>/gi,
+    '<table$1 style="border-collapse: collapse; width: 100%; margin: 8px 0; border: 1px solid #e0e0e0;">'
+  )
+  
+  // Enhance social media buttons and links
+  sanitized = sanitized.replace(
+    /<a\s+([^>]*href\s*=\s*["']([^"']*(?:facebook|twitter|x|linkedin|instagram|youtube|slack)[^"']*)["'][^>]*)>([^<]*?)<\/a>/gi,
+    '<a $1 class="social-media-link" style="display: inline-block; margin: 4px; padding: 8px 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; text-decoration: none; color: #495057; font-size: 12px;">$3</a>'
   )
   
   return sanitized
@@ -76,6 +107,12 @@ interface Email {
   date: string
   isRead: boolean
   hasAttachments: boolean
+  attachments?: Array<{
+    filename: string
+    mimeType: string
+    size: number
+    attachmentId: string
+  }>
   body: string
   to: string
   lastUpdated?: string
@@ -191,10 +228,38 @@ export default function InboxPage() {
     body: ''
   })
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [loadingEmailContent, setLoadingEmailContent] = useState(false)
+  const [showAttachmentPreview, setShowAttachmentPreview] = useState(false)
+  const [previewAttachment, setPreviewAttachment] = useState<{
+    filename: string
+    mimeType: string
+    previewUrl: string
+  } | null>(null)
+  const [emailThread, setEmailThread] = useState<Email[]>([])
+  const [showEmailThread, setShowEmailThread] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
     status: 'checking' as ConnectionStatusType,
     message: 'Checking connection...'
   })
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [textContent, setTextContent] = useState<string>('')
+
+  // Load text content when preview attachment changes
+  useEffect(() => {
+    if (previewAttachment && previewAttachment.mimeType.startsWith('text/')) {
+      fetch(previewAttachment.previewUrl)
+        .then(response => response.text())
+        .then(text => {
+          setTextContent(text)
+        })
+        .catch(error => {
+          console.error('Error loading text content:', error)
+          setTextContent('Error loading text content: ' + error.message)
+        })
+    } else {
+      setTextContent('')
+    }
+  }, [previewAttachment])
 
   // Component lifecycle management
 
@@ -344,6 +409,7 @@ export default function InboxPage() {
           }),
           isRead: gmailEmail.isRead ?? false,
           hasAttachments: gmailEmail.hasAttachments ?? false,
+          attachments: gmailEmail.attachments || [],
           body: gmailEmail.body || '',
           to: gmailEmail.to || 'me',
           lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
@@ -576,7 +642,8 @@ export default function InboxPage() {
             day: 'numeric' 
           }),
           isRead: false,
-          hasAttachments: false,
+          hasAttachments: gmailEmail.hasAttachments ?? false,
+          attachments: gmailEmail.attachments || [],
           body: gmailEmail.body || '',
           to: gmailEmail.to || 'me',
           lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
@@ -649,6 +716,7 @@ export default function InboxPage() {
   })
 
   const handleEmailSelect = (email: Email) => {
+    setLoadingEmailContent(true)
     setSelectedEmail(email)
     
     // Extract email address from the "from" field
@@ -671,6 +739,26 @@ export default function InboxPage() {
       lastUpdated: email.lastUpdated || new Date().toISOString()
     }
     setSelectedContact(contact)
+    
+    // Load email thread if available
+    loadEmailThread(email)
+    
+    // Simulate loading time for better UX
+    setTimeout(() => {
+      setLoadingEmailContent(false)
+    }, 300)
+  }
+
+  const loadEmailThread = async (email: Email) => {
+    // For now, we'll simulate thread loading
+    // In a real implementation, you'd fetch the thread from Gmail API
+    const threadEmails = emails.filter(e => 
+      e.subject === email.subject && 
+      e.from === email.from &&
+      e.id !== email.id
+    ).slice(0, 5) // Limit to 5 emails in thread
+    
+    setEmailThread(threadEmails)
   }
 
   const processEmailAsLead = async () => {
@@ -1272,20 +1360,253 @@ export default function InboxPage() {
           {/* Email Body */}
           <div className="flex-1 p-4 overflow-y-auto min-h-0">
             <div className="prose prose-sm max-w-none mb-4 p-4 border rounded-lg bg-background">
-              <div 
-                className="email-content text-sm max-w-full"
-                dangerouslySetInnerHTML={{ 
-                  __html: sanitizeHtml(selectedEmail.body) 
-                }}
-              />
+              {/* Email Subject */}
+              <div className="mb-4 pb-3 border-b">
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  {selectedEmail.subject}
+                </h3>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span>From: {selectedEmail.from}</span>
+                  <span>Date: {selectedEmail.date}</span>
+                </div>
+              </div>
               
-              {selectedEmail.hasAttachments && (
-                <div className="mt-4 p-3 border rounded-lg bg-muted/20">
-                  <div className="flex items-center gap-2">
+              {/* Email Content */}
+              {loadingEmailContent ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-muted-foreground">Loading email content...</p>
+                  </div>
+                </div>
+              ) : selectedEmail.body ? (
+                <div 
+                  className="email-content text-sm max-w-full"
+                  dangerouslySetInnerHTML={{ 
+                    __html: sanitizeHtml(selectedEmail.body) 
+                  }}
+                  onLoad={(e) => {
+                    // Handle any post-load processing for email content
+                    const target = e.target as HTMLElement
+                    if (target) {
+                      // Ensure all images are properly sized
+                      const images = target.querySelectorAll('img')
+                      images.forEach(img => {
+                        img.style.maxWidth = '100%'
+                        img.style.height = 'auto'
+                      })
+                      
+                      // Ensure all buttons are clickable
+                      const buttons = target.querySelectorAll('button, .email-button, .email-button-link')
+                      buttons.forEach(button => {
+                        button.addEventListener('click', (e) => {
+                          e.preventDefault()
+                          const href = (button as HTMLAnchorElement).href
+                          if (href && href !== '#') {
+                            window.open(href, '_blank', 'noopener,noreferrer')
+                          }
+                        })
+                      })
+                    }
+                  }}
+                />
+              ) : (
+                <div className="text-sm text-muted-foreground p-4 bg-muted/20 rounded-lg">
+                  <p>No email content available</p>
+                  <p className="text-xs mt-2">This email may contain only attachments or the content could not be loaded.</p>
+                </div>
+              )}
+              
+              {/* Attachments Section */}
+              {selectedEmail.hasAttachments && selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
+                <div className="mt-6 p-4 border rounded-lg bg-muted/20">
+                  <div className="flex items-center gap-2 mb-3">
                     <Paperclip className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm font-medium truncate">
-                      Estimate_1530_from_Pinnacle_NWA_Handyman_LLC.pdf (80 KB)
-                    </span>
+                    <span className="text-sm font-medium">Attachments ({selectedEmail.attachments.length})</span>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedEmail.attachments.map((attachment, index) => {
+                      const getFileIcon = (mimeType: string) => {
+                        if (mimeType.startsWith('image/')) return '🖼️'
+                        if (mimeType.startsWith('application/pdf')) return '📄'
+                        if (mimeType.startsWith('text/')) return '📝'
+                        if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊'
+                        if (mimeType.includes('word') || mimeType.includes('document')) return '📄'
+                        return '📎'
+                      }
+                      
+                      const formatFileSize = (bytes: number) => {
+                        if (bytes === 0) return '0 Bytes'
+                        const k = 1024
+                        const sizes = ['Bytes', 'KB', 'MB', 'GB']
+                        const i = Math.floor(Math.log(bytes) / Math.log(k))
+                        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+                      }
+                      
+                      return (
+                        <div key={index} className="flex items-center justify-between p-2 bg-background rounded border">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-muted rounded flex items-center justify-center text-sm">
+                              {getFileIcon(attachment.mimeType)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium truncate max-w-[200px]">
+                                {attachment.filename}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(attachment.size)} • {attachment.mimeType}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            {/* Show preview button for supported file types under 10MB */}
+                            {(attachment.mimeType.startsWith('image/') || 
+                              attachment.mimeType === 'application/pdf' || 
+                              attachment.mimeType.startsWith('text/')) && 
+                              attachment.size < 10 * 1024 * 1024 && ( // 10MB limit for preview
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-7"
+                                disabled={previewLoading}
+                                onClick={async () => {
+                                  try {
+                                    setPreviewLoading(true)
+                                    console.log('Starting preview for attachment:', attachment)
+                                    
+                                    const response = await fetch('/api/gmail/download-attachment', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                      },
+                                      body: JSON.stringify({
+                                        userId: user?.id,
+                                        messageId: selectedEmail.id,
+                                        attachmentId: attachment.attachmentId
+                                      })
+                                    })
+
+                                    const data = await response.json()
+                                    console.log('Preview API response:', data)
+
+                                    if (response.ok && data.success && data.attachment) {
+                                      // Convert base64 to blob for better handling of large files
+                                      try {
+                                        const bytes = decodeBase64Safely(data.attachment.data)
+                                        const blob = new Blob([bytes], { 
+                                          type: data.attachment.mimeType 
+                                        })
+                                        const previewUrl = URL.createObjectURL(blob)
+                                        
+                                        console.log('Created blob URL for preview:', data.attachment.mimeType)
+                                        
+                                        // Show preview in modal
+                                        setPreviewAttachment({
+                                          filename: attachment.filename,
+                                          mimeType: attachment.mimeType,
+                                          previewUrl: previewUrl
+                                        })
+                                        setShowAttachmentPreview(true)
+                                      } catch (decodeError) {
+                                        console.error('Preview decode error:', decodeError)
+                                        throw new Error('Invalid attachment data format')
+                                      }
+                                    } else {
+                                      console.error('Preview failed - API response:', data)
+                                      throw new Error(data.error || 'Failed to load preview')
+                                    }
+                                  } catch (error) {
+                                    console.error('Error opening preview:', error)
+                                    toast.error('Preview Failed', {
+                                      description: error instanceof Error ? error.message : 'Failed to open preview',
+                                      duration: 5000,
+                                    })
+                                  } finally {
+                                    setPreviewLoading(false)
+                                  }
+                                }}
+                              >
+                                {previewLoading ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current mr-1"></div>
+                                    Loading...
+                                  </>
+                                ) : (
+                                  'Preview'
+                                )}
+                              </Button>
+                            )}
+                            {/* Show message for files that can't be previewed */}
+                            {((attachment.mimeType.startsWith('image/') || 
+                              attachment.mimeType === 'application/pdf' || 
+                              attachment.mimeType.startsWith('text/')) && 
+                              attachment.size >= 10 * 1024 * 1024) && (
+                              <span className="text-xs text-muted-foreground self-center">
+                                (Preview not available for files over 10MB)
+                              </span>
+                            )}
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7"
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch('/api/gmail/download-attachment', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                      userId: user?.id,
+                                      messageId: selectedEmail.id,
+                                      attachmentId: attachment.attachmentId
+                                    })
+                                  })
+
+                                  const data = await response.json()
+
+                                  if (response.ok && data.success) {
+                                    try {
+                                      const bytes = decodeBase64Safely(data.attachment.data)
+                                      const blob = new Blob([bytes], { 
+                                        type: data.attachment.mimeType 
+                                      })
+                                      const url = URL.createObjectURL(blob)
+                                      
+                                      const a = document.createElement('a')
+                                      a.href = url
+                                      a.download = attachment.filename
+                                      document.body.appendChild(a)
+                                      a.click()
+                                      document.body.removeChild(a)
+                                      URL.revokeObjectURL(url)
+                                      
+                                      toast.success('Download Started', {
+                                        description: `${attachment.filename} is being downloaded`,
+                                        duration: 3000,
+                                      })
+                                    } catch (decodeError) {
+                                      console.error('Download decode error:', decodeError)
+                                      throw new Error('Invalid attachment data format for download')
+                                    }
+                                  } else {
+                                    throw new Error(data.error || 'Failed to download attachment')
+                                  }
+                                } catch (error) {
+                                  console.error('Error downloading attachment:', error)
+                                  toast.error('Download Failed', {
+                                    description: error instanceof Error ? error.message : 'Failed to download attachment',
+                                    duration: 5000,
+                                  })
+                                }
+                              }}
+                            >
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -1305,6 +1626,17 @@ export default function InboxPage() {
                 <Forward className="h-3 w-3 mr-1" />
                 Forward
               </Button>
+              {emailThread.length > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8"
+                  onClick={() => setShowEmailThread(true)}
+                >
+                  <MessageSquare className="h-3 w-3 mr-1" />
+                  Thread ({emailThread.length})
+                </Button>
+              )}
               <Button 
                 variant="default" 
                 size="sm" 
@@ -1623,6 +1955,174 @@ export default function InboxPage() {
                 'Send Email'
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Thread Modal */}
+      <Dialog open={showEmailThread} onOpenChange={setShowEmailThread}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>Email Thread</DialogTitle>
+            <DialogDescription>
+              {selectedEmail?.subject} - {emailThread.length} related emails
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="space-y-4">
+              {/* Current email */}
+              {selectedEmail && (
+                <div className="p-4 border rounded-lg bg-primary/5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-primary">Current Email</span>
+                    <span className="text-xs text-muted-foreground">{selectedEmail.date}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">From: {selectedEmail.from}</p>
+                  <p className="text-sm">{selectedEmail.preview}</p>
+                </div>
+              )}
+              
+              {/* Thread emails */}
+              {emailThread.map((email, index) => (
+                <div key={email.id} className="p-4 border rounded-lg bg-muted/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Thread Email {index + 1}</span>
+                    <span className="text-xs text-muted-foreground">{email.date}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">From: {email.from}</p>
+                  <p className="text-sm">{email.preview}</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-2"
+                    onClick={() => {
+                      handleEmailSelect(email)
+                      setShowEmailThread(false)
+                    }}
+                  >
+                    View Email
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <DialogFooter className="flex-shrink-0 mt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowEmailThread(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attachment Preview Modal */}
+      <Dialog open={showAttachmentPreview} onOpenChange={(open) => {
+        setShowAttachmentPreview(open)
+        if (!open && previewAttachment) {
+          // Clean up blob URL to prevent memory leaks
+          URL.revokeObjectURL(previewAttachment.previewUrl)
+          setPreviewAttachment(null)
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>Preview: {previewAttachment?.filename}</DialogTitle>
+            <DialogDescription>
+              {previewAttachment?.mimeType}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {previewLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-sm text-muted-foreground">Loading preview...</p>
+                </div>
+              </div>
+            ) : previewAttachment ? (
+              <div className="flex items-center justify-center p-4">
+                {previewAttachment.mimeType.startsWith('image/') ? (
+                  <img 
+                    src={previewAttachment.previewUrl} 
+                    alt={previewAttachment.filename}
+                    className="max-w-full max-h-full object-contain"
+                    onError={(e) => {
+                      console.error('Failed to load image preview')
+                      toast.error('Image Preview Failed', {
+                        description: 'Could not load image preview',
+                        duration: 3000,
+                      })
+                    }}
+                    onLoad={() => {
+                      console.log('Image preview loaded successfully')
+                    }}
+                  />
+                ) : previewAttachment.mimeType === 'application/pdf' ? (
+                  <iframe
+                    src={previewAttachment.previewUrl}
+                    className="w-full h-[600px] border rounded"
+                    title={previewAttachment.filename}
+                    onError={(e) => {
+                      console.error('Failed to load PDF preview')
+                      toast.error('PDF Preview Failed', {
+                        description: 'Could not load PDF preview',
+                        duration: 3000,
+                      })
+                    }}
+                  />
+                ) : previewAttachment.mimeType.startsWith('text/') ? (
+                  <div className="w-full max-h-[600px] overflow-auto">
+                    <pre className="text-sm p-4 bg-muted rounded border">
+                      <code>{textContent || 'Loading text content...'}</code>
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      Preview not available for this file type
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      File type: {previewAttachment.mimeType}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+          
+          <DialogFooter className="flex-shrink-0 mt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowAttachmentPreview(false)}
+            >
+              Close
+            </Button>
+            {previewAttachment && (
+              <Button 
+                onClick={() => {
+                  // Download the file from the preview
+                  const a = document.createElement('a')
+                  a.href = previewAttachment.previewUrl
+                  a.download = previewAttachment.filename
+                  document.body.appendChild(a)
+                  a.click()
+                  document.body.removeChild(a)
+                  
+                  toast.success('File Downloaded', {
+                    description: `${previewAttachment.filename} has been downloaded.`,
+                    duration: 3000,
+                  })
+                }}
+              >
+                Download
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -359,8 +359,8 @@ export class GmailIntegration {
       // Check if email is read (has UNREAD label)
       const isRead = !data.labelIds?.includes('UNREAD')
       
-      // Check for attachments
-      const hasAttachments = this.hasAttachments(data.payload)
+      // Check for attachments and get attachment details
+      const attachmentInfo = this.hasAttachments(data.payload)
       
       // Get email body
       const body = this.extractEmailBody(data.payload)
@@ -374,7 +374,8 @@ export class GmailIntegration {
         snippet: data.snippet,
         internalDate: data.internalDate,
         isRead,
-        hasAttachments,
+        hasAttachments: attachmentInfo.hasAttachments,
+        attachments: attachmentInfo.attachments,
       }
     } catch (error) {
       console.error(`Error getting email details for ${messageId}:`, error)
@@ -416,23 +417,35 @@ export class GmailIntegration {
   }
   
   /**
-   * Check if email has attachments
+   * Check if email has attachments and extract attachment information
    */
-  private hasAttachments(payload: Record<string, unknown> | null): boolean {
-    if (!payload) return false
+  private hasAttachments(payload: Record<string, unknown> | null): { hasAttachments: boolean; attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> } {
+    if (!payload) return { hasAttachments: false, attachments: [] }
+    
+    const attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> = []
     
     // Check if message has parts (multipart)
     if (payload.parts && Array.isArray(payload.parts)) {
       for (const part of payload.parts as Record<string, unknown>[]) {
         // Check if part is an attachment
         if (part.filename && part.filename !== '') {
-          return true
+          attachments.push({
+            filename: part.filename as string,
+            mimeType: part.mimeType as string || 'application/octet-stream',
+            size: (part.body as Record<string, unknown>)?.size as number || 0,
+            attachmentId: (part.body as Record<string, unknown>)?.attachmentId as string || ''
+          })
         }
         // Check if part has sub-parts with attachments
         if (part.parts && Array.isArray(part.parts)) {
           for (const subPart of part.parts as Record<string, unknown>[]) {
             if (subPart.filename && subPart.filename !== '') {
-              return true
+              attachments.push({
+                filename: subPart.filename as string,
+                mimeType: subPart.mimeType as string || 'application/octet-stream',
+                size: (subPart.body as Record<string, unknown>)?.size as number || 0,
+                attachmentId: (subPart.body as Record<string, unknown>)?.attachmentId as string || ''
+              })
             }
           }
         }
@@ -441,10 +454,18 @@ export class GmailIntegration {
     
     // Check if single part message has attachment
     if (payload.filename && payload.filename !== '') {
-      return true
+      attachments.push({
+        filename: payload.filename as string,
+        mimeType: payload.mimeType as string || 'application/octet-stream',
+        size: (payload.body as Record<string, unknown>)?.size as number || 0,
+        attachmentId: (payload.body as Record<string, unknown>)?.attachmentId as string || ''
+      })
     }
     
-    return false
+    return {
+      hasAttachments: attachments.length > 0,
+      attachments
+    }
   }
 
   /**
@@ -709,6 +730,46 @@ export class GmailIntegration {
 
     // Combine headers and body
     return `${headers.join('\r\n')}\r\n\r\n${body}`
+  }
+
+  /**
+   * Download attachment from Gmail
+   */
+  async downloadAttachment(messageId: string, attachmentId: string): Promise<{ data: string; mimeType: string; filename: string; size: number }> {
+    try {
+      if (!this.accessToken) {
+        throw new Error('No access token available')
+      }
+
+      const response = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+          },
+        }
+      )
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download attachment: ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      
+      // For binary files, we need to return the base64 data directly
+      // The Gmail API returns base64 encoded data that we can use directly
+      const attachmentData = data.data || ''
+      
+      return {
+        data: attachmentData, // Return base64 data directly for proper binary handling
+        mimeType: data.mimeType || 'application/octet-stream',
+        filename: data.filename || 'attachment',
+        size: data.size || 0
+      }
+    } catch (error) {
+      console.error(`Error downloading attachment ${attachmentId} from message ${messageId}:`, error)
+      throw error
+    }
   }
 
   /**
