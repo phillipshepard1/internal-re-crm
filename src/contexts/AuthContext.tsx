@@ -34,12 +34,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadingRef = useRef(true)
   const sessionValidationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastValidationRef = useRef(0)
+  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Debug component lifecycle
   useEffect(() => {
     console.log('AuthContext: Provider mounted', {
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      isProduction: process.env.NODE_ENV === 'production'
     })
+
+    // Test database connection with production-specific timeout
+    const testConnection = async () => {
+      try {
+        const timeoutMs = process.env.NODE_ENV === 'production' ? 3000 : 5000
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Database connection timeout')), timeoutMs)
+        })
+
+        const connectionPromise = supabase
+          .from('users')
+          .select('count')
+          .limit(1)
+
+        const { data, error } = await Promise.race([connectionPromise, timeoutPromise])
+        
+        if (error) {
+          console.error('AuthContext: Database connection test failed:', error)
+        } else {
+          console.log('AuthContext: Database connection test successful')
+        }
+      } catch (error) {
+        console.error('AuthContext: Database connection test error:', error)
+      }
+    }
+    
+    testConnection()
+
+    // Set a timeout to prevent infinite loading (shorter in production)
+    const timeoutMs = process.env.NODE_ENV === 'production' ? 8000 : 10000
+    authTimeoutRef.current = setTimeout(() => {
+      if (loadingRef.current) {
+        console.warn('AuthContext: Loading timeout reached, forcing completion', {
+          environment: process.env.NODE_ENV,
+          timeoutMs
+        })
+        loadingRef.current = false
+        setLoading(false)
+        
+        // If we have a user but no role, set a default role
+        if (userRef.current && !userRoleRef.current) {
+          console.log('AuthContext: Setting default role due to timeout')
+          userRoleRef.current = 'agent'
+          setUserRole('agent')
+        }
+      }
+    }, timeoutMs)
 
     return () => {
       console.log('AuthContext: Provider unmounted', {
@@ -50,28 +100,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (sessionValidationTimeoutRef.current) {
         clearTimeout(sessionValidationTimeoutRef.current)
       }
+      if (authTimeoutRef.current) {
+        clearTimeout(authTimeoutRef.current)
+      }
     }
   }, [])
 
   // Get user role from database
   const getUserRole = useCallback(async (userId: string): Promise<string | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', userId)
-        .single()
+    const maxRetries = process.env.NODE_ENV === 'production' ? 2 : 3
+    const timeoutMs = process.env.NODE_ENV === 'production' ? 3000 : 5000
+    let lastError: Error | null = null
 
-      if (error) {
-        console.error('Error fetching user role:', error)
-        return null
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`AuthContext: Getting user role (attempt ${attempt}/${maxRetries})`, {
+          environment: process.env.NODE_ENV,
+          timeoutMs
+        })
+        
+        // Add timeout to prevent hanging (shorter in production)
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Database timeout')), timeoutMs)
+        })
+
+        const rolePromise = supabase
+          .from('users')
+          .select('role')
+          .eq('id', userId)
+          .single()
+
+        const { data, error } = await Promise.race([rolePromise, timeoutPromise])
+
+        if (error) {
+          console.error(`AuthContext: Error fetching user role (attempt ${attempt}):`, error)
+          lastError = new Error(error.message)
+          
+          if (attempt === maxRetries) {
+            return null
+          }
+          
+          // Wait before retrying (shorter delay in production)
+          const delayMs = process.env.NODE_ENV === 'production' ? 500 * attempt : 1000 * attempt
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+          continue
+        }
+
+        console.log(`AuthContext: Successfully got user role: ${data?.role}`)
+        return data?.role || null
+
+      } catch (error) {
+        console.error(`AuthContext: Error fetching user role (attempt ${attempt}):`, error)
+        lastError = error instanceof Error ? error : new Error('Unknown error')
+        
+        if (attempt === maxRetries) {
+          return null
+        }
+        
+        // Wait before retrying (shorter delay in production)
+        const delayMs = process.env.NODE_ENV === 'production' ? 500 * attempt : 1000 * attempt
+        await new Promise(resolve => setTimeout(resolve, delayMs))
       }
-
-      return data?.role || null
-    } catch (error) {
-      console.error('Error fetching user role:', error)
-      return null
     }
+
+    console.error('AuthContext: Failed to get user role after all retries:', lastError)
+    return null
   }, [])
 
   // Validate session and update state
@@ -99,6 +192,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (loadingRef.current) {
           loadingRef.current = false
           setLoading(false)
+          // Clear the auth timeout since we're done loading
+          if (authTimeoutRef.current) {
+            clearTimeout(authTimeoutRef.current)
+            authTimeoutRef.current = null
+          }
         }
         return
       }
@@ -134,6 +232,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (loadingRef.current) {
         loadingRef.current = false
         setLoading(false)
+        // Clear the auth timeout since we're done loading
+        if (authTimeoutRef.current) {
+          clearTimeout(authTimeoutRef.current)
+          authTimeoutRef.current = null
+        }
       }
 
     } catch (error) {
@@ -148,6 +251,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (loadingRef.current) {
         loadingRef.current = false
         setLoading(false)
+        // Clear the auth timeout since we're done loading
+        if (authTimeoutRef.current) {
+          clearTimeout(authTimeoutRef.current)
+          authTimeoutRef.current = null
+        }
       }
     }
   }, [getUserRole])
@@ -191,6 +299,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (loadingRef.current) {
           loadingRef.current = false
           setLoading(false)
+          // Clear the auth timeout since we're done loading
+          if (authTimeoutRef.current) {
+            clearTimeout(authTimeoutRef.current)
+            authTimeoutRef.current = null
+          }
         }
       }
     )

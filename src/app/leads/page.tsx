@@ -48,6 +48,17 @@ export default function LeadsPage() {
   const [openStatusDialog, setOpenStatusDialog] = useState<string | null>(null)
   const itemsPerPage = 10
 
+  // Define loadStats function before it's used
+  const loadStats = async () => {
+    try {
+      const stats = await getLeadStats(user?.id, user?.role)
+      console.log('Lead stats loaded:', stats)
+      setLeadStats(stats)
+    } catch (error) {
+      console.error('Error loading stats:', error)
+    }
+  }
+
   // Data loaders - these must be called before any conditional returns
   const {
     data: stagingLeads,
@@ -209,16 +220,6 @@ export default function LeadsPage() {
       alert(`Users table status: ${JSON.stringify(result, null, 2)}`)
     } catch (error) {
       console.error('Error checking users table:', error)
-    }
-  }
-
-  const loadStats = async () => {
-    try {
-      const stats = await getLeadStats(user?.id, user?.role)
-      console.log('Lead stats loaded:', stats)
-      setLeadStats(stats)
-    } catch (error) {
-      console.error('Error loading stats:', error)
     }
   }
 

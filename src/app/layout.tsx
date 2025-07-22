@@ -16,7 +16,7 @@ const inter = Inter({ subsets: ['latin'] })
 function AppContent({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
-  const isPublicPage = ['/login', '/privacy-policy', '/terms-of-service'].includes(pathname)
+  const isPublicPage = ['/login', '/privacy-policy', '/terms-of-service', '/debug'].includes(pathname)
 
   return (
     <ErrorBoundary>
