@@ -13,7 +13,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export default function DebugPage() {
-  const { user, userRole, loading } = useAuth()
+  const { user, userRole, loading, refreshUserRole } = useAuth()
   const [dbStatus, setDbStatus] = useState<{ connected: boolean; error?: string } | null>(null)
   const [sessionInfo, setSessionInfo] = useState<any>(null)
   const [testResults, setTestResults] = useState<string[]>([])
@@ -49,6 +49,47 @@ export default function DebugPage() {
     localStorage.clear()
     sessionStorage.clear()
     addTestResult('Storage cleared')
+  }
+
+  const testRoleCache = () => {
+    addTestResult('Testing role cache...')
+    if (user?.id) {
+      const cachedRole = localStorage.getItem(`user_role_${user.id}`)
+      const cachedTimestamp = localStorage.getItem(`user_role_timestamp_${user.id}`)
+      
+      if (cachedRole && cachedTimestamp) {
+        const cacheAge = Date.now() - parseInt(cachedTimestamp)
+        const cacheValidMs = process.env.NODE_ENV === 'production' ? 5 * 60 * 1000 : 10 * 60 * 1000
+        const isValid = cacheAge < cacheValidMs
+        
+        addTestResult(`Role cache found: ${cachedRole} (age: ${Math.round(cacheAge/1000)}s, valid: ${isValid})`)
+      } else {
+        addTestResult('No role cache found')
+      }
+    } else {
+      addTestResult('No user ID available for cache test')
+    }
+  }
+
+  const clearRoleCache = () => {
+    addTestResult('Clearing role cache...')
+    if (user?.id) {
+      localStorage.removeItem(`user_role_${user.id}`)
+      localStorage.removeItem(`user_role_timestamp_${user.id}`)
+      addTestResult('Role cache cleared')
+    } else {
+      addTestResult('No user ID available for cache clear')
+    }
+  }
+
+  const refreshRole = async () => {
+    addTestResult('Refreshing user role...')
+    try {
+      await refreshUserRole()
+      addTestResult('User role refreshed successfully')
+    } catch (error) {
+      addTestResult(`Error refreshing role: ${error}`)
+    }
   }
 
   useEffect(() => {
@@ -115,8 +156,17 @@ export default function DebugPage() {
             <Button onClick={testSession} variant="outline" className="w-full">
               Test Session
             </Button>
+            <Button onClick={testRoleCache} variant="outline" className="w-full">
+              Test Role Cache
+            </Button>
+            <Button onClick={clearRoleCache} variant="outline" className="w-full">
+              Clear Role Cache
+            </Button>
             <Button onClick={clearStorage} variant="outline" className="w-full">
               Clear Storage
+            </Button>
+            <Button onClick={refreshRole} variant="outline" className="w-full">
+              Refresh Role
             </Button>
           </CardContent>
         </Card>

@@ -19,6 +19,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, role: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshSession: () => Promise<void>
+  refreshUserRole: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -106,11 +107,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Get user role from database
+  // Get user role from database with caching
   const getUserRole = useCallback(async (userId: string): Promise<string | null> => {
     const maxRetries = process.env.NODE_ENV === 'production' ? 2 : 3
     const timeoutMs = process.env.NODE_ENV === 'production' ? 3000 : 5000
     let lastError: Error | null = null
+
+    // Try to get cached role first
+    if (typeof window !== 'undefined') {
+      const cachedRole = localStorage.getItem(`user_role_${userId}`)
+      const cachedTimestamp = localStorage.getItem(`user_role_timestamp_${userId}`)
+      
+      if (cachedRole && cachedTimestamp) {
+        const cacheAge = Date.now() - parseInt(cachedTimestamp)
+        const cacheValidMs = process.env.NODE_ENV === 'production' ? 5 * 60 * 1000 : 10 * 60 * 1000 // 5 min in prod, 10 min in dev
+        
+        if (cacheAge < cacheValidMs) {
+          console.log(`AuthContext: Using cached user role: ${cachedRole}`)
+          return cachedRole
+        } else {
+          // Clear expired cache
+          localStorage.removeItem(`user_role_${userId}`)
+          localStorage.removeItem(`user_role_timestamp_${userId}`)
+        }
+      }
+    }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -137,6 +158,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           lastError = new Error(error.message)
           
           if (attempt === maxRetries) {
+            // On final failure, try to use cached role even if expired
+            if (typeof window !== 'undefined') {
+              const fallbackRole = localStorage.getItem(`user_role_${userId}`)
+              if (fallbackRole) {
+                console.log(`AuthContext: Using expired cached role as fallback: ${fallbackRole}`)
+                return fallbackRole
+              }
+            }
             return null
           }
           
@@ -146,14 +175,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           continue
         }
 
-        console.log(`AuthContext: Successfully got user role: ${data?.role}`)
-        return data?.role || null
+        const role = data?.role || null
+        console.log(`AuthContext: Successfully got user role: ${role}`)
+        
+        // Cache the successful result
+        if (typeof window !== 'undefined' && role) {
+          localStorage.setItem(`user_role_${userId}`, role)
+          localStorage.setItem(`user_role_timestamp_${userId}`, Date.now().toString())
+        }
+        
+        return role
 
       } catch (error) {
         console.error(`AuthContext: Error fetching user role (attempt ${attempt}):`, error)
         lastError = error instanceof Error ? error : new Error('Unknown error')
         
         if (attempt === maxRetries) {
+          // On final failure, try to use cached role even if expired
+          if (typeof window !== 'undefined') {
+            const fallbackRole = localStorage.getItem(`user_role_${userId}`)
+            if (fallbackRole) {
+              console.log(`AuthContext: Using expired cached role as fallback: ${fallbackRole}`)
+              return fallbackRole
+            }
+          }
           return null
         }
         
@@ -483,6 +528,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         supabaseKeys.forEach(key => localStorage.removeItem(key))
+        
+        // Clear user role cache
+        if (userRef.current?.id) {
+          localStorage.removeItem(`user_role_${userRef.current.id}`)
+          localStorage.removeItem(`user_role_timestamp_${userRef.current.id}`)
+        }
       }
       
       // Force clear user state immediately
@@ -522,6 +573,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const refreshUserRole = useCallback(async () => {
+    if (!userRef.current?.id) return
+    
+    try {
+      console.log('AuthContext: Refreshing user role...')
+      
+      // Clear cached role to force fresh fetch
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`user_role_${userRef.current.id}`)
+        localStorage.removeItem(`user_role_timestamp_${userRef.current.id}`)
+      }
+      
+      // Fetch fresh role
+      const role = await getUserRole(userRef.current.id)
+      userRoleRef.current = role
+      setUserRole(role)
+      
+      console.log('AuthContext: User role refreshed:', role)
+    } catch (error) {
+      console.error('AuthContext: Error refreshing user role:', error)
+    }
+  }, [getUserRole])
+
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
     user,
@@ -531,8 +605,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInWithGoogle,
     signUp,
     signOut,
-    refreshSession
-  }), [user, userRole, loading, signIn, signInWithGoogle, signUp, signOut, refreshSession])
+    refreshSession,
+    refreshUserRole
+  }), [user, userRole, loading, signIn, signInWithGoogle, signUp, signOut, refreshSession, refreshUserRole])
 
   return (
     <AuthContext.Provider value={contextValue}>
