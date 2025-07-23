@@ -17,13 +17,10 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { event, zap_id, data } = body
 
-    console.log('🔔 HomeStack webhook received:', { event, zap_id, data })
-
-    // Validate webhook signature if configured (temporarily disabled for debugging)
+    // Validate webhook signature if configured
     const signature = request.headers.get('x-homestack-signature')
     if (!signature) {
-      console.log('⚠️ Missing webhook signature - continuing for debugging')
-      // return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
     }
 
     // Get HomeStack configuration
@@ -35,7 +32,6 @@ export async function POST(request: Request) {
       .single()
     
     if (configError || !configData) {
-      console.log('❌ HomeStack integration not configured:', configError)
       return NextResponse.json(
         { error: 'HomeStack integration not configured' },
         { status: 400 }
@@ -53,31 +49,26 @@ export async function POST(request: Request) {
 
     // Process webhook based on event type
     const eventType = event || data?.type || body.type
-    console.log('🔔 Processing event type:', eventType)
 
     if (eventType === 'new_user') {
-      console.log('👤 Processing new_user event')
       return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'update_user') {
       return await handleUserUpdated(data, homeStack)
     } else if (eventType === 'new_chat_message') {
       return await handleChatMessage(data, homeStack)
     } else if (eventType === 'mobile.user.created') {
-      console.log('📱 Processing mobile.user.created event')
       return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'mobile.lead.created') {
       return await handleLeadCreated(data, homeStack)
     } else if (eventType === 'mobile.contact.created') {
       return await handleContactCreated(data, homeStack)
     } else if (eventType === 'user.created') {
-      console.log('👤 Processing user.created event')
       return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'lead.created') {
       return await handleLeadCreated(data, homeStack)
     } else if (eventType === 'contact.created') {
       return await handleContactCreated(data, homeStack)
     } else {
-      console.log('⚠️ Unhandled event type:', eventType)
       return NextResponse.json({ 
         success: true, 
         message: 'Event received but not processed',
@@ -85,7 +76,6 @@ export async function POST(request: Request) {
       })
     }
   } catch (error) {
-    console.error('❌ Error processing HomeStack webhook:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -93,21 +83,17 @@ export async function POST(request: Request) {
 // Handle new user signup from HomeStack
 async function handleUserCreated(userData: any, homeStack: HomeStackIntegration, eventType?: string) {
   try {
-    console.log('👤 handleUserCreated called with:', { userData, eventType })
-    
     // Handle different HomeStack data formats
     let actualUserData = userData
     
     // If data is nested under 'user' object, extract it
     if (userData.user && typeof userData.user === 'object') {
       actualUserData = userData.user
-      console.log('📦 Extracted user data from nested object')
     }
     
     // Handle the exact format from HomeStack documentation
     if (userData.guid || userData.name || userData.email) {
       actualUserData = userData
-      console.log('📋 Using direct user data format')
     }
     
     // Determine source - always HomeStack for this webhook endpoint
