@@ -153,6 +153,8 @@ export async function getPeopleForFollowUpManagement(userId?: string, userRole?:
     `)
     // Include all people except staging leads (not assigned to agents yet)
     .neq('lead_status', 'staging')
+    // Only show people who are actually assigned to agents
+    .not('assigned_to', 'is', null)
     .order('last_interaction', { ascending: false })
   
   // If user is an agent, only show assigned contacts
