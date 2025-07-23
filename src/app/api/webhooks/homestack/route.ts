@@ -23,32 +23,58 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
     }
 
+    // Get HomeStack configuration
+    const { data: configData, error: configError } = await supabase
+      .from('integration_configs')
+      .select('*')
+      .eq('integration_type', 'homestack')
+      .eq('enabled', true)
+      .single()
+    
+    if (configError || !configData) {
+      return NextResponse.json(
+        { error: 'HomeStack integration not configured' },
+        { status: 400 }
+      )
+    }
+
+    const homeStackConfig = {
+      apiKey: configData.api_key,
+      baseUrl: configData.base_url || 'https://api.homestack.com',
+      webhookSecret: configData.webhook_secret,
+    }
+
+    // Initialize HomeStack integration
+    const homeStack = new HomeStackIntegration(homeStackConfig)
+
     // Process webhook based on event type
     const eventType = event || data?.type || body.type
 
     if (eventType === 'new_user') {
-      // Process new user event
+      return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'update_user') {
-      // Process user update event
+      return await handleUserUpdated(data, homeStack)
     } else if (eventType === 'new_chat_message') {
-      // Process chat message event
+      return await handleChatMessage(data, homeStack)
     } else if (eventType === 'mobile.user.created') {
-      // Process mobile app user creation event
+      return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'mobile.lead.created') {
-      // Process mobile app lead creation event
+      return await handleLeadCreated(data, homeStack)
     } else if (eventType === 'mobile.contact.created') {
-      // Process mobile app contact creation event
+      return await handleContactCreated(data, homeStack)
     } else if (eventType === 'user.created') {
-      // Process legacy user creation event
+      return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'lead.created') {
-      // Process legacy lead creation event
+      return await handleLeadCreated(data, homeStack)
     } else if (eventType === 'contact.created') {
-      // Process legacy contact creation event
+      return await handleContactCreated(data, homeStack)
     } else {
-      // Unhandled webhook event
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Event received but not processed',
+        event_type: eventType 
+      })
     }
-
-    return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
