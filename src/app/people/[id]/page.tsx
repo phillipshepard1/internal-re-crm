@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare, Target } from 'lucide-react'
-import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles, getFollowUpPlanTemplates, applyFollowUpPlanToLead, getLeadTags, updateLeadTagForLead } from '@/lib/database'
+import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles, getLeadTags, updateLeadTagForLead, applyFollowUpFrequencyToLead } from '@/lib/database'
 import { supabase } from '@/lib/supabase'
 import type { Person, Note, Task, Activity as ActivityType, File, FollowUpPlanTemplate, LeadTag } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -82,14 +82,14 @@ export default function PersonDetailPage() {
     type: 'info'
   })
   
-  // Follow-up plan management
-  const [followUpPlans, setFollowUpPlans] = useState<FollowUpPlanTemplate[]>([])
+  // Follow-up frequency management
   const [leadTags, setLeadTags] = useState<LeadTag[]>([])
-  const [showPlanDialog, setShowPlanDialog] = useState(false)
+  const [showFrequencyDialog, setShowFrequencyDialog] = useState(false)
   const [showTagDialog, setShowTagDialog] = useState(false)
-  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [selectedFrequency, setSelectedFrequency] = useState<'twice_week' | 'weekly' | 'biweekly' | 'monthly'>('weekly')
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1)
   const [selectedTagId, setSelectedTagId] = useState('')
-  const [updatingPlan, setUpdatingPlan] = useState(false)
+  const [updatingFrequency, setUpdatingFrequency] = useState(false)
   const [updatingTag, setUpdatingTag] = useState(false)
   const [formData, setFormData] = useState({
     first_name: '',
@@ -126,13 +126,12 @@ export default function PersonDetailPage() {
         setLoading(true)
         setError('')
         const personId = params.id as string
-        const [personData, notesData, tasksData, activitiesData, filesData, plansData, tagsData] = await Promise.all([
+        const [personData, notesData, tasksData, activitiesData, filesData, tagsData] = await Promise.all([
           getPersonById(personId, user.id, userRole || undefined),
           getNotes(personId),
           getTasks(personId, user.id, userRole || undefined),
           getActivities(personId),
           getFiles(personId),
-          getFollowUpPlanTemplates(),
           getLeadTags()
         ])
         
@@ -141,7 +140,6 @@ export default function PersonDetailPage() {
         setTasks(tasksData)
         setActivities(activitiesData)
         setUploadedFiles(filesData)
-        setFollowUpPlans(plansData)
         setLeadTags(tagsData)
 
         // Initialize form data
@@ -456,37 +454,35 @@ export default function PersonDetailPage() {
     }))
   }
 
-  // Follow-up plan management functions
-  const handleUpdateFollowUpPlan = async () => {
+  // Follow-up frequency management functions
+  const handleUpdateFollowUpFrequency = async () => {
     if (!person || !user?.id) return
 
     try {
-      setUpdatingPlan(true)
+      setUpdatingFrequency(true)
       
-      // Update the lead's follow-up plan
+      // Update the lead's follow-up frequency
       const updateData: any = {
-        follow_up_plan_id: selectedPlanId === 'none' ? null : selectedPlanId,
+        follow_up_frequency: selectedFrequency,
+        follow_up_day_of_week: selectedDayOfWeek,
         updated_at: new Date().toISOString()
       }
       
       await updatePerson(person.id, updateData)
       
-      // If a plan is selected, apply it to create follow-up tasks
-      if (selectedPlanId && selectedPlanId !== 'none') {
-        await applyFollowUpPlanToLead(person.id, selectedPlanId, user.id)
-      }
+      // Apply the frequency to create follow-up tasks
+      await applyFollowUpFrequencyToLead(person.id, selectedFrequency, selectedDayOfWeek, user.id)
       
       setAlertModal({
         open: true,
         title: 'Success',
-        message: 'Follow-up plan updated successfully',
+        message: 'Follow-up frequency updated successfully',
         type: 'success'
       })
       
-      setShowPlanDialog(false)
-      setSelectedPlanId('')
+      setShowFrequencyDialog(false)
       
-      // Reload person data to get updated plan
+      // Reload person data to get updated frequency
       const updatedPerson = await getPersonById(person.id, user.id, userRole || undefined)
       setPerson(updatedPerson)
       
@@ -494,11 +490,11 @@ export default function PersonDetailPage() {
       setAlertModal({
         open: true,
         title: 'Error',
-        message: 'Failed to update follow-up plan',
+        message: 'Failed to update follow-up frequency',
         type: 'error'
       })
     } finally {
-      setUpdatingPlan(false)
+      setUpdatingFrequency(false)
     }
   }
 
@@ -536,9 +532,10 @@ export default function PersonDetailPage() {
     }
   }
 
-  const openPlanDialog = () => {
-    setSelectedPlanId(person?.follow_up_plan_id || 'none')
-    setShowPlanDialog(true)
+  const openFrequencyDialog = () => {
+    setSelectedFrequency(person?.follow_up_frequency || 'weekly')
+    setSelectedDayOfWeek(person?.follow_up_day_of_week || 1)
+    setShowFrequencyDialog(true)
   }
 
   const openTagDialog = () => {
@@ -1168,19 +1165,22 @@ export default function PersonDetailPage() {
 
                     {/* Follow-up Plan */}
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Follow-up Plan:</span>
+                      <span className="text-sm font-medium">Follow-up Frequency:</span>
                       <div className="flex items-center space-x-2">
-                        {person.follow_up_plan ? (
+                        {person.follow_up_frequency ? (
                           <Badge variant="outline">
-                            {person.follow_up_plan.name}
+                            {person.follow_up_frequency === 'twice_week' && 'Twice a Week'}
+                            {person.follow_up_frequency === 'weekly' && 'Every Week'}
+                            {person.follow_up_frequency === 'biweekly' && 'Every 2 Weeks'}
+                            {person.follow_up_frequency === 'monthly' && 'Every Month'}
                           </Badge>
                         ) : (
-                          <Badge variant="outline">No plan</Badge>
+                          <Badge variant="outline">No frequency set</Badge>
                         )}
                         <Button 
                           variant="ghost" 
                           size="sm"
-                          onClick={openPlanDialog}
+                          onClick={openFrequencyDialog}
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
@@ -1701,50 +1701,65 @@ export default function PersonDetailPage() {
         </Tabs>
       </div>
 
-      {/* Follow-up Plan Dialog */}
-      <Dialog open={showPlanDialog} onOpenChange={setShowPlanDialog}>
+      {/* Follow-up Frequency Dialog */}
+      <Dialog open={showFrequencyDialog} onOpenChange={setShowFrequencyDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update Follow-up Plan</DialogTitle>
+            <DialogTitle>Update Follow-up Frequency</DialogTitle>
             <DialogDescription>
-              Change the follow-up plan for {person?.first_name} {person?.last_name}
+              Change the follow-up frequency for {person?.first_name} {person?.last_name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="plan">Follow-up Plan</Label>
-              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+              <Label htmlFor="frequency">Follow-up Frequency</Label>
+              <Select value={selectedFrequency} onValueChange={(value: 'twice_week' | 'weekly' | 'biweekly' | 'monthly') => setSelectedFrequency(value)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Choose a follow-up plan" />
+                  <SelectValue placeholder="Choose follow-up frequency" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No plan</SelectItem>
-                  {followUpPlans.map((plan) => (
-                    <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="twice_week">Twice a Week (Monday & Thursday)</SelectItem>
+                  <SelectItem value="weekly">Every Week</SelectItem>
+                  <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                  <SelectItem value="monthly">Every Month</SelectItem>
                 </SelectContent>
               </Select>
-              {selectedPlanId && (
-                <p className="text-sm text-muted-foreground">
-                  This will replace the current plan and create new follow-up tasks
-                </p>
-              )}
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="dayOfWeek">Preferred Day of Week</Label>
+              <Select value={String(selectedDayOfWeek)} onValueChange={(value) => setSelectedDayOfWeek(Number(value))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose day of week" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Sunday</SelectItem>
+                  <SelectItem value="1">Monday</SelectItem>
+                  <SelectItem value="2">Tuesday</SelectItem>
+                  <SelectItem value="3">Wednesday</SelectItem>
+                  <SelectItem value="4">Thursday</SelectItem>
+                  <SelectItem value="5">Friday</SelectItem>
+                  <SelectItem value="6">Saturday</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                Follow-ups will be scheduled on this day of the week
+              </p>
+            </div>
+
             <div className="flex justify-end space-x-2">
               <Button 
                 variant="outline" 
-                onClick={() => setShowPlanDialog(false)}
-                disabled={updatingPlan}
+                onClick={() => setShowFrequencyDialog(false)}
+                disabled={updatingFrequency}
               >
                 Cancel
               </Button>
               <Button 
-                onClick={handleUpdateFollowUpPlan}
-                disabled={updatingPlan}
+                onClick={handleUpdateFollowUpFrequency}
+                disabled={updatingFrequency}
               >
-                {updatingPlan ? 'Updating...' : 'Update Plan'}
+                {updatingFrequency ? 'Updating...' : 'Update Frequency'}
               </Button>
             </div>
           </div>

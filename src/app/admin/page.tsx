@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ActivityDashboard } from '@/components/admin/ActivityDashboard'
 import { LeadStaging } from '@/components/admin/LeadStaging'
 import { LeadSourceManagement } from '@/components/admin/LeadSourceManagement'
-import { FollowUpPlanManagement } from '@/components/admin/FollowUpPlanManagement'
+import { FollowUpFrequencyManagement } from '@/components/admin/FollowUpFrequencyManagement'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -255,7 +255,7 @@ export default function AdminPage() {
             <TabsTrigger value="roles">Role Management</TabsTrigger>
             <TabsTrigger value="leads">Lead Staging</TabsTrigger>
             <TabsTrigger value="sources">Lead Sources</TabsTrigger>
-            <TabsTrigger value="plans">Follow-up Plans</TabsTrigger>
+            <TabsTrigger value="plans">Follow-up Frequencies</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
           </TabsList>
           
@@ -449,7 +449,7 @@ export default function AdminPage() {
           </TabsContent>
 
           <TabsContent value="plans" className="space-y-4">
-            <FollowUpPlanManagement users={users} />
+            <FollowUpFrequencyManagement users={users} />
           </TabsContent>
         </Tabs>
       </div>

@@ -85,6 +85,10 @@ export interface Person {
   follow_up_plan_id?: string | null
   assigned_by?: string | null
   assigned_at?: string | null
+  // Simplified follow-up system fields
+  follow_up_frequency?: 'twice_week' | 'weekly' | 'biweekly' | 'monthly' | null
+  follow_up_day_of_week?: number | null
+  last_follow_up_date?: string | null
   // Properties fields
   looking_for?: string
   selling?: string

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { applyFollowUpPlanToLead } from '@/lib/database'
+import { applyFollowUpFrequencyToLead } from '@/lib/database'
 
 // Initialize Supabase client with service role key for admin operations
 const supabase = createClient(
@@ -11,7 +11,7 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { leadId, userId, assignedBy, followUpPlanId } = body
+    const { leadId, userId, assignedBy, followUpFrequency, followUpDayOfWeek } = body
 
     if (!leadId || !userId) {
       return NextResponse.json(
@@ -42,13 +42,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Apply follow-up plan if provided
-    if (followUpPlanId && followUpPlanId !== 'none') {
+    // Apply follow-up frequency if provided
+    if (followUpFrequency) {
       try {
-        await applyFollowUpPlanToLead(leadId, followUpPlanId, userId)
-      } catch (planError) {
-        console.error('Error applying follow-up plan:', planError)
-        // Don't fail the assignment if plan application fails
+        await applyFollowUpFrequencyToLead(leadId, followUpFrequency, followUpDayOfWeek || 1, userId)
+      } catch (frequencyError) {
+        console.error('Error applying follow-up frequency:', frequencyError)
+        // Don't fail the assignment if frequency application fails
       }
     }
 

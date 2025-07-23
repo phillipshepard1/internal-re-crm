@@ -42,7 +42,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Person | null>(null)
   const [selectedUserId, setSelectedUserId] = useState('')
-  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [selectedFrequency, setSelectedFrequency] = useState<'twice_week' | 'weekly' | 'biweekly' | 'monthly'>('weekly')
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1) // Monday
   const [assigning, setAssigning] = useState(false)
   const [assignmentNotes, setAssignmentNotes] = useState('')
   const itemsPerPage = 10
@@ -65,11 +66,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
     refetch: refetchAssigned
   } = useDataLoader(getAssignedLeads, {})
 
-  const {
-    data: followUpPlans,
-    loading: plansLoading,
-    error: plansError
-  } = useDataLoader(getFollowUpPlanTemplates, {})
+
 
   // Filter data based on search term
   const filterLeads = (leads: Person[]) => {
@@ -109,7 +106,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
         leadId: selectedLead.id,
         userId: selectedUserId,
         assignedBy: user?.id, // Add the admin's user ID
-        followUpPlanId: selectedPlanId || null,
+        followUpFrequency: selectedFrequency,
+        followUpDayOfWeek: selectedDayOfWeek,
         notes: assignmentNotes
       }
       
@@ -133,7 +131,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
       setAssignDialogOpen(false)
       setSelectedLead(null)
       setSelectedUserId('')
-      setSelectedPlanId('')
+      setSelectedFrequency('weekly')
+      setSelectedDayOfWeek(1)
       setAssignmentNotes('')
       
     } catch (error) {
@@ -146,7 +145,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const openAssignDialog = (lead: Person) => {
     setSelectedLead(lead)
     setSelectedUserId('')
-    setSelectedPlanId('')
+    setSelectedFrequency('weekly')
+    setSelectedDayOfWeek(1)
     setAssignmentNotes('')
     setAssignDialogOpen(true)
   }
@@ -434,26 +434,43 @@ export function LeadStaging({ users }: LeadStagingProps) {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="plan">Follow-up Plan (Optional)</Label>
-                <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                            <div className="space-y-2">
+                <Label htmlFor="frequency">Follow-up Frequency</Label>
+                <Select value={selectedFrequency} onValueChange={(value: 'twice_week' | 'weekly' | 'biweekly' | 'monthly') => setSelectedFrequency(value)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose a follow-up plan" />
+                    <SelectValue placeholder="Choose follow-up frequency" />
                   </SelectTrigger>
-                                  <SelectContent>
-                  <SelectItem value="none">No plan</SelectItem>
-                  {followUpPlans?.map((plan: FollowUpPlanTemplate) => (
-                    <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                  <SelectContent>
+                    <SelectItem value="twice_week">Twice a Week (Monday & Thursday)</SelectItem>
+                    <SelectItem value="weekly">Every Week</SelectItem>
+                    <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                    <SelectItem value="monthly">Every Month</SelectItem>
+                  </SelectContent>
                 </Select>
-                {selectedPlanId && (
-                  <p className="text-sm text-muted-foreground">
-                    This plan will automatically create follow-up tasks for the agent
-                  </p>
-                )}
+                <p className="text-sm text-muted-foreground">
+                  This will automatically create follow-up tasks based on the selected frequency
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dayOfWeek">Preferred Day of Week</Label>
+                <Select value={String(selectedDayOfWeek)} onValueChange={(value) => setSelectedDayOfWeek(Number(value))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose day of week" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Sunday</SelectItem>
+                    <SelectItem value="1">Monday</SelectItem>
+                    <SelectItem value="2">Tuesday</SelectItem>
+                    <SelectItem value="3">Wednesday</SelectItem>
+                    <SelectItem value="4">Thursday</SelectItem>
+                    <SelectItem value="5">Friday</SelectItem>
+                    <SelectItem value="6">Saturday</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Follow-ups will be scheduled on this day of the week
+                </p>
               </div>
 
               <div className="space-y-2">

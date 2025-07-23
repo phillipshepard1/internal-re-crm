@@ -87,7 +87,7 @@ export const updateUserRole = async (userId: string, newRole: 'admin' | 'agent')
   }
 }
 
-// People/Contacts
+// People/Contacts - for /people page (converted leads + non-leads)
 export async function getPeople(userId?: string, userRole?: string) {
   let query = supabase
     .from('people')
@@ -100,7 +100,7 @@ export async function getPeople(userId?: string, userRole?: string) {
         last_name
       )
     `)
-    .or('client_type.neq.lead,lead_status.eq.converted') // Include non-leads and converted leads
+    .or('client_type.neq.lead,lead_status.eq.converted') // Include non-leads and converted leads only
     .order('last_interaction', { ascending: false })
   
   // If user is an agent, only show assigned contacts
@@ -126,6 +126,33 @@ export async function getAllPeople(userId?: string, userRole?: string) {
         last_name
       )
     `)
+    .order('last_interaction', { ascending: false })
+  
+  // If user is an agent, only show assigned contacts
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+// Get people for Follow-up Frequency Management (assigned leads + non-leads, excluding staging)
+export async function getPeopleForFollowUpManagement(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    // Include all people except staging leads (not assigned to agents yet)
+    .neq('lead_status', 'staging')
     .order('last_interaction', { ascending: false })
   
   // If user is an agent, only show assigned contacts
@@ -1267,45 +1294,60 @@ export async function deleteFollowUpPlanStep(id: string): Promise<void> {
   if (error) throw error
 }
 
-// Apply follow-up plan to a lead
-export async function applyFollowUpPlanToLead(leadId: string, planId: string, assignedUserId: string): Promise<void> {
+// Apply simplified follow-up frequency to a lead
+export async function applyFollowUpFrequencyToLead(leadId: string, frequency: 'twice_week' | 'weekly' | 'biweekly' | 'monthly', dayOfWeek: number = 1, assignedUserId: string): Promise<void> {
   try {
-    // Get the plan with steps
-    const plan = await getFollowUpPlanTemplate(planId)
-    
-    // Update the lead with the plan
+    // Update the lead with the frequency settings
     await updatePerson(leadId, {
-      follow_up_plan_id: planId,
+      follow_up_frequency: frequency,
+      follow_up_day_of_week: dayOfWeek,
       assigned_at: new Date().toISOString()
     })
     
-    // Create follow-ups for each step in the plan
-    const assignmentDate = new Date()
+    // Create the first follow-up using the database function
+    const { data, error } = await supabase.rpc('create_next_followup_for_person', {
+      person_id: leadId
+    })
     
-    for (const step of plan.steps) {
-      const scheduledDate = new Date(assignmentDate)
-      scheduledDate.setDate(scheduledDate.getDate() + step.days_after_assignment)
-      
-      await createFollowUp({
-        person_id: leadId,
-        scheduled_date: scheduledDate.toISOString(),
-        status: 'pending',
-        type: step.type,
-        notes: step.notes || step.description,
-      })
+    if (error) {
+      console.error('Error creating initial follow-up:', error)
+      throw error
     }
     
     // Create activity log
     await createActivity({
       person_id: leadId,
       type: 'follow_up',
-      description: `Follow-up plan "${plan.name}" applied with ${plan.steps.length} steps`,
+      description: `Follow-up frequency set to ${frequency} (${getFrequencyDisplayName(frequency)})`,
       created_by: assignedUserId,
     })
     
   } catch (error) {
     throw error
   }
+}
+
+// Helper function to get display name for frequency
+export function getFrequencyDisplayName(frequency: 'twice_week' | 'weekly' | 'biweekly' | 'monthly'): string {
+  const names = {
+    twice_week: 'Twice a Week',
+    weekly: 'Every Week',
+    biweekly: 'Every 2 Weeks',
+    monthly: 'Every Month'
+  }
+  return names[frequency] || frequency
+}
+
+// Get day of week display name
+export function getDayOfWeekDisplayName(day: number): string {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  return days[day] || 'Monday'
+}
+
+// Legacy function for backward compatibility
+export async function applyFollowUpPlanToLead(leadId: string, planId: string, assignedUserId: string): Promise<void> {
+  // For now, just apply weekly frequency as default
+  await applyFollowUpFrequencyToLead(leadId, 'weekly', 1, assignedUserId)
 }
 
 // Update lead tag for a specific lead

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getFollowUps, updateFollowUp, createFollowUp, createActivity, createNote, getPeople } from '@/lib/database'
+import { createClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -36,6 +37,47 @@ function isOverdue(fu: FollowUpWithPerson) {
   return fu.status !== 'completed' && new Date(fu.scheduled_date) < new Date()
 }
 
+// Helper functions for week-based view
+function getWeekDays(startDate: Date): Date[] {
+  const days = []
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(startDate)
+    day.setDate(startDate.getDate() + i)
+    days.push(day)
+  }
+  return days
+}
+
+function getDayName(date: Date): string {
+  return date.toLocaleDateString('en-US', { weekday: 'short' })
+}
+
+function getDayNumber(date: Date): string {
+  return date.getDate().toString()
+}
+
+function isToday(date: Date): boolean {
+  const today = new Date()
+  return date.toDateString() === today.toDateString()
+}
+
+function isSameDay(date1: Date, date2: Date): boolean {
+  return date1.toDateString() === date2.toDateString()
+}
+
+function getFollowUpsForDay(followUps: FollowUpWithPerson[], date: Date): FollowUpWithPerson[] {
+  return followUps.filter(fu => {
+    const followUpDate = new Date(fu.scheduled_date)
+    return isSameDay(followUpDate, date) && fu.status !== 'completed'
+  })
+}
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 // Move loadFunction outside component to prevent recreation on every render
 const loadFollowUpsData = async (userId: string, userRole: string) => {
   return await getFollowUps(userId, userRole)
@@ -44,10 +86,16 @@ const loadFollowUpsData = async (userId: string, userRole: string) => {
 export default function FollowUpsPage() {
   const { user, userRole } = useAuth()
   const [filter, setFilter] = useState<'upcoming' | 'overdue'>('upcoming')
+  const [viewMode, setViewMode] = useState<'list' | 'week'>('week')
+  const [currentWeek, setCurrentWeek] = useState(() => {
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1) // Monday
+    return startOfWeek
+  })
   const [modalOpen, setModalOpen] = useState(false)
   const [activeFollowUp, setActiveFollowUp] = useState<FollowUpWithPerson | null>(null)
   const [interactionNote, setInteractionNote] = useState('')
-  const [nextFollowUpDays, setNextFollowUpDays] = useState(7)
   const [saving, setSaving] = useState(false)
   // New state for scheduling follow-up
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
@@ -105,7 +153,6 @@ export default function FollowUpsPage() {
   const openInteractionModal = (fu: FollowUpWithPerson) => {
     setActiveFollowUp(fu)
     setInteractionNote('')
-    setNextFollowUpDays(7)
     setModalOpen(true)
   }
 
@@ -113,7 +160,6 @@ export default function FollowUpsPage() {
     setModalOpen(false)
     setActiveFollowUp(null)
     setInteractionNote('')
-    setNextFollowUpDays(7)
   }
 
   const handleSaveInteraction = async () => {
@@ -137,16 +183,17 @@ export default function FollowUpsPage() {
           created_by: user?.id,
         })
       }
-      // 3. Schedule next follow-up
-      const nextDate = new Date()
-      nextDate.setDate(nextDate.getDate() + Number(nextFollowUpDays))
-      await createFollowUp({
-        person_id: activeFollowUp.people?.id,
-        scheduled_date: nextDate.toISOString(),
-        status: 'pending',
-        type: activeFollowUp.type || 'call',
-        notes: '',
-      })
+      // 3. Schedule next follow-up using the person's frequency settings
+      if (activeFollowUp.people?.id) {
+        // Use the database function to create the next follow-up based on frequency
+        const { data, error } = await supabase.rpc('create_next_followup_for_person', {
+          person_id: activeFollowUp.people.id
+        })
+        
+        if (error) {
+          console.error('Error creating next follow-up:', error)
+        }
+      }
       // 4. Refresh list
       refetch()
       closeModal()
@@ -195,12 +242,35 @@ export default function FollowUpsPage() {
           <h1 className="text-4xl font-bold">Follow-ups</h1>
           <p className="text-muted-foreground text-lg mt-1">Manage your scheduled activities and reminders</p>
         </div>
-        <Button className="flex items-center gap-2" variant="default" onClick={openScheduleModal}>
-          <Plus className="h-4 w-4" />
-          Schedule Follow-up
-        </Button>
-      </div>
-      <Card>
+        <div className="flex items-center space-x-2">
+          <Button 
+            variant={viewMode === 'week' ? 'default' : 'outline'}
+            onClick={() => setViewMode('week')}
+          >
+            Week View
+          </Button>
+          <Button 
+            variant={viewMode === 'list' ? 'default' : 'outline'}
+            onClick={() => setViewMode('list')}
+          >
+            List View
+          </Button>
+          <Button className="flex items-center gap-2" variant="default" onClick={openScheduleModal}>
+            <Plus className="h-4 w-4" />
+            Schedule Follow-up
+          </Button>
+        </div>
+              </div>
+        
+        {viewMode === 'week' ? (
+          <WeekView 
+            followUps={filteredFollowUps}
+            currentWeek={currentWeek}
+            onWeekChange={setCurrentWeek}
+            onFollowUpClick={openInteractionModal}
+          />
+        ) : (
+          <Card>
         <CardHeader>
           <CardTitle>All Follow-ups</CardTitle>
           <CardDescription>View and manage all your scheduled activities</CardDescription>
@@ -262,6 +332,7 @@ export default function FollowUpsPage() {
           )}
         </CardContent>
       </Card>
+        )}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -275,17 +346,9 @@ export default function FollowUpsPage() {
               rows={4}
             />
             <div>
-              <label className="block mb-1 font-medium">Next Follow-up</label>
-              <Select value={String(nextFollowUpDays)} onValueChange={v => setNextFollowUpDays(Number(v))}>
-                <SelectTrigger>
-                  {NEXT_FOLLOWUP_OPTIONS.find(opt => opt.value === nextFollowUpDays)?.label || 'Select...'}
-                </SelectTrigger>
-                <SelectContent>
-                  {NEXT_FOLLOWUP_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <p className="text-sm text-muted-foreground">
+                Next follow-up will be automatically scheduled based on the person's frequency settings.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -355,5 +418,107 @@ export default function FollowUpsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// WeekView Component
+interface WeekViewProps {
+  followUps: FollowUpWithPerson[]
+  currentWeek: Date
+  onWeekChange: (date: Date) => void
+  onFollowUpClick: (followUp: FollowUpWithPerson) => void
+}
+
+function WeekView({ followUps, currentWeek, onWeekChange, onFollowUpClick }: WeekViewProps) {
+  const weekDays = getWeekDays(currentWeek)
+  
+  const goToPreviousWeek = () => {
+    const newWeek = new Date(currentWeek)
+    newWeek.setDate(currentWeek.getDate() - 7)
+    onWeekChange(newWeek)
+  }
+  
+  const goToNextWeek = () => {
+    const newWeek = new Date(currentWeek)
+    newWeek.setDate(currentWeek.getDate() + 7)
+    onWeekChange(newWeek)
+  }
+  
+  const goToCurrentWeek = () => {
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1) // Monday
+    onWeekChange(startOfWeek)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Week View</CardTitle>
+            <CardDescription>
+              {currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString()}
+            </CardDescription>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+              ← Previous
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
+              Today
+            </Button>
+            <Button variant="outline" size="sm" onClick={goToNextWeek}>
+              Next →
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-7 gap-2">
+          {weekDays.map((day, index) => {
+            const dayFollowUps = getFollowUpsForDay(followUps, day)
+            const isCurrentDay = isToday(day)
+            
+            return (
+              <div 
+                key={index} 
+                className={`p-3 border rounded-lg min-h-[120px] ${
+                  isCurrentDay ? 'bg-primary/10 border-primary' : 'bg-muted/20'
+                }`}
+              >
+                <div className="text-center mb-2">
+                  <div className="text-sm font-medium text-muted-foreground">
+                    {getDayName(day)}
+                  </div>
+                  <div className={`text-lg font-bold ${
+                    isCurrentDay ? 'text-primary' : ''
+                  }`}>
+                    {getDayNumber(day)}
+                  </div>
+                </div>
+                
+                <div className="space-y-1">
+                  {dayFollowUps.map((followUp) => (
+                    <div
+                      key={followUp.id}
+                      className="p-2 bg-background border rounded text-xs cursor-pointer hover:bg-muted/50"
+                      onClick={() => onFollowUpClick(followUp)}
+                    >
+                      <div className="font-medium truncate">
+                        {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown'}
+                      </div>
+                      <div className="text-muted-foreground capitalize">
+                        {followUp.type}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
   )
 } 

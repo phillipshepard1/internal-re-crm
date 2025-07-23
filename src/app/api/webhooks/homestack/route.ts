@@ -167,7 +167,7 @@ async function handleMobileUserSignup(userData: any, homeStack: HomeStackIntegra
       id: userData.guid || userData.id || userData.user_id || userData.userId,
       email: userData.email || userData.email_address || userData.user_email,
       first_name: userData.first_name || userData.firstName || (userData.name ? userData.name.split(' ')[0] : undefined) || userData.email?.split('@')[0],
-      last_name: userData.last_name || userData.lastName || (userData.name ? userData.name.split(' ').slice(1).join(' ') : undefined) || 'Unknown',
+      last_name: userData.last_name || userData.lastName || (userData.name ? userData.name.split(' ').slice(1).join(' ') : undefined) || '',
       phone: userData.phone || userData.phone_number || userData.mobile || userData.contact_number,
       created_at: userData.created_at || userData.createdAt || userData.registration_date || userData.signup_date,
       source: 'homestack_mobile', // Mark as mobile signup
