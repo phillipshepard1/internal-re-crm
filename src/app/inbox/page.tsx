@@ -28,7 +28,9 @@ import {
   Tag,
   Bell,
   MessageSquare,
-  RefreshCw
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -244,6 +246,14 @@ export default function InboxPage() {
   })
   const [previewLoading, setPreviewLoading] = useState(false)
   const [textContent, setTextContent] = useState<string>('')
+  
+  // Collapsible sidebar and resizable panels state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [emailListWidth, setEmailListWidth] = useState(400) // Default width for email list
+  const [emailContentWidth, setEmailContentWidth] = useState(455) // Default width for email content
+  const [isResizing, setIsResizing] = useState(false)
+  const [resizeStartX, setResizeStartX] = useState(0)
+  const [resizeStartWidth, setResizeStartWidth] = useState(0)
 
   // Load text content when preview attachment changes
   useEffect(() => {
@@ -1023,6 +1033,60 @@ export default function InboxPage() {
 
   const folders = getFolders()
 
+  // Resize handlers
+  const handleResizeStart = (e: React.MouseEvent, panel: 'emailList' | 'emailContent') => {
+    e.preventDefault()
+    setIsResizing(true)
+    setResizeStartX(e.clientX)
+    setResizeStartWidth(panel === 'emailList' ? emailListWidth : emailContentWidth)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  const handleResizeMove = useCallback((e: MouseEvent) => {
+    if (!isResizing) return
+    
+    const deltaX = e.clientX - resizeStartX
+    const newWidth = Math.max(200, Math.min(800, resizeStartWidth + deltaX))
+    
+    if (resizeStartWidth === emailListWidth) {
+      setEmailListWidth(newWidth)
+    } else {
+      setEmailContentWidth(newWidth)
+    }
+  }, [isResizing, resizeStartX, resizeStartWidth, emailListWidth, emailContentWidth])
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }, [])
+
+  // Add and remove resize event listeners
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove)
+      document.addEventListener('mouseup', handleResizeEnd)
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove)
+        document.removeEventListener('mouseup', handleResizeEnd)
+      }
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'b') {
+        e.preventDefault()
+        setSidebarCollapsed(!sidebarCollapsed)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [sidebarCollapsed])
+
   if (connectionStatus.status === ('checking' as ConnectionStatusType)) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -1035,13 +1099,33 @@ export default function InboxPage() {
   }
 
   return (
-    <div className=" container flex-1 flex h-[91vh] bg-background overflow-hidden">
+    <div className="container flex-1 flex h-[91vh] bg-background overflow-hidden">
       {/* Left Sidebar - Mailbox Navigation */}
-      <div className="w-[220px] border-r bg-muted/20 flex-shrink-0">
-        <div className="p-4">
+      <div className={`${sidebarCollapsed ? 'w-12' : 'w-[220px]'} border-r bg-muted/20 flex-shrink-0 transition-all duration-300 relative`}>
+        {/* Collapse/Expand Button */}
+        <button
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className="absolute -right-3 top-4 w-6 h-6 bg-background border rounded-full flex items-center justify-center hover:bg-muted transition-colors z-10"
+          title={sidebarCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-3 w-3" />
+          ) : (
+            <ChevronLeft className="h-3 w-3" />
+          )}
+        </button>
+        
+        <div className={`p-4 ${sidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <h2 className="text-lg font-semibold mb-4">
             Gmail Inbox
           </h2>
+          
+          {/* Collapsed state indicator */}
+          {sidebarCollapsed && (
+            <div className="absolute top-16 left-1/2 transform -translate-x-1/2">
+              <Mail className="h-6 w-6 text-muted-foreground" />
+            </div>
+          )}
           
           {/* Gmail Connection Status */}
           <div className="mb-4 p-3 bg-muted/40 rounded-lg">
@@ -1191,11 +1275,22 @@ export default function InboxPage() {
       </div>
 
       {/* Middle Panel - Email List */}
-      <div className="flex-1 flex flex-col border-r min-w-0">
+      <div 
+        className="flex flex-col border-r min-w-0 flex-1"
+        style={{ width: sidebarCollapsed ? 'auto' : `${emailListWidth}px` }}
+      >
         {/* Email List Header */}
         <div className="p-4 border-b bg-background flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-muted-foreground">Select conversations</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Select conversations</h3>
+              {!sidebarCollapsed && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span>•</span>
+                  <span>Drag separators to resize panels</span>
+                </div>
+              )}
+            </div>
             <Select onValueChange={handleFilterChange} value={currentFilter}>
               <SelectTrigger className="w-32 h-8">
                 <Filter className="h-3 w-3 mr-2" />
@@ -1315,9 +1410,26 @@ export default function InboxPage() {
         </div>
       </div>
 
+      {/* Resizable Separator between Email List and Email Content */}
+      {gmailConnected && selectedEmail && (
+        <div
+          className={`w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors relative group ${
+            isResizing && resizeStartWidth === emailListWidth ? 'bg-primary' : ''
+          }`}
+          onMouseDown={(e) => handleResizeStart(e, 'emailList')}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-0.5 h-8 bg-muted-foreground/30 group-hover:bg-primary/60 rounded-full transition-colors"></div>
+          </div>
+        </div>
+      )}
+
       {/* Right Panel - Email Content */}
       {gmailConnected && selectedEmail && (
-        <div className="w-[455px] flex flex-col border-r flex-shrink-0">
+        <div 
+          className="flex flex-col border-r flex-shrink-0"
+          style={{ width: `${emailContentWidth}px` }}
+        >
           {/* Email Header */}
           <div className="p-4 border-b bg-background flex-shrink-0">
             {/* Email Details */}
@@ -1645,6 +1757,20 @@ export default function InboxPage() {
                 Create Note
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resizable Separator between Email Content and Contact Panel */}
+      {gmailConnected && selectedEmail && selectedContact && (
+        <div
+          className={`w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors relative group ${
+            isResizing && resizeStartWidth === emailContentWidth ? 'bg-primary' : ''
+          }`}
+          onMouseDown={(e) => handleResizeStart(e, 'emailContent')}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-0.5 h-8 bg-muted-foreground/30 group-hover:bg-primary/60 rounded-full transition-colors"></div>
           </div>
         </div>
       )}

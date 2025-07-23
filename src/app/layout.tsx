@@ -50,6 +50,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <title>Internal-Re-CRM</title>
+        <meta name="description" content="Internal Real Estate CRM System" />
+      </head>
       <body className={inter.className}>
         <AuthProvider>
           <AppContent>
