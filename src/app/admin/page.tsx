@@ -16,6 +16,7 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ActivityDashboard } from '@/components/admin/ActivityDashboard'
 import { LeadStaging } from '@/components/admin/LeadStaging'
+import { LeadSourceManagement } from '@/components/admin/LeadSourceManagement'
 import { FollowUpPlanManagement } from '@/components/admin/FollowUpPlanManagement'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
@@ -253,6 +254,7 @@ export default function AdminPage() {
             <TabsTrigger value="users">User Management</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
             <TabsTrigger value="leads">Lead Staging</TabsTrigger>
+            <TabsTrigger value="sources">Lead Sources</TabsTrigger>
             <TabsTrigger value="plans">Follow-up Plans</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
           </TabsList>
@@ -440,6 +442,10 @@ export default function AdminPage() {
 
           <TabsContent value="leads" className="space-y-4">
             <LeadStaging users={users} />
+          </TabsContent>
+
+          <TabsContent value="sources" className="space-y-4">
+            <LeadSourceManagement />
           </TabsContent>
 
           <TabsContent value="plans" className="space-y-4">

@@ -368,6 +368,8 @@ export class HomeStackIntegration {
     [key: string]: any
   }): Promise<Person | null> {
     try {
+      console.log('🏗️ createPersonFromUserSignup called with:', userData)
+      
       const { createClient } = await import('@supabase/supabase-js')
       
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -388,8 +390,11 @@ export class HomeStackIntegration {
         .single()
 
       if (existingUser) {
+        console.log('⚠️ User already exists:', existingUser.email)
         return existingUser
       }
+
+      console.log('✅ User does not exist, proceeding with creation')
 
       // Get admin user for initial assignment
       const { data: adminUser } = await supabase
@@ -432,7 +437,10 @@ export class HomeStackIntegration {
         closed: undefined
       }
 
+      const { createPerson } = await import('./database')
       const newPerson = await createPerson(personData)
+
+      console.log('✅ Person created successfully:', newPerson.id)
 
       // Create activity log
       const { createActivity } = await import('./database')
@@ -443,6 +451,7 @@ export class HomeStackIntegration {
         created_by: adminUser.id,
       })
 
+      console.log('✅ Activity log created')
       return newPerson
 
     } catch (error) {

@@ -32,17 +32,29 @@ export default function IntegrationsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const loadConfigurations = async () => {
+  const loadConfigurations = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/integrations/homestack')
       if (response.ok) {
         const data = await response.json()
-        setHomeStackConfig(data)
+        // Extract the config from the response
+        if (data.config) {
+          setHomeStackConfig({
+            apiKey: data.config.api_key || '',
+            baseUrl: data.config.base_url || '',
+            webhookSecret: data.config.webhook_secret || '',
+            enabled: data.config.enabled || false,
+            ssoEnabled: data.config.sso_enabled || false,
+            ssoApiKey: data.config.sso_api_key || '',
+            ssoBaseUrl: data.config.sso_base_url || 'https://bkapi.homestack.com',
+            ssoBrokerUrl: data.config.sso_broker_url || 'https://broker.homestack.com'
+          })
+        }
       }
     } catch (error) {
       // Error loading configurations
     }
-  }
+  }, [])
 
   useEffect(() => {
     // Load saved configurations
@@ -235,6 +247,40 @@ export default function IntegrationsPage() {
     }
   }
 
+  const testHomeStackSignup = async (type: 'web' | 'mobile') => {
+    try {
+      setProcessing(true)
+      setError('')
+      
+      const response = await fetch('/api/homestack/test-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          testType: type,
+          userData: {
+            email: `test${type}${Date.now()}@example.com`,
+            first_name: `Test${type.charAt(0).toUpperCase() + type.slice(1)}`,
+            last_name: 'User',
+            phone: '+1234567890'
+          }
+        })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setSuccess(`${type.charAt(0).toUpperCase() + type.slice(1)} signup test successful! User created: ${result.person.first_name} ${result.person.last_name}`)
+        setTimeout(() => setSuccess(''), 5000)
+      } else {
+        setError(result.error || `${type} signup test failed`)
+      }
+    } catch (error) {
+      setError(`Failed to test ${type} signup`)
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
@@ -311,7 +357,7 @@ export default function IntegrationsPage() {
               <div className="flex items-center space-x-2">
                 <Switch
                   id="homestack-enabled"
-                  checked={homeStackConfig.enabled}
+                  checked={homeStackConfig.enabled || false}
                   onCheckedChange={(checked) => 
                     setHomeStackConfig(prev => ({ ...prev, enabled: checked }))
                   }
@@ -366,7 +412,7 @@ export default function IntegrationsPage() {
                       <div className="flex items-center space-x-2">
                         <Switch
                           id="homestack-sso-enabled"
-                          checked={homeStackConfig.ssoEnabled}
+                          checked={homeStackConfig.ssoEnabled || false}
                           onCheckedChange={(checked) => 
                             setHomeStackConfig(prev => ({ ...prev, ssoEnabled: checked }))
                           }
@@ -417,7 +463,7 @@ export default function IntegrationsPage() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button 
                       onClick={testHomeStackConnection} 
                       disabled={processing || !homeStackConfig.apiKey}
@@ -442,6 +488,22 @@ export default function IntegrationsPage() {
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Test Mobile Webhook
                     </Button>
+                    <Button 
+                      onClick={() => testHomeStackSignup('web')} 
+                      disabled={processing}
+                      variant="outline"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Test Web Signup
+                    </Button>
+                    <Button 
+                      onClick={() => testHomeStackSignup('mobile')} 
+                      disabled={processing}
+                      variant="outline"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Test Mobile Signup
+                    </Button>
                     <Button onClick={saveHomeStackConfig} disabled={processing}>
                       <Settings className="h-4 w-4 mr-2" />
                       Save Configuration
@@ -450,7 +512,6 @@ export default function IntegrationsPage() {
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Import Recent Leads
                     </Button>
-
                   </div>
 
                   {lastProcessed.homeStack && (

@@ -8,6 +8,8 @@ export interface EmailLead {
   phone: string[]
   message?: string
   source: 'homestack' | 'email_form' | 'zillow' | 'realtor' | 'other'
+  leadSourceId?: string
+  leadSourceName?: string
   listingAddress?: string
   propertyDetails?: string
   timestamp: Date
@@ -22,11 +24,10 @@ export class EmailLeadProcessor {
       const subject = emailData.subject as string
       const body = emailData.body as string
       // Try to identify the source based on email patterns
-      const source = this.identifySource(subject, emailData.from as string, body)
+      const sourceInfo = await this.identifySource(subject, emailData.from as string, body)
       // Extract lead data based on source
-      const leadData = await this.extractLeadData(source, subject, body)
+      const leadData = await this.extractLeadData(sourceInfo.source, subject, body)
       if (!leadData) {
-    
         return null
       }
       return {
@@ -37,7 +38,9 @@ export class EmailLeadProcessor {
         message: leadData.message,
         listingAddress: leadData.listingAddress,
         propertyDetails: leadData.propertyDetails,
-        source,
+        source: sourceInfo.source,
+        leadSourceId: sourceInfo.leadSourceId,
+        leadSourceName: sourceInfo.leadSourceName,
         timestamp: new Date()
       }
     } catch (error) {
@@ -48,26 +51,43 @@ export class EmailLeadProcessor {
   /**
    * Identify the source of the lead email
    */
-  private static identifySource(subject: string, from: string, body: string): EmailLead['source'] {
+  private static async identifySource(subject: string, from: string, body: string): Promise<{ source: EmailLead['source']; leadSourceId?: string; leadSourceName?: string }> {
     const subjectLower = subject.toLowerCase()
     const fromLower = from.toLowerCase()
     const bodyLower = body.toLowerCase()
     
+    // Try to detect lead source from database first
+    try {
+      const { detectLeadSourceFromEmail } = await import('./database')
+      const detectedSource = await detectLeadSourceFromEmail(from)
+      
+      if (detectedSource) {
+        return { 
+          source: 'email_form', 
+          leadSourceId: detectedSource.id, 
+          leadSourceName: detectedSource.name 
+        }
+      }
+    } catch (error) {
+      console.error('Error detecting lead source from database:', error)
+    }
+    
+    // Fallback to hardcoded detection
     // HomeStack patterns
     if (subjectLower.includes('homestack') || fromLower.includes('homestack')) {
-      return 'homestack'
+      return { source: 'homestack' }
     }
     
     // Zillow patterns
     if (subjectLower.includes('zillow') || fromLower.includes('zillow') || 
         bodyLower.includes('zillow.com')) {
-      return 'zillow'
+      return { source: 'zillow' }
     }
     
     // Realtor.com patterns
     if (subjectLower.includes('realtor') || fromLower.includes('realtor') || 
         bodyLower.includes('realtor.com')) {
-      return 'realtor'
+      return { source: 'realtor' }
     }
     
     // Generic email form patterns
@@ -75,10 +95,10 @@ export class EmailLeadProcessor {
         subjectLower.includes('contact') || subjectLower.includes('form') ||
         subjectLower.includes('property') || subjectLower.includes('house') ||
         subjectLower.includes('home') || subjectLower.includes('real estate')) {
-      return 'email_form'
+      return { source: 'email_form' }
     }
     
-    return 'other'
+    return { source: 'other' }
   }
   
   /**
@@ -256,10 +276,11 @@ export class EmailLeadProcessor {
         email: lead.email,
         phone: lead.phone,
         client_type: 'lead',
-        lead_source: lead.source,
+        lead_source: lead.leadSourceName || lead.source,
+        lead_source_id: lead.leadSourceId || undefined,
         lead_status: 'staging', // New leads go to staging
         assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
-        notes: lead.message || `Lead captured from ${lead.source} email on ${lead.timestamp.toLocaleDateString()}`,
+        notes: lead.message || `Lead captured from ${lead.leadSourceName || lead.source} email on ${lead.timestamp.toLocaleDateString()}`,
         // Set default values
         profile_picture: null,
         birthday: null,

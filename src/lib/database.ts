@@ -1511,3 +1511,100 @@ export async function getLeadStatsWithTags(userId?: string, userRole?: string) {
   
   return stats
 } 
+
+// Lead source detection functions
+export async function detectLeadSourceFromEmail(fromEmail: string): Promise<{ id: string; name: string } | null> {
+  try {
+    const { data: leadSources, error } = await supabase
+      .from('lead_sources')
+      .select('id, name, email_patterns, domain_patterns')
+      .eq('is_active', true)
+    
+    if (error) throw error
+    
+    if (!leadSources || leadSources.length === 0) {
+      return null
+    }
+    
+    // Check each lead source for matches
+    for (const source of leadSources) {
+      // Check email patterns
+      if (source.email_patterns && source.email_patterns.length > 0) {
+        for (const pattern of source.email_patterns) {
+          if (pattern === fromEmail || 
+              (pattern.includes('*') && fromEmail.includes(pattern.replace('*', '')))) {
+            return { id: source.id, name: source.name }
+          }
+        }
+      }
+      
+      // Check domain patterns
+      if (source.domain_patterns && source.domain_patterns.length > 0) {
+        const emailDomain = fromEmail.split('@')[1]
+        for (const pattern of source.domain_patterns) {
+          if (emailDomain === pattern || 
+              (pattern.includes('*') && emailDomain.includes(pattern.replace('*', '')))) {
+            return { id: source.id, name: source.name }
+          }
+        }
+      }
+    }
+    
+    return null
+  } catch (error) {
+    console.error('Error detecting lead source from email:', error)
+    return null
+  }
+}
+
+export async function addEmailAsLeadSource(email: string, name?: string): Promise<{ id: string; name: string } | null> {
+  try {
+    const emailDomain = email.split('@')[1]
+    const sourceName = name || `${emailDomain} Email`
+    
+    // Check if this email or domain already exists
+    const existingSource = await detectLeadSourceFromEmail(email)
+    if (existingSource) {
+      return existingSource
+    }
+    
+    // Create new lead source
+    const { data, error } = await supabase
+      .from('lead_sources')
+      .insert({
+        name: sourceName,
+        description: `Leads from ${email}`,
+        email_patterns: [email],
+        domain_patterns: [emailDomain],
+        keywords: ['email', 'inquiry'],
+        is_default: false,
+        is_active: true
+      })
+      .select('id, name')
+      .single()
+    
+    if (error) throw error
+    
+    return data
+  } catch (error) {
+    console.error('Error adding email as lead source:', error)
+    return null
+  }
+}
+
+export async function getLeadSources(): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('lead_sources')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+    
+    if (error) throw error
+    
+    return data || []
+  } catch (error) {
+    console.error('Error fetching lead sources:', error)
+    return []
+  }
+} 
