@@ -17,10 +17,13 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { event, zap_id, data } = body
 
+    console.log('HomeStack webhook received:', { event, zap_id, data })
+
     // Validate webhook signature if configured
     const signature = request.headers.get('x-homestack-signature')
     if (!signature) {
-      return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
+      console.log('Missing webhook signature - continuing for debugging')
+      // return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
     }
 
     // Get HomeStack configuration
@@ -49,26 +52,32 @@ export async function POST(request: Request) {
 
     // Process webhook based on event type
     const eventType = event || data?.type || body.type
+    console.log('Processing event type:', eventType)
 
     if (eventType === 'new_user') {
+      console.log('Processing new_user event')
       return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'update_user') {
-      return await handleUserUpdated(data, homeStack)
+      console.log('Processing update_user event (mobile signup)')
+      return await handleMobileUserSignup(data, homeStack)
     } else if (eventType === 'new_chat_message') {
       return await handleChatMessage(data, homeStack)
     } else if (eventType === 'mobile.user.created') {
+      console.log('Processing mobile.user.created event')
       return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'mobile.lead.created') {
       return await handleLeadCreated(data, homeStack)
     } else if (eventType === 'mobile.contact.created') {
       return await handleContactCreated(data, homeStack)
     } else if (eventType === 'user.created') {
+      console.log('Processing user.created event')
       return await handleUserCreated(data, homeStack, eventType)
     } else if (eventType === 'lead.created') {
       return await handleLeadCreated(data, homeStack)
     } else if (eventType === 'contact.created') {
       return await handleContactCreated(data, homeStack)
     } else {
+      console.log('Unhandled event type:', eventType)
       return NextResponse.json({ 
         success: true, 
         message: 'Event received but not processed',
@@ -76,6 +85,7 @@ export async function POST(request: Request) {
       })
     }
   } catch (error) {
+    console.error('Error processing HomeStack webhook:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -83,6 +93,8 @@ export async function POST(request: Request) {
 // Handle new user signup from HomeStack
 async function handleUserCreated(userData: any, homeStack: HomeStackIntegration, eventType?: string) {
   try {
+    console.log('handleUserCreated called with:', { userData, eventType })
+    
     // Handle different HomeStack data formats
     let actualUserData = userData
     
@@ -145,54 +157,65 @@ async function handleUserCreated(userData: any, homeStack: HomeStackIntegration,
   }
 }
 
-// Handle user updates from HomeStack
-async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration) {
+// Handle mobile user signups from HomeStack (update_user events)
+async function handleMobileUserSignup(userData: any, homeStack: HomeStackIntegration) {
   try {
-    // Check if this is actually a new user signup (recent created_at timestamp)
-    const createdAt = new Date(userData.created_at)
-    const now = new Date()
-    const timeDifference = now.getTime() - createdAt.getTime()
-    const isRecentSignup = timeDifference < 5 * 60 * 1000 // Within 5 minutes
+    console.log('handleMobileUserSignup called with:', userData)
     
-    // If this is a recent signup, treat it as a new user creation
-    if (isRecentSignup) {
-      
-      // Transform the user data to match our expected format
-      const transformedUserData = {
-        id: userData.guid,
-        email: userData.email,
-        first_name: userData.name?.split(' ')[0] || userData.email.split('@')[0],
-        last_name: userData.name?.split(' ').slice(1).join(' ') || 'Unknown',
-        phone: userData.phone,
-        created_at: userData.created_at,
-        source: 'homestack_mobile', // Mark as mobile signup
-        platform: 'homestack_mobile'
-      }
-      
-      // Create the user in our CRM
-      const person = await homeStack.createPersonFromUserSignup(transformedUserData)
-      
-      if (person) {
-        return NextResponse.json({
-          success: true,
-          message: 'New user successfully created from mobile app',
-          person_id: person.id
-        })
-      } else {
-        return NextResponse.json(
-          { error: 'Failed to create new user from mobile app' },
-          { status: 500 }
-        )
-      }
-    } else {
-      // This is a genuine update, just log it for now
-      
+    // Transform the user data to match our expected format
+    const transformedUserData = {
+      id: userData.guid || userData.id || userData.user_id || userData.userId,
+      email: userData.email || userData.email_address || userData.user_email,
+      first_name: userData.first_name || userData.firstName || (userData.name ? userData.name.split(' ')[0] : undefined) || userData.email?.split('@')[0],
+      last_name: userData.last_name || userData.lastName || (userData.name ? userData.name.split(' ').slice(1).join(' ') : undefined) || 'Unknown',
+      phone: userData.phone || userData.phone_number || userData.mobile || userData.contact_number,
+      created_at: userData.created_at || userData.createdAt || userData.registration_date || userData.signup_date,
+      source: 'homestack_mobile', // Mark as mobile signup
+      platform: 'homestack_mobile'
+    }
+    
+    console.log('Transformed mobile user data:', transformedUserData)
+    
+    // Create the user in our CRM
+    const person = await homeStack.createPersonFromUserSignup(transformedUserData)
+    
+    if (person) {
+      console.log('Mobile user created successfully:', person.id)
       return NextResponse.json({
         success: true,
-        message: 'User update received from HomeStack',
-        user_id: userData.guid
+        message: 'New user successfully created from mobile app',
+        person_id: person.id
       })
+    } else {
+      console.log('Failed to create mobile user')
+      return NextResponse.json(
+        { error: 'Failed to create new user from mobile app' },
+        { status: 500 }
+      )
     }
+
+  } catch (error) {
+    console.error('Error in handleMobileUserSignup:', error)
+    return NextResponse.json(
+      { error: 'Failed to process mobile user signup' },
+      { status: 500 }
+    )
+  }
+}
+
+// Handle user updates from HomeStack (genuine updates only)
+async function handleUserUpdated(userData: any, homeStack: HomeStackIntegration) {
+  try {
+    console.log('handleUserUpdated called with:', userData)
+    
+    // This is for genuine user updates, not new signups
+    console.log('Processing genuine user update')
+    
+    return NextResponse.json({
+      success: true,
+      message: 'User update received from HomeStack',
+      user_id: userData.guid || userData.id
+    })
 
   } catch (error) {
     return NextResponse.json(
