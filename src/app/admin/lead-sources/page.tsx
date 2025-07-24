@@ -244,106 +244,134 @@ export default function LeadSourcesPage() {
             Configure email patterns, domains, and keywords to help the AI identify leads from different sources.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center p-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Email Patterns</TableHead>
-                  <TableHead>Domain Patterns</TableHead>
-                  <TableHead>Keywords</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leadSources.map((source) => (
-                  <TableRow key={source.id}>
-                    <TableCell className="font-medium">{source.name}</TableCell>
-                    <TableCell>{source.description || '-'}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {source.email_patterns.slice(0, 2).map((pattern, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {pattern}
-                          </Badge>
-                        ))}
-                        {source.email_patterns.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{source.email_patterns.length - 2} more
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {source.domain_patterns.slice(0, 2).map((pattern, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {pattern}
-                          </Badge>
-                        ))}
-                        {source.domain_patterns.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{source.domain_patterns.length - 2} more
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {source.keywords.slice(0, 2).map((keyword, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {keyword}
-                          </Badge>
-                        ))}
-                        {source.keywords.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{source.keywords.length - 2} more
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={source.is_active ? "default" : "secondary"}>
-                        {source.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={source.is_default ? "default" : "outline"}>
-                        {source.is_default ? "Default" : "Custom"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEdit(source)}
-                          disabled={source.is_default}
-                        >
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDelete(source)}
-                          disabled={source.is_default}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[150px] min-w-[150px]">Name</TableHead>
+                    <TableHead className="w-[200px] min-w-[200px]">Description</TableHead>
+                    <TableHead className="w-[180px] min-w-[180px]">Email Patterns</TableHead>
+                    <TableHead className="w-[180px] min-w-[180px]">Domain Patterns</TableHead>
+                    <TableHead className="w-[180px] min-w-[180px]">Keywords</TableHead>
+                    <TableHead className="w-[100px] min-w-[100px]">Status</TableHead>
+                    <TableHead className="w-[100px] min-w-[100px]">Type</TableHead>
+                    <TableHead className="w-[120px] min-w-[120px]">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {leadSources.map((source) => (
+                    <TableRow key={source.id}>
+                      <TableCell className="font-medium max-w-[150px]">
+                        <div className="truncate" title={source.name}>
+                          {source.name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[200px]">
+                        <div className="truncate" title={source.description || '-'}>
+                          {source.description || '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        <div className="flex flex-wrap gap-1">
+                          {source.email_patterns.length === 0 ? (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          ) : (
+                            <>
+                              {source.email_patterns.slice(0, 2).map((pattern, index) => (
+                                <Badge key={index} variant="secondary" className="text-xs max-w-full truncate">
+                                  <span className="truncate">{pattern}</span>
+                                </Badge>
+                              ))}
+                              {source.email_patterns.length > 2 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{source.email_patterns.length - 2} more
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        <div className="flex flex-wrap gap-1">
+                          {source.domain_patterns.length === 0 ? (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          ) : (
+                            <>
+                              {source.domain_patterns.slice(0, 2).map((pattern, index) => (
+                                <Badge key={index} variant="secondary" className="text-xs max-w-full truncate">
+                                  <span className="truncate">{pattern}</span>
+                                </Badge>
+                              ))}
+                              {source.domain_patterns.length > 2 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{source.domain_patterns.length - 2} more
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        <div className="flex flex-wrap gap-1">
+                          {source.keywords.length === 0 ? (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          ) : (
+                            <>
+                              {source.keywords.slice(0, 2).map((keyword, index) => (
+                                <Badge key={index} variant="outline" className="text-xs max-w-full truncate">
+                                  <span className="truncate">{keyword}</span>
+                                </Badge>
+                              ))}
+                              {source.keywords.length > 2 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{source.keywords.length - 2} more
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[100px]">
+                        <Badge variant={source.is_active ? "default" : "secondary"}>
+                          {source.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[100px]">
+                        <Badge variant={source.is_default ? "default" : "outline"}>
+                          {source.is_default ? "Default" : "Custom"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[120px]">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEdit(source)}
+                            disabled={source.is_default}
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDelete(source)}
+                            disabled={source.is_default}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
