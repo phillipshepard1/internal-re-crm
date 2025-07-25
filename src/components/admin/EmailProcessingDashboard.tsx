@@ -64,7 +64,9 @@ export function EmailProcessingDashboard() {
   const triggerProcessing = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/cron/email-processing', {
+      // Get the cron secret token from environment or generate a temporary one
+      // For admin dashboard access, we'll use a different approach
+      const response = await fetch('/api/admin/email-processing/trigger', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
