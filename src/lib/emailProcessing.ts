@@ -106,11 +106,11 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     let existingError = null
     
     for (const email of leadResult.lead_data.email) {
-      // Use the contains operator to check if the email array contains this email
+      // Use the overlaps operator to check if the email arrays have any common elements
       const { data: person, error: error } = await supabase
         .from('people')
         .select('id, first_name, last_name, email, lead_status')
-        .contains('email', [email])
+        .overlaps('email', [email])
         .single()
 
       if (person) {
