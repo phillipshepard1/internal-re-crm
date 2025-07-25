@@ -27,15 +27,13 @@ export class LeadDetectionService {
     try {
       const { from, subject, body } = emailData
       
-      // Get all active lead sources and detection rules
-      const [leadSources, detectionRules] = await Promise.all([
-        this.getActiveLeadSources(supabaseClient),
-        this.getActiveDetectionRules(supabaseClient)
-      ])
+             // Get all active lead sources (detection rules disabled - only using admin-configured sources)
+       const [leadSources] = await Promise.all([
+         this.getActiveLeadSources(supabaseClient)
+       ])
       
-      console.log(`Loaded ${leadSources.length} lead sources and ${detectionRules.length} detection rules`)
+      console.log(`Loaded ${leadSources.length} lead sources (detection rules disabled)`)
       console.log('Lead sources:', leadSources.map(s => s.name))
-      console.log('Detection rules:', detectionRules.map(r => r.name))
       
       let maxConfidence = 0
       let detectedSource: LeadSource | undefined
@@ -53,24 +51,24 @@ export class LeadDetectionService {
         }
       }
       
-      // Check against detection rules
-      for (const rule of detectionRules) {
-        const ruleConfidence = this.calculateRuleConfidence(from, subject, body, rule)
-        console.log(`Rule ${rule.name}: ${(ruleConfidence * 100).toFixed(1)}% confidence`)
-        if (ruleConfidence > maxConfidence) {
-          maxConfidence = ruleConfidence
-          detectedRule = rule
-          reasons.push(`Matched detection rule: ${rule.name}`)
-        }
-      }
+      // DISABLED: Check against detection rules (only using admin-configured lead sources)
+      // for (const rule of detectionRules) {
+      //   const ruleConfidence = this.calculateRuleConfidence(from, subject, body, rule)
+      //   console.log(`Rule ${rule.name}: ${(ruleConfidence * 100).toFixed(1)}% confidence`)
+      //   if (ruleConfidence > maxConfidence) {
+      //     maxConfidence = ruleConfidence
+      //     detectedRule = rule
+      //     reasons.push(`Matched detection rule: ${rule.name}`)
+      //   }
+      // }
       
       // Extract data from email
       const extractedData = this.extractContactData(from, subject, body)
       
       // Determine if this is a lead based on confidence threshold
-      const isLead = maxConfidence >= 0.3 // Minimum 30% confidence (lowered from 60%)
+      const isLead = maxConfidence >= 0.6 // Minimum 60% confidence (increased from 30%)
       
-      console.log(`Final confidence: ${(maxConfidence * 100).toFixed(1)}% (threshold: 30%)`)
+              console.log(`Final confidence: ${(maxConfidence * 100).toFixed(1)}% (threshold: 60%)`)
       
       if (isLead) {
         reasons.push(`High confidence score: ${(maxConfidence * 100).toFixed(1)}%`)

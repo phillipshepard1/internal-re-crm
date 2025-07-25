@@ -170,6 +170,12 @@ export class GmailIntegration {
       let processedCount = 0
       
       for (const email of emails) {
+        // Pre-filter common non-lead emails
+        if (this.shouldSkipEmail(email)) {
+          console.log(`Skipping email from ${email.from}: ${email.subject}`)
+          continue
+        }
+        
         // Use AI-powered lead detection
         const leadResult = await LeadDetectionService.extractLeadData({
           from: email.from as string,
@@ -209,6 +215,95 @@ export class GmailIntegration {
     } catch (error) {
       return 0
     }
+  }
+  
+  /**
+   * Check if email should be skipped (common non-lead emails)
+   */
+  private shouldSkipEmail(email: Record<string, unknown>): boolean {
+    const from = (email.from as string || '').toLowerCase()
+    const subject = (email.subject as string || '').toLowerCase()
+    
+         // Skip internal team emails (ADD YOUR COMPANY DOMAINS HERE WHEN READY)
+     // if (from.includes('@yourcompany.com') || from.includes('@yourdomain.com')) {
+     //   return true
+     // }
+    
+    // Skip common non-lead email patterns
+    const skipPatterns = [
+      'noreply@',
+      'donotreply@',
+      'no-reply@',
+      'mailer-daemon@',
+      'postmaster@',
+      'bounce@',
+      'unsubscribe@',
+      'newsletter@',
+      'marketing@',
+      'promotions@',
+      'offers@',
+      'deals@',
+      'sales@',
+      'support@',
+      'help@',
+      'info@',
+      'admin@',
+      'system@',
+      'notification@',
+      'alert@',
+      'update@',
+      'digest@',
+      'summary@',
+      'report@'
+    ]
+    
+    for (const pattern of skipPatterns) {
+      if (from.includes(pattern)) {
+        return true
+      }
+    }
+    
+    // Skip emails with common non-lead subjects
+    const skipSubjects = [
+      'unsubscribe',
+      'newsletter',
+      'promotion',
+      'offer',
+      'deal',
+      'sale',
+      'discount',
+      'coupon',
+      'newsletter',
+      'digest',
+      'summary',
+      'report',
+      'notification',
+      'alert',
+      'update',
+      'welcome',
+      'confirmation',
+      'receipt',
+      'invoice',
+      'statement',
+      'billing',
+      'payment',
+      'subscription',
+      'membership',
+      'account',
+      'password',
+      'security',
+      'verification',
+      'activation',
+      'registration'
+    ]
+    
+    for (const skipSubject of skipSubjects) {
+      if (subject.includes(skipSubject)) {
+        return true
+      }
+    }
+    
+    return false
   }
   
   /**
