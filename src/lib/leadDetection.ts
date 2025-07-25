@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
 import type { 
   LeadSource, 
   LeadDetectionRule, 
@@ -7,15 +6,8 @@ import type {
   LeadDetectionConditions 
 } from './types/leadSources'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
+// Note: This file is now used only on the server side
+// The Supabase client will be created in the API routes where this is used
 
 export class LeadDetectionService {
   
@@ -29,16 +21,21 @@ export class LeadDetectionService {
       body: string
       to?: string
       date?: string
-    }
+    },
+    supabaseClient: any
   ): Promise<EmailAnalysisResult> {
     try {
       const { from, subject, body } = emailData
       
       // Get all active lead sources and detection rules
       const [leadSources, detectionRules] = await Promise.all([
-        this.getActiveLeadSources(),
-        this.getActiveDetectionRules()
+        this.getActiveLeadSources(supabaseClient),
+        this.getActiveDetectionRules(supabaseClient)
       ])
+      
+      console.log(`Loaded ${leadSources.length} lead sources and ${detectionRules.length} detection rules`)
+      console.log('Lead sources:', leadSources.map(s => s.name))
+      console.log('Detection rules:', detectionRules.map(r => r.name))
       
       let maxConfidence = 0
       let detectedSource: LeadSource | undefined
@@ -48,6 +45,7 @@ export class LeadDetectionService {
       // Check against lead sources first
       for (const source of leadSources) {
         const sourceConfidence = this.calculateSourceConfidence(from, subject, body, source)
+        console.log(`Source ${source.name}: ${(sourceConfidence * 100).toFixed(1)}% confidence`)
         if (sourceConfidence > maxConfidence) {
           maxConfidence = sourceConfidence
           detectedSource = source
@@ -58,6 +56,7 @@ export class LeadDetectionService {
       // Check against detection rules
       for (const rule of detectionRules) {
         const ruleConfidence = this.calculateRuleConfidence(from, subject, body, rule)
+        console.log(`Rule ${rule.name}: ${(ruleConfidence * 100).toFixed(1)}% confidence`)
         if (ruleConfidence > maxConfidence) {
           maxConfidence = ruleConfidence
           detectedRule = rule
@@ -69,7 +68,9 @@ export class LeadDetectionService {
       const extractedData = this.extractContactData(from, subject, body)
       
       // Determine if this is a lead based on confidence threshold
-      const isLead = maxConfidence >= 0.6 // Minimum 60% confidence
+      const isLead = maxConfidence >= 0.3 // Minimum 30% confidence (lowered from 60%)
+      
+      console.log(`Final confidence: ${(maxConfidence * 100).toFixed(1)}% (threshold: 30%)`)
       
       if (isLead) {
         reasons.push(`High confidence score: ${(maxConfidence * 100).toFixed(1)}%`)
@@ -106,10 +107,11 @@ export class LeadDetectionService {
       body: string
       to?: string
       date?: string
-    }
+    },
+    supabaseClient: any
   ): Promise<LeadExtractionResult> {
     try {
-      const analysis = await this.analyzeEmail(emailData)
+      const analysis = await this.analyzeEmail(emailData, supabaseClient)
       
       if (!analysis.is_lead) {
         return {
@@ -177,31 +179,42 @@ export class LeadDetectionService {
     const subjectLower = subject.toLowerCase()
     const bodyLower = body.toLowerCase()
     
-    // Check email patterns
+    // Check email patterns (highest confidence)
     for (const pattern of source.email_patterns) {
       if (this.matchesPattern(fromLower, pattern)) {
-        confidence += 0.4
+        confidence += 0.8
         break
       }
     }
     
-    // Check domain patterns
+    // Check domain patterns (high confidence)
     for (const pattern of source.domain_patterns) {
       if (this.matchesPattern(fromLower, pattern)) {
-        confidence += 0.3
+        confidence += 0.6
         break
       }
     }
     
-    // Check keywords in subject and body
+    // Check keywords in subject and body (cumulative)
+    let keywordMatches = 0
     for (const keyword of source.keywords) {
       const keywordLower = keyword.toLowerCase()
       if (subjectLower.includes(keywordLower)) {
-        confidence += 0.2
+        keywordMatches += 1
+        confidence += 0.3
+        console.log(`  Keyword "${keyword}" matched in subject`)
       }
       if (bodyLower.includes(keywordLower)) {
-        confidence += 0.1
+        keywordMatches += 1
+        confidence += 0.2
+        console.log(`  Keyword "${keyword}" matched in body`)
       }
+    }
+    
+    // Bonus for multiple keyword matches
+    if (keywordMatches >= 2) {
+      confidence += 0.2
+      console.log(`  Bonus for ${keywordMatches} keyword matches`)
     }
     
     return Math.min(confidence, 1.0)
@@ -222,21 +235,37 @@ export class LeadDetectionService {
     const subjectLower = subject.toLowerCase()
     const bodyLower = body.toLowerCase()
     
-    // Check subject keywords
+    // Check subject keywords (higher weight)
     if (conditions.subject_keywords) {
+      let subjectMatches = 0
       for (const keyword of conditions.subject_keywords) {
         if (subjectLower.includes(keyword.toLowerCase())) {
-          confidence += 0.3
+          subjectMatches += 1
+          confidence += 0.4
+          console.log(`  Rule subject keyword "${keyword}" matched`)
         }
+      }
+      // Bonus for multiple subject matches
+      if (subjectMatches >= 2) {
+        confidence += 0.2
+        console.log(`  Rule bonus for ${subjectMatches} subject matches`)
       }
     }
     
     // Check body keywords
     if (conditions.body_keywords) {
+      let bodyMatches = 0
       for (const keyword of conditions.body_keywords) {
         if (bodyLower.includes(keyword.toLowerCase())) {
-          confidence += 0.2
+          bodyMatches += 1
+          confidence += 0.3
+          console.log(`  Rule body keyword "${keyword}" matched`)
         }
+      }
+      // Bonus for multiple body matches
+      if (bodyMatches >= 2) {
+        confidence += 0.2
+        console.log(`  Rule bonus for ${bodyMatches} body matches`)
       }
     }
     
@@ -244,7 +273,7 @@ export class LeadDetectionService {
     if (conditions.sender_patterns) {
       for (const pattern of conditions.sender_patterns) {
         if (this.matchesPattern(fromLower, pattern)) {
-          confidence += 0.2
+          confidence += 0.3
         }
       }
     }
@@ -253,13 +282,13 @@ export class LeadDetectionService {
     if (conditions.domain_patterns) {
       for (const pattern of conditions.domain_patterns) {
         if (this.matchesPattern(fromLower, pattern)) {
-          confidence += 0.2
+          confidence += 0.3
         }
       }
     }
     
-    // Apply minimum confidence threshold
-    const minConfidence = conditions.min_confidence || 0.5
+    // Apply minimum confidence threshold (lowered from 0.5 to 0.3)
+    const minConfidence = conditions.min_confidence || 0.3
     if (confidence < minConfidence) {
       confidence = 0
     }
@@ -283,6 +312,8 @@ export class LeadDetectionService {
    * Extract contact data from email
    */
   private static extractContactData(from: string, subject: string, body: string) {
+    const fullText = `${subject} ${body}`
+    
     return {
       name: this.extractName(from, body),
       email: this.extractEmails(body, from),
@@ -291,7 +322,11 @@ export class LeadDetectionService {
       position: this.extractPosition(body),
       message: body.substring(0, 1000), // First 1000 characters
       property_address: this.extractPropertyAddress(subject, body),
-      property_details: this.extractPropertyDetails(subject, body)
+      property_details: this.extractPropertyDetails(subject, body),
+      price_range: this.extractPriceRange(fullText),
+      location_preferences: this.extractLocationPreferences(fullText),
+      property_type: this.extractPropertyType(fullText),
+      timeline: this.extractTimeline(fullText)
     }
   }
   
@@ -419,15 +454,98 @@ export class LeadDetectionService {
       }
     }
     
-    return details.join(' ')
+    return details.join('. ')
+  }
+
+  /**
+   * Extract price range from text
+   */
+  private static extractPriceRange(text: string): string {
+    // Match various price formats: $300k-$500k, $300,000-$500,000, 300k-500k, etc.
+    const pricePatterns = [
+      /\$?(\d{1,3}(?:,\d{3})*(?:k|K)?)\s*[-–—]\s*\$?(\d{1,3}(?:,\d{3})*(?:k|K)?)/g,
+      /\$?(\d{1,3}(?:,\d{3})*(?:k|K)?)\s*to\s*\$?(\d{1,3}(?:,\d{3})*(?:k|K)?)/gi,
+      /budget.*?\$?(\d{1,3}(?:,\d{3})*(?:k|K)?)/gi,
+      /price.*?\$?(\d{1,3}(?:,\d{3})*(?:k|K)?)/gi
+    ]
+    
+    for (const pattern of pricePatterns) {
+      const matches = text.match(pattern)
+      if (matches && matches.length > 0) {
+        return matches[0].trim()
+      }
+    }
+    
+    return ''
+  }
+
+  /**
+   * Extract location preferences from text
+   */
+  private static extractLocationPreferences(text: string): string {
+    const locationKeywords = ['area', 'neighborhood', 'city', 'town', 'zip', 'location', 'prefer']
+    const sentences = text.split(/[.!?]/)
+    const locationSentences: string[] = []
+    
+    for (const sentence of sentences) {
+      const lowerSentence = sentence.toLowerCase()
+      if (locationKeywords.some(keyword => lowerSentence.includes(keyword))) {
+        locationSentences.push(sentence.trim())
+      }
+    }
+    
+    return locationSentences.join('. ')
+  }
+
+  /**
+   * Extract property type preferences from text
+   */
+  private static extractPropertyType(text: string): string {
+    const propertyTypes = [
+      'single family', 'single-family', 'condo', 'condominium', 'townhouse', 'town house',
+      'apartment', 'duplex', 'triplex', 'multi-family', 'commercial', 'land', 'lot'
+    ]
+    
+    const lowerText = text.toLowerCase()
+    const foundTypes: string[] = []
+    
+    for (const type of propertyTypes) {
+      if (lowerText.includes(type)) {
+        foundTypes.push(type)
+      }
+    }
+    
+    return foundTypes.join(', ')
+  }
+
+  /**
+   * Extract timeline information from text
+   */
+  private static extractTimeline(text: string): string {
+    const timelineKeywords = [
+      'timeline', 'timeline', 'when', 'timeframe', 'urgent', 'asap', 'soon',
+      'month', 'year', 'spring', 'summer', 'fall', 'winter', 'immediately'
+    ]
+    
+    const sentences = text.split(/[.!?]/)
+    const timelineSentences: string[] = []
+    
+    for (const sentence of sentences) {
+      const lowerSentence = sentence.toLowerCase()
+      if (timelineKeywords.some(keyword => lowerSentence.includes(keyword))) {
+        timelineSentences.push(sentence.trim())
+      }
+    }
+    
+    return timelineSentences.join('. ')
   }
   
   /**
    * Get all active lead sources
    */
-  private static async getActiveLeadSources(): Promise<LeadSource[]> {
+  private static async getActiveLeadSources(supabaseClient: any): Promise<LeadSource[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('lead_sources')
         .select('*')
         .eq('is_active', true)
@@ -443,9 +561,9 @@ export class LeadDetectionService {
   /**
    * Get all active detection rules
    */
-  private static async getActiveDetectionRules(): Promise<LeadDetectionRule[]> {
+  private static async getActiveDetectionRules(supabaseClient: any): Promise<LeadDetectionRule[]> {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('lead_detection_rules')
         .select('*')
         .eq('is_active', true)

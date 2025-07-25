@@ -323,6 +323,7 @@ export class EmailLeadProcessor {
 
   /**
    * Create a new person record from AI-detected lead data
+   * Note: This method is deprecated. Use the API route /api/leads/process-email instead.
    */
   static async createPersonFromLeadData(leadData: {
     first_name: string
@@ -338,77 +339,9 @@ export class EmailLeadProcessor {
     lead_source_id?: string
     confidence_score: number
   }): Promise<Person | null> {
-    try {
-      // Get admin user for initial assignment (leads go to staging first)
-      const { createClient } = await import('@supabase/supabase-js')
-      
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-      
-      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      })
-
-      const { data: adminUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role', 'admin')
-        .single()
-
-      if (!adminUser) {
-        return null
-      }
-      
-      const personData: Partial<Person> = {
-        first_name: leadData.first_name,
-        last_name: leadData.last_name,
-        email: leadData.email,
-        phone: leadData.phone,
-        client_type: 'lead',
-        lead_source: leadData.lead_source,
-        lead_source_id: leadData.lead_source_id,
-        lead_status: 'staging', // New leads go to staging
-        assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
-        notes: leadData.message || `AI-detected lead from ${leadData.lead_source} (Confidence: ${(leadData.confidence_score * 100).toFixed(1)}%)`,
-        // Set default values
-        profile_picture: null,
-        birthday: null,
-        mailing_address: null,
-        relationship_id: null,
-        last_interaction: new Date().toISOString(),
-        next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
-        best_to_reach_by: null,
-        lists: [],
-        company: leadData.company,
-        position: leadData.position,
-        address: leadData.property_address,
-        city: undefined,
-        state: undefined,
-        zip_code: undefined,
-        country: undefined,
-        looking_for: leadData.property_details,
-        selling: undefined,
-        closed: undefined,
-      }
-      
-      const newPerson = await createPerson(personData)
-      
-      // Create an activity log entry
-      const { createActivity } = await import('./database')
-      await createActivity({
-        person_id: newPerson.id,
-        type: 'created',
-        description: `AI-detected lead from ${leadData.lead_source} and placed in staging`,
-        created_by: adminUser.id,
-      })
-      
-      return newPerson
-      
-    } catch (error) {
-      return null
-    }
+    // This method is deprecated - the functionality has been moved to the API route
+    // to avoid client-side Supabase service key usage
+    console.warn('createPersonFromLeadData is deprecated. Use /api/leads/process-email API route instead.')
+    return null
   }
 } 

@@ -159,7 +159,7 @@ export class GmailIntegration {
   /**
    * Get recent emails and process them for leads
    */
-  async processRecentEmails(maxResults: number = 10): Promise<number> {
+  async processRecentEmails(maxResults: number = 10, supabaseClient?: any): Promise<number> {
     try {
       if (!this.accessToken) {
         await this.initialize()
@@ -177,7 +177,7 @@ export class GmailIntegration {
           body: email.body as string,
           to: email.to as string,
           date: email.internalDate as string
-        })
+        }, supabaseClient)
         
         if (leadResult.success && leadResult.lead_data) {
           // Create person from detected lead data
