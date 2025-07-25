@@ -26,39 +26,36 @@ async function runMigration() {
     
     // Read the migration SQL file
     const migrationPath = path.join(__dirname, '..', 'migrations', 'create_processed_emails_table.sql')
-    const sql = fs.readFileSync(migrationPath, 'utf8')
+    const sqlContent = fs.readFileSync(migrationPath, 'utf8')
     
-    console.log('Executing SQL migration...')
+    console.log('SQL to execute:')
+    console.log(sqlContent)
+    console.log('\n---')
     
-    // Execute the SQL directly
-    const { error } = await supabase.rpc('exec_sql', { sql_query: sql })
+    // Since Supabase client doesn't support raw SQL execution,
+    // we'll provide instructions for manual execution
+    console.log('⚠️  IMPORTANT: Supabase client doesn\'t support raw SQL execution.')
+    console.log('Please run this migration manually in your Supabase dashboard:')
+    console.log('\n1. Go to your Supabase project dashboard')
+    console.log('2. Navigate to SQL Editor in the left sidebar')
+    console.log('3. Copy and paste the SQL above')
+    console.log('4. Click "Run" to execute the migration')
+    console.log('\nAlternatively, you can use the Supabase CLI:')
+    console.log('supabase db push --include-all')
     
-    if (error) {
-      console.error('Migration failed:', error)
-      process.exit(1)
-    }
-    
-    console.log('Migration completed successfully!')
-    
-    // Verify the table was created
-    const { data: tables, error: verifyError } = await supabase
-      .from('information_schema.tables')
-      .select('table_name')
-      .eq('table_schema', 'public')
-      .eq('table_name', 'processed_emails')
-    
-    if (verifyError) {
-      console.error('Error verifying table creation:', verifyError)
-    } else if (tables && tables.length > 0) {
-      console.log('✅ processed_emails table created successfully')
-    } else {
-      console.log('❌ processed_emails table was not created')
-    }
-    
+    return true
   } catch (error) {
-    console.error('Migration failed:', error)
-    process.exit(1)
+    console.error('Error running migration:', error)
+    return false
   }
 }
 
-runMigration() 
+// Run the migration
+runMigration().then(success => {
+  if (success) {
+    console.log('\n✅ Migration instructions provided successfully')
+  } else {
+    console.log('\n❌ Failed to provide migration instructions')
+    process.exit(1)
+  }
+}) 
