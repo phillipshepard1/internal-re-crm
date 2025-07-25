@@ -127,6 +127,99 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       }
     }
 
+    // Check for existing leads with the same email address
+    const primaryEmail = leadResult.lead_data.email[0] // Use first email as primary
+    const { data: existingPerson, error: checkError } = await supabase
+      .from('people')
+      .select('id, first_name, last_name, email, lead_status, created_at')
+      .or(`email.cs.{${primaryEmail}},email.cs.{${primaryEmail.toLowerCase()}}`)
+      .limit(1)
+
+    if (checkError) {
+      console.error('Error checking for existing person:', checkError)
+      return {
+        success: false,
+        message: 'Error checking for duplicate leads',
+        details: 'Database error occurred while checking for existing leads'
+      }
+    }
+
+    if (existingPerson && existingPerson.length > 0) {
+      const existing = existingPerson[0]
+      console.log('Duplicate lead detected by email:', {
+        existing_id: existing.id,
+        existing_name: `${existing.first_name} ${existing.last_name}`,
+        existing_email: existing.email,
+        existing_status: existing.lead_status,
+        existing_created: existing.created_at,
+        new_name: `${leadResult.lead_data.first_name} ${leadResult.lead_data.last_name}`,
+        new_email: primaryEmail
+      })
+
+      return {
+        success: false,
+        message: 'Lead already exists in system',
+        details: `A lead with email ${primaryEmail} already exists (ID: ${existing.id}, Status: ${existing.lead_status})`,
+        person: existing
+      }
+    }
+
+    // Additional duplicate check by name and phone (if phone exists)
+    if (leadResult.lead_data.phone && leadResult.lead_data.phone.length > 0) {
+      const primaryPhone = leadResult.lead_data.phone[0]
+      const { data: existingByPhone, error: phoneCheckError } = await supabase
+        .from('people')
+        .select('id, first_name, last_name, email, phone, lead_status, created_at')
+        .contains('phone', [primaryPhone])
+        .limit(1)
+
+      if (!phoneCheckError && existingByPhone && existingByPhone.length > 0) {
+        const existing = existingByPhone[0]
+        console.log('Duplicate lead detected by phone:', {
+          existing_id: existing.id,
+          existing_name: `${existing.first_name} ${existing.last_name}`,
+          existing_phone: existing.phone,
+          existing_status: existing.lead_status,
+          new_name: `${leadResult.lead_data.first_name} ${leadResult.lead_data.last_name}`,
+          new_phone: primaryPhone
+        })
+
+        return {
+          success: false,
+          message: 'Lead already exists in system',
+          details: `A lead with phone ${primaryPhone} already exists (ID: ${existing.id}, Status: ${existing.lead_status})`,
+          person: existing
+        }
+      }
+    }
+
+    // Additional duplicate check by exact name match
+    const { data: existingByName, error: nameCheckError } = await supabase
+      .from('people')
+      .select('id, first_name, last_name, email, lead_status, created_at')
+      .eq('first_name', leadResult.lead_data.first_name)
+      .eq('last_name', leadResult.lead_data.last_name)
+      .limit(1)
+
+    if (!nameCheckError && existingByName && existingByName.length > 0) {
+      const existing = existingByName[0]
+      console.log('Duplicate lead detected by name:', {
+        existing_id: existing.id,
+        existing_name: `${existing.first_name} ${existing.last_name}`,
+        existing_email: existing.email,
+        existing_status: existing.lead_status,
+        new_name: `${leadResult.lead_data.first_name} ${leadResult.lead_data.last_name}`,
+        new_email: primaryEmail
+      })
+
+      return {
+        success: false,
+        message: 'Lead already exists in system',
+        details: `A lead with name ${leadResult.lead_data.first_name} ${leadResult.lead_data.last_name} already exists (ID: ${existing.id}, Status: ${existing.lead_status})`,
+        person: existing
+      }
+    }
+
     // Get admin user for initial assignment (leads go to staging first)
     const { data: adminUser, error: adminError } = await supabase
       .from('users')

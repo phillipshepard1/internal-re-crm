@@ -18,7 +18,6 @@ import { ActivityDashboard } from '@/components/admin/ActivityDashboard'
 import { LeadStaging } from '@/components/admin/LeadStaging'
 import { LeadSourceManagement } from '@/components/admin/LeadSourceManagement'
 import { FollowUpFrequencyManagement } from '@/components/admin/FollowUpFrequencyManagement'
-import { EmailProcessingDashboard } from '@/components/admin/EmailProcessingDashboard'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -258,7 +257,6 @@ export default function AdminPage() {
             <TabsTrigger value="sources">Lead Sources</TabsTrigger>
             <TabsTrigger value="plans">Follow-up Frequencies</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
-            <TabsTrigger value="email">Email Processing</TabsTrigger>
           </TabsList>
           
           <TabsContent value="users" className="space-y-4">
@@ -452,10 +450,6 @@ export default function AdminPage() {
 
           <TabsContent value="plans" className="space-y-4">
             <FollowUpFrequencyManagement users={users} />
-          </TabsContent>
-
-          <TabsContent value="email" className="space-y-4">
-            <EmailProcessingDashboard />
           </TabsContent>
         </Tabs>
       </div>
