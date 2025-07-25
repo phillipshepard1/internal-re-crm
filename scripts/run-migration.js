@@ -26,22 +26,37 @@ async function runMigration() {
     
     // Read the migration SQL file
     const migrationPath = path.join(__dirname, '..', 'migrations', 'create_processed_emails_table.sql')
-    const sqlContent = fs.readFileSync(migrationPath, 'utf8')
+    const sql = fs.readFileSync(migrationPath, 'utf8')
     
-    console.log('SQL to execute:')
-    console.log(sqlContent)
-    console.log('\n---')
-    console.log('⚠️  IMPORTANT: Supabase client cannot execute raw SQL directly.')
-    console.log('Please run this SQL manually in your Supabase dashboard:')
-    console.log('1. Go to your Supabase project dashboard')
-    console.log('2. Navigate to SQL Editor in the left sidebar')
-    console.log('3. Copy and paste the SQL above')
-    console.log('4. Click "Run" to execute the migration')
-    console.log('\nAlternatively, you can use the Supabase CLI:')
-    console.log('supabase db push --include-all')
+    console.log('Executing SQL migration...')
+    
+    // Execute the SQL directly
+    const { error } = await supabase.rpc('exec_sql', { sql_query: sql })
+    
+    if (error) {
+      console.error('Migration failed:', error)
+      process.exit(1)
+    }
+    
+    console.log('Migration completed successfully!')
+    
+    // Verify the table was created
+    const { data: tables, error: verifyError } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .eq('table_name', 'processed_emails')
+    
+    if (verifyError) {
+      console.error('Error verifying table creation:', verifyError)
+    } else if (tables && tables.length > 0) {
+      console.log('✅ processed_emails table created successfully')
+    } else {
+      console.log('❌ processed_emails table was not created')
+    }
     
   } catch (error) {
-    console.error('Error running migration:', error)
+    console.error('Migration failed:', error)
     process.exit(1)
   }
 }
