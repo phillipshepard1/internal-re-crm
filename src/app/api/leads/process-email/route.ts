@@ -1,220 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { emailData, userId } = body
-
-    if (!emailData || !userId) {
-      return NextResponse.json(
-        { error: 'Email data and user ID are required' },
-        { status: 400 }
-      )
-    }
-
-    const { from, subject, body: emailBody, to, date } = emailData
-
-    // Validate required email fields
-    if (!from || !subject || !emailBody) {
-      return NextResponse.json(
-        { error: 'Email from, subject, and body are required' },
-        { status: 400 }
-      )
-    }
-
-    // Import the lead detection service
-    const { LeadDetectionService } = await import('@/lib/leadDetection')
     
-    // Analyze the email to determine if it's a lead
-    const analysisResult = await LeadDetectionService.analyzeEmail({
-      from,
-      subject,
-      body: emailBody,
-      to,
-      date
-    }, supabase)
-
-    console.log('Email analysis result:', {
-      is_lead: analysisResult.is_lead,
-      confidence: analysisResult.confidence_score,
-      reasons: analysisResult.reasons
-    })
-
-    if (!analysisResult.is_lead) {
-      return NextResponse.json({
-        success: false,
-        message: 'Email does not appear to be a lead',
-        confidence: analysisResult.confidence_score,
-        reasons: analysisResult.reasons
-      })
+    // Import the shared processing function
+    const { processEmailAsLead } = await import('@/lib/emailProcessing')
+    
+    // Process the email using the shared function
+    const result = await processEmailAsLead(body)
+    
+    // Convert the result to NextResponse
+    if (result.success) {
+      return NextResponse.json(result)
+    } else {
+      return NextResponse.json(
+        { 
+          error: result.error || result.message,
+          details: result.details
+        },
+        { status: 400 }
+      )
     }
-
-    // Extract lead data
-    const leadResult = await LeadDetectionService.extractLeadData({
-      from,
-      subject,
-      body: emailBody,
-      to,
-      date
-    }, supabase)
-
-    console.log('Lead extraction result:', {
-      success: leadResult.success,
-      has_data: !!leadResult.lead_data,
-      error: leadResult.error
-    })
-
-    if (!leadResult.success || !leadResult.lead_data) {
-      return NextResponse.json({
-        success: false,
-        message: leadResult.error || 'Failed to extract lead data from email',
-        details: 'The email content could not be parsed into a valid lead'
-      })
-    }
-
-    // Validate extracted lead data
-    if (!leadResult.lead_data.first_name || !leadResult.lead_data.last_name) {
-      return NextResponse.json({
-        success: false,
-        message: 'Could not extract valid name from email',
-        details: 'First name and last name are required'
-      })
-    }
-
-    if (!leadResult.lead_data.email || leadResult.lead_data.email.length === 0) {
-      return NextResponse.json({
-        success: false,
-        message: 'Could not extract valid email address from email',
-        details: 'At least one email address is required'
-      })
-    }
-
-    // Get admin user for initial assignment (leads go to staging first)
-    const { data: adminUser, error: adminError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('role', 'admin')
-      .single()
-
-    if (adminError || !adminUser) {
-      console.error('Error finding admin user:', adminError)
-      return NextResponse.json({
-        success: false,
-        message: 'No admin user found for lead assignment',
-        details: 'Please ensure there is at least one admin user in the system'
-      })
-    }
-
-    // Create comprehensive notes with all extracted information
-    const notes = [
-      `AI-detected lead from ${leadResult.lead_data.lead_source} (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
-      leadResult.lead_data.message && `Message: ${leadResult.lead_data.message}`,
-      leadResult.lead_data.price_range && `Price Range: ${leadResult.lead_data.price_range}`,
-      leadResult.lead_data.location_preferences && `Location Preferences: ${leadResult.lead_data.location_preferences}`,
-      leadResult.lead_data.property_type && `Property Type: ${leadResult.lead_data.property_type}`,
-      leadResult.lead_data.timeline && `Timeline: ${leadResult.lead_data.timeline}`,
-      leadResult.lead_data.property_address && `Property Address: ${leadResult.lead_data.property_address}`,
-      leadResult.lead_data.property_details && `Property Details: ${leadResult.lead_data.property_details}`
-    ].filter(Boolean).join('\n')
-
-    // Create the person record
-    const personData = {
-      first_name: leadResult.lead_data.first_name,
-      last_name: leadResult.lead_data.last_name,
-      email: leadResult.lead_data.email,
-      phone: leadResult.lead_data.phone || [],
-      client_type: 'lead',
-      lead_source: leadResult.lead_data.lead_source,
-      lead_source_id: leadResult.lead_data.lead_source_id,
-      lead_status: 'staging', // New leads go to staging
-      assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
-      notes: notes,
-      // Set default values
-      profile_picture: null,
-      birthday: null,
-      mailing_address: null,
-      relationship_id: null,
-      last_interaction: new Date().toISOString(),
-      next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
-      best_to_reach_by: null,
-      lists: [],
-      company: leadResult.lead_data.company || null,
-      position: leadResult.lead_data.position || null,
-      address: leadResult.lead_data.property_address || null,
-      city: null,
-      state: null,
-      zip_code: null,
-      country: null,
-      looking_for: [
-        leadResult.lead_data.property_details,
-        leadResult.lead_data.price_range,
-        leadResult.lead_data.location_preferences,
-        leadResult.lead_data.property_type,
-        leadResult.lead_data.timeline
-      ].filter(Boolean).join(' | ') || null,
-      selling: null,
-      closed: null,
-    }
-
-    console.log('Creating person with data:', {
-      first_name: personData.first_name,
-      last_name: personData.last_name,
-      email: personData.email,
-      lead_source: personData.lead_source
-    })
-
-    // Insert the person record
-    const { data: newPerson, error: personError } = await supabase
-      .from('people')
-      .insert(personData)
-      .select()
-      .single()
-
-    if (personError || !newPerson) {
-      console.error('Error creating person:', personError)
-      return NextResponse.json({
-        success: false,
-        message: 'Failed to create lead record',
-        details: personError?.message || 'Database error occurred'
-      })
-    }
-
-    // Create an activity log entry
-    const { error: activityError } = await supabase
-      .from('activities')
-      .insert({
-        person_id: newPerson.id,
-        type: 'created',
-        description: `AI-detected lead from ${leadResult.lead_data.lead_source} and placed in staging`,
-        created_by: adminUser.id,
-      })
-
-    if (activityError) {
-      console.error('Error creating activity:', activityError)
-      // Don't fail the entire operation if activity logging fails
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Lead processed successfully',
-      person: newPerson,
-      analysis: {
-        confidence: analysisResult.confidence_score,
-        reasons: analysisResult.reasons,
-        source: leadResult.lead_data.lead_source
-      }
-    })
 
   } catch (error) {
     console.error('Error processing email as lead:', error)
