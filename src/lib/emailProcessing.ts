@@ -100,7 +100,48 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       }
     }
 
-    // Duplicate detection removed - admin-controlled lead source detection handles lead filtering
+    // Check for existing person with the same email to prevent duplicates
+    // leadResult.lead_data.email is an array, so we need to check each email
+    let existingPerson = null
+    let existingError = null
+    
+    for (const email of leadResult.lead_data.email) {
+      const { data: person, error: error } = await supabase
+        .from('people')
+        .select('id, first_name, last_name, email, lead_status')
+        .eq('email', email)
+        .single()
+
+      if (person) {
+        existingPerson = person
+        break
+      }
+      
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 is "not found" error, which is expected when no duplicate exists
+        existingError = error
+        break
+      }
+    }
+
+    if (existingPerson) {
+      console.log('Person already exists with email:', existingPerson.email)
+      return {
+        success: false,
+        message: 'Lead already exists in system',
+        details: `A person with email ${existingPerson.email} already exists`,
+        person: existingPerson
+      }
+    }
+
+    if (existingError) {
+      console.error('Error checking for existing person:', existingError)
+      return {
+        success: false,
+        message: 'Error checking for existing lead',
+        details: existingError.message
+      }
+    }
 
     // Get admin user for initial assignment (leads go to staging first)
     const { data: adminUser, error: adminError } = await supabase

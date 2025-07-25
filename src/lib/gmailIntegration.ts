@@ -165,14 +165,34 @@ export class GmailIntegration {
         await this.initialize()
       }
       
+      // Clean up old processed email records (do this periodically)
+      await this.cleanupOldProcessedEmails(supabaseClient)
+      
       // Get recent emails
       const emails = await this.getRecentEmails(maxResults)
       let processedCount = 0
+      let skippedCount = 0
+      let alreadyProcessedCount = 0
+      
+      console.log(`Processing ${emails.length} recent emails for user ${this.userId}`)
       
       for (const email of emails) {
+        // Check if this email has already been processed
+        const emailId = email.id as string
+        const hasBeenProcessed = await this.hasEmailBeenProcessed(emailId, supabaseClient)
+        
+        if (hasBeenProcessed) {
+          console.log(`Email ${emailId} already processed, skipping`)
+          alreadyProcessedCount++
+          continue
+        }
+        
         // Pre-filter common non-lead emails
         if (this.shouldSkipEmail(email)) {
           console.log(`Skipping email from ${email.from}: ${email.subject}`)
+          // Mark as processed even if skipped to avoid reprocessing
+          await this.markEmailAsProcessed(emailId, 'skipped', supabaseClient)
+          skippedCount++
           continue
         }
         
@@ -204,16 +224,96 @@ export class GmailIntegration {
             
             if (result.success) {
               processedCount++
+              // Mark email as successfully processed
+              await this.markEmailAsProcessed(emailId, 'lead_created', supabaseClient)
+            } else {
+              // Mark email as processed even if lead creation failed to avoid infinite retries
+              await this.markEmailAsProcessed(emailId, 'lead_creation_failed', supabaseClient)
             }
           } catch (error) {
             console.error('Error creating person from lead data:', error)
+            // Mark email as processed even if there was an error to avoid infinite retries
+            await this.markEmailAsProcessed(emailId, 'error', supabaseClient)
           }
+        } else {
+          // Mark email as processed even if no lead detected to avoid reprocessing
+          await this.markEmailAsProcessed(emailId, 'no_lead_detected', supabaseClient)
         }
       }
       
+      console.log(`Email processing summary for user ${this.userId}: ${processedCount} leads created, ${skippedCount} skipped, ${alreadyProcessedCount} already processed`)
       return processedCount
     } catch (error) {
       return 0
+    }
+  }
+
+  /**
+   * Check if an email has already been processed
+   */
+  private async hasEmailBeenProcessed(emailId: string, supabaseClient?: any): Promise<boolean> {
+    try {
+      const client = supabaseClient || supabase
+      const { data, error } = await client
+        .from('processed_emails')
+        .select('id')
+        .eq('email_id', emailId)
+        .eq('user_id', this.userId)
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking if email was processed:', error)
+        return false
+      }
+
+      return !!data
+    } catch (error) {
+      console.error('Error checking if email was processed:', error)
+      return false
+    }
+  }
+
+  /**
+   * Mark an email as processed
+   */
+  private async markEmailAsProcessed(emailId: string, status: string, supabaseClient?: any): Promise<void> {
+    try {
+      const client = supabaseClient || supabase
+      await client
+        .from('processed_emails')
+        .insert({
+          email_id: emailId,
+          user_id: this.userId,
+          status: status,
+          processed_at: new Date().toISOString()
+        })
+    } catch (error) {
+      console.error('Error marking email as processed:', error)
+    }
+  }
+
+  /**
+   * Clean up old processed email records (older than 30 days)
+   */
+  private async cleanupOldProcessedEmails(supabaseClient?: any): Promise<void> {
+    try {
+      const client = supabaseClient || supabase
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      
+      const { error } = await client
+        .from('processed_emails')
+        .delete()
+        .lt('processed_at', thirtyDaysAgo.toISOString())
+        .eq('user_id', this.userId)
+
+      if (error) {
+        console.error('Error cleaning up old processed emails:', error)
+      } else {
+        console.log('Cleaned up old processed email records')
+      }
+    } catch (error) {
+      console.error('Error cleaning up old processed emails:', error)
     }
   }
   
