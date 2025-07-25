@@ -65,15 +65,15 @@ export class LeadDetectionService {
       // Extract data from email
       const extractedData = this.extractContactData(from, subject, body)
       
-      // Determine if this is a lead based on confidence threshold
-      const isLead = maxConfidence >= 0.6 // Minimum 60% confidence (increased from 30%)
+      // If we matched a lead source, it's a lead (admin-controlled filtering)
+      const isLead = maxConfidence > 0
       
-              console.log(`Final confidence: ${(maxConfidence * 100).toFixed(1)}% (threshold: 60%)`)
+      console.log(`Lead source matched: ${(maxConfidence * 100).toFixed(1)}% confidence`)
       
       if (isLead) {
-        reasons.push(`High confidence score: ${(maxConfidence * 100).toFixed(1)}%`)
+        reasons.push(`Matched lead source with ${(maxConfidence * 100).toFixed(1)}% confidence`)
       } else {
-        reasons.push(`Low confidence score: ${(maxConfidence * 100).toFixed(1)}%`)
+        reasons.push(`No lead source matched`)
       }
       
       return {
