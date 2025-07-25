@@ -180,10 +180,36 @@ export class GmailIntegration {
         }, supabaseClient)
         
         if (leadResult.success && leadResult.lead_data) {
-          // Create person from detected lead data
-          const person = await EmailLeadProcessor.createPersonFromLeadData(leadResult.lead_data)
-          if (person) {
-            processedCount++
+          // Create person from detected lead data using the new API route
+          try {
+            // Import the API route handler directly for server-side usage
+            const { POST } = await import('@/app/api/leads/process-email/route')
+            
+            const request = new Request('http://localhost/api/leads/process-email', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                emailData: {
+                  from: email.from as string,
+                  subject: email.subject as string,
+                  body: email.body as string,
+                  to: email.to as string,
+                  date: email.internalDate as string
+                },
+                userId: this.userId
+              })
+            })
+            
+            const response = await POST(request)
+            const result = await response.json()
+            
+            if (result.success) {
+              processedCount++
+            }
+          } catch (error) {
+            console.error('Error creating person from lead data:', error)
           }
         }
       }
