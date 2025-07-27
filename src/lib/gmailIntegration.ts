@@ -165,6 +165,23 @@ export class GmailIntegration {
         await this.initialize()
       }
       
+      // Check if processed_emails table exists
+      try {
+        const { data: tableCheck, error: tableError } = await supabase
+          .from('processed_emails')
+          .select('id')
+          .limit(1)
+        
+        if (tableError) {
+          console.error('Processed emails table error:', tableError)
+          console.log('Processed emails table might not exist or be accessible')
+        } else {
+          console.log('Processed emails table is accessible')
+        }
+      } catch (error) {
+        console.error('Error checking processed emails table:', error)
+      }
+      
       // Get recent emails
       const emails = await this.getRecentEmails(maxResults)
       let processedCount = 0
@@ -179,6 +196,8 @@ export class GmailIntegration {
             console.log(`Email ${email.id} already processed, skipping`)
             continue
           }
+          
+          console.log(`Processing email ${email.id} from ${email.from}`)
           
           // Use AI-powered lead detection
           const leadResult = await LeadDetectionService.extractLeadData({
@@ -246,8 +265,11 @@ export class GmailIntegration {
         .eq('email_id', emailId)
         .single()
       
-      return !error && !!data
+      const isProcessed = !error && !!data
+      console.log(`Email ${emailId} processed check:`, { isProcessed, error: error?.message })
+      return isProcessed
     } catch (error) {
+      console.log(`Email ${emailId} processed check error:`, error)
       return false
     }
   }
@@ -257,6 +279,7 @@ export class GmailIntegration {
    */
   private async markEmailAsProcessed(emailId: string, personId: string | null): Promise<void> {
     try {
+      console.log(`Marking email ${emailId} as processed with person_id:`, personId)
       await supabase
         .from('processed_emails')
         .insert({
@@ -266,6 +289,7 @@ export class GmailIntegration {
           processed_at: new Date().toISOString(),
           gmail_email: this.config.emailAddress
         })
+      console.log(`Successfully marked email ${emailId} as processed`)
     } catch (error) {
       console.error('Error marking email as processed:', error)
     }

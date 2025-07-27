@@ -13,6 +13,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 })
 
 export async function POST(request: NextRequest) {
+  // Add a simple lock mechanism to prevent concurrent runs
+  const lockKey = 'email_processing_lock'
+  
   try {
     // Verify this is an authorized cron job request
     const authHeader = request.headers.get('authorization')
@@ -25,7 +28,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('Starting automated email processing...')
+    console.log('Starting automated email processing...', new Date().toISOString())
+    
+    const lockValue = new Date().toISOString()
+    
+    // Try to acquire lock
+    const { data: existingLock, error: lockError } = await supabase
+      .from('processed_emails')
+      .select('id')
+      .eq('email_id', lockKey)
+      .single()
+    
+    if (existingLock) {
+      console.log('Email processing already running, skipping this execution')
+      return NextResponse.json({
+        success: true,
+        message: 'Email processing already running, skipped',
+        processedCount: 0
+      })
+    }
+    
+    // Create a temporary lock entry
+    try {
+      await supabase
+        .from('processed_emails')
+        .insert({
+          email_id: lockKey,
+          user_id: 'system',
+          person_id: null,
+          processed_at: lockValue,
+          gmail_email: 'system'
+        })
+    } catch (error) {
+      console.log('Could not acquire lock, processing already running')
+      return NextResponse.json({
+        success: true,
+        message: 'Email processing already running, skipped',
+        processedCount: 0
+      })
+    }
 
     // Get all active Gmail integrations
     const { data: gmailTokens, error: tokensError } = await supabase
@@ -117,6 +158,16 @@ export async function POST(request: NextRequest) {
       console.log(`Failed processing for ${failedResults.length} users`)
     }
 
+    // Clean up the lock
+    try {
+      await supabase
+        .from('processed_emails')
+        .delete()
+        .eq('email_id', lockKey)
+    } catch (error) {
+      console.error('Error cleaning up lock:', error)
+    }
+
     return NextResponse.json({
       success: true,
       message: `Automated email processing completed`,
@@ -131,6 +182,17 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Automated email processing error:', error)
+    
+    // Clean up the lock on error
+    try {
+      await supabase
+        .from('processed_emails')
+        .delete()
+        .eq('email_id', lockKey)
+    } catch (cleanupError) {
+      console.error('Error cleaning up lock on error:', cleanupError)
+    }
+    
     return NextResponse.json(
       { 
         error: 'Internal server error',

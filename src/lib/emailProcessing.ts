@@ -145,23 +145,36 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     let existingPerson = null
     let existingError: any = null
     
+    // Log the emails we're checking for duplicates
+    console.log('Checking for duplicates with emails:', leadResult.lead_data.email)
+    
+    // Also log the email data for debugging
+    console.log('Email data being processed:', {
+      from: emailData.from,
+      subject: emailData.subject.substring(0, 50) + '...',
+      date: emailData.date
+    })
+    
     // First, check for exact email matches (same person's email)
     for (const email of leadResult.lead_data.email) {
       try {
-        const { data: person, error: error } = await supabase
+        console.log(`Checking for existing person with email: ${email}`)
+        
+        // Use a more robust query to check for email matches
+        const { data: persons, error: error } = await supabase
           .from('people')
           .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-          .filter('email', 'cs', `{${email}}`)
-          .single()
+          .or(`email.cs.{${email}},email.eq.${email}`)
 
-        if (person) {
-          existingPerson = person
-          console.log('Found existing person with exact email match:', person.email)
+        if (error) {
+          console.error('Error checking for existing person:', error)
+          existingError = error
           break
         }
-        
-        if (error && error.code !== 'PGRST116') {
-          existingError = error
+
+        if (persons && persons.length > 0) {
+          existingPerson = persons[0]
+          console.log('Found existing person with exact email match:', existingPerson.email)
           break
         }
       } catch (error) {
@@ -214,7 +227,13 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     }
 
     if (existingPerson) {
-      console.log('Found existing person:', existingPerson.email)
+      console.log('Found existing person:', existingPerson.email, 'ID:', existingPerson.id)
+      console.log('Existing person data:', {
+        first_name: existingPerson.first_name,
+        last_name: existingPerson.last_name,
+        email: existingPerson.email,
+        lead_status: existingPerson.lead_status
+      })
       
       // Update the existing lead with new information instead of creating duplicate
       const updateData: any = {
@@ -364,11 +383,19 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       first_name: personData.first_name,
       last_name: personData.last_name,
       email: personData.email,
+      email_type: typeof personData.email,
+      email_is_array: Array.isArray(personData.email),
       lead_source: personData.lead_source,
       confidence: leadResult.lead_data.confidence_score
     })
 
     // Insert the person record
+    console.log('Attempting to insert person with email data:', {
+      email: personData.email,
+      email_type: typeof personData.email,
+      email_length: Array.isArray(personData.email) ? personData.email.length : 'not array'
+    })
+    
     const { data: newPerson, error: personError } = await supabase
       .from('people')
       .insert(personData)
