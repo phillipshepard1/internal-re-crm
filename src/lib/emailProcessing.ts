@@ -160,11 +160,44 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       try {
         console.log(`Checking for existing person with email: ${email}`)
         
-        // Use a more robust query to check for email matches
-        const { data: persons, error: error } = await supabase
+        // Try multiple query approaches to find existing person
+        let persons = null
+        let error = null
+        
+        // Approach 1: Check for array containment
+        const { data: arrayMatch, error: arrayError } = await supabase
           .from('people')
           .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-          .or(`email.cs.{${email}},email.eq.${email}`)
+          .contains('email', [email])
+        
+        if (!arrayError && arrayMatch && arrayMatch.length > 0) {
+          persons = arrayMatch
+          console.log('Found match using array containment')
+        } else {
+          // Approach 2: Check for exact string match
+          const { data: stringMatch, error: stringError } = await supabase
+            .from('people')
+            .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+            .eq('email', email)
+          
+          if (!stringError && stringMatch && stringMatch.length > 0) {
+            persons = stringMatch
+            console.log('Found match using exact string match')
+          } else {
+            // Approach 3: Check for array format match
+            const { data: formatMatch, error: formatError } = await supabase
+              .from('people')
+              .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+              .eq('email', `{${email}}`)
+            
+            if (!formatError && formatMatch && formatMatch.length > 0) {
+              persons = formatMatch
+              console.log('Found match using array format match')
+            } else {
+              error = formatError || stringError || arrayError
+            }
+          }
+        }
 
         if (error) {
           console.error('Error checking for existing person:', error)
@@ -278,16 +311,16 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         }
       }
 
-      // Create an activity log entry for the update
-      try {
-        const { error: activityError } = await supabase
-          .from('activities')
-          .insert({
-            person_id: existingPerson.id,
-            type: 'updated',
-            description: `Lead updated with new information from ${leadResult.lead_data.lead_source} (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
-            created_by: userId,
-          })
+               // Create an activity log entry for the update
+         try {
+           const { error: activityError } = await supabase
+             .from('activities')
+             .insert({
+               person_id: existingPerson.id,
+               type: 'note_added',
+               description: `Lead updated with new information from ${leadResult.lead_data.lead_source} (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
+               created_by: userId,
+             })
 
         if (activityError) {
           console.error('Error creating activity:', activityError)
@@ -396,14 +429,63 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       email_length: Array.isArray(personData.email) ? personData.email.length : 'not array'
     })
     
-    const { data: newPerson, error: personError } = await supabase
-      .from('people')
-      .insert(personData)
-      .select()
-      .single()
+    // Try to insert with error handling for duplicate emails
+    let newPerson = null
+    let personError = null
+    
+    try {
+      const { data, error } = await supabase
+        .from('people')
+        .insert(personData)
+        .select()
+        .single()
+      
+      newPerson = data
+      personError = error
+    } catch (error) {
+      console.error('Exception during person insertion:', error)
+      personError = error as any
+    }
 
     if (personError || !newPerson) {
       console.error('Error creating person:', personError)
+      
+      // Check if this is a duplicate email error
+      if (personError && (personError as any).code === '23505' && (personError as any).message?.includes('email')) {
+        console.log('Duplicate email detected during insertion, attempting to find existing person')
+        
+        // Try to find the existing person that caused the duplicate error
+        for (const email of leadResult.lead_data.email) {
+          try {
+            const { data: existingPerson } = await supabase
+              .from('people')
+              .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+              .contains('email', [email])
+              .single()
+            
+            if (existingPerson) {
+              console.log('Found existing person after duplicate error:', existingPerson.email)
+              return {
+                success: true,
+                message: 'Lead already exists (found during duplicate error handling)',
+                person: existingPerson,
+                analysis: {
+                  confidence: leadResult.analysis_result?.confidence_score || leadResult.lead_data.confidence_score,
+                  reasons: leadResult.analysis_result?.reasons || ['Lead source matched'],
+                  source: leadResult.lead_data.lead_source,
+                  extracted_fields: leadResult.lead_data ? Object.keys(leadResult.lead_data).filter(key => 
+                    (leadResult.lead_data as any)[key] && 
+                    !['confidence_score', 'lead_source_id'].includes(key)
+                  ) : []
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error finding existing person after duplicate error:', error)
+          }
+        }
+      }
+      
       return {
         success: false,
         message: 'Failed to create lead record',
