@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Process recent emails (check last 20 emails)
-        const processedCount = await gmail.processRecentEmails(20, supabase)
+        const processedCount = await gmail.processRecentEmails(20)
         
         totalProcessed += processedCount
         results.push({
