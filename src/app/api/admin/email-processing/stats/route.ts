@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const successRate = total > 0 ? (leads / total) * 100 : 0
 
     // Get last 24 hours stats
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
     
     const { data: last24Hours, error: last24Error } = await supabase
       .from('processed_emails')
