@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
         person_id,
         processed_at,
         gmail_email,
-        people!inner(
+        people(
           first_name,
           last_name,
           lead_source
@@ -99,8 +99,10 @@ export async function GET(request: NextRequest) {
     const recentActivityFormatted = recentActivity?.map(activity => ({
       id: activity.id,
       email_from: activity.gmail_email || 'Unknown',
-      lead_name: activity.people ? `${activity.people.first_name} ${activity.people.last_name}` : '',
-      lead_source: activity.people?.lead_source || 'Unknown',
+      lead_name: activity.people && activity.people.length > 0 ? 
+        `${activity.people[0].first_name} ${activity.people[0].last_name}` : '',
+      lead_source: activity.people && activity.people.length > 0 ? 
+        activity.people[0].lead_source || 'Unknown' : 'Unknown',
       confidence: 0.7 + Math.random() * 0.3, // Mock confidence score
       processed_at: activity.processed_at,
       status: activity.person_id ? 'success' : 'failed' as const
