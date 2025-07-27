@@ -9,10 +9,10 @@ import type {
 // Only create Supabase client on server side
 let supabase: any = null
 
-function getSupabaseClient() {
+async function getSupabaseClient() {
   if (typeof window === 'undefined' && !supabase) {
     // Server-side only
-    const { createClient } = require('@supabase/supabase-js')
+    const { createClient } = await import('@supabase/supabase-js')
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     
@@ -537,7 +537,7 @@ export class LeadDetectionService {
    */
   private static async getActiveLeadSources(): Promise<LeadSource[]> {
     try {
-      const supabase = getSupabaseClient()
+      const supabase = await getSupabaseClient()
       const { data, error } = await supabase
         .from('lead_sources')
         .select('*')
@@ -556,7 +556,7 @@ export class LeadDetectionService {
    */
   private static async getActiveDetectionRules(): Promise<LeadDetectionRule[]> {
     try {
-      const supabase = getSupabaseClient()
+      const supabase = await getSupabaseClient()
       const { data, error } = await supabase
         .from('lead_detection_rules')
         .select('*')
