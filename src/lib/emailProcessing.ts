@@ -143,7 +143,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
 
     // Check for existing person with the same email to prevent duplicates
     let existingPerson = null
-    let existingError = null
+    let existingError: any = null
     
     // First, check for exact email matches (same person's email)
     for (const email of leadResult.lead_data.email) {
