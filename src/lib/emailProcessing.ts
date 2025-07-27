@@ -164,11 +164,20 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         let persons = null
         let error = null
         
-        // Approach 1: Check for array containment
-        const { data: arrayMatch, error: arrayError } = await supabase
-          .from('people')
-          .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-          .contains('email', [email])
+                 // Approach 1: Check for array containment (only if email is actually an array)
+         let arrayMatch = null
+         let arrayError = null
+         
+         try {
+           const { data, error } = await supabase
+             .from('people')
+             .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+             .contains('email', [email])
+           arrayMatch = data
+           arrayError = error
+         } catch (error) {
+           arrayError = error
+         }
         
         if (!arrayError && arrayMatch && arrayMatch.length > 0) {
           persons = arrayMatch
@@ -454,14 +463,33 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       if (personError && (personError as any).code === '23505' && (personError as any).message?.includes('email')) {
         console.log('Duplicate email detected during insertion, attempting to find existing person')
         
-        // Try to find the existing person that caused the duplicate error
-        for (const email of leadResult.lead_data.email) {
-          try {
-            const { data: existingPerson } = await supabase
-              .from('people')
-              .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-              .contains('email', [email])
-              .single()
+                 // Try to find the existing person that caused the duplicate error
+         for (const email of leadResult.lead_data.email) {
+           try {
+             // Try multiple approaches to find the existing person
+             let existingPerson = null
+             
+             // Try array containment first
+             try {
+               const { data } = await supabase
+                 .from('people')
+                 .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+                 .contains('email', [email])
+                 .single()
+               existingPerson = data
+             } catch (error) {
+               // If array containment fails, try exact match
+               try {
+                 const { data } = await supabase
+                   .from('people')
+                   .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+                   .eq('email', email)
+                   .single()
+                 existingPerson = data
+               } catch (error2) {
+                 console.error('Error finding existing person after duplicate error:', error2)
+               }
+             }
             
             if (existingPerson) {
               console.log('Found existing person after duplicate error:', existingPerson.email)
