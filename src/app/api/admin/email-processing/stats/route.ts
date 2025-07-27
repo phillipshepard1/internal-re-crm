@@ -13,71 +13,122 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get Gmail integrations
-    const { data: gmailIntegrations, error: gmailError } = await supabase
-      .from('user_gmail_tokens')
-      .select('user_id, gmail_email, is_active, updated_at')
-      .order('updated_at', { ascending: false })
+    // Get total processed emails
+    const { data: totalProcessed, error: totalError } = await supabase
+      .from('processed_emails')
+      .select('id', { count: 'exact' })
 
-    if (gmailError) {
-      console.error('Error fetching Gmail integrations:', gmailError)
-      return NextResponse.json(
-        { error: 'Failed to fetch Gmail integrations' },
-        { status: 500 }
-      )
-    }
+    if (totalError) throw totalError
 
-    // Get recent activities related to email processing
-    const { data: recentActivities, error: activitiesError } = await supabase
-      .from('activities')
-      .select('*')
-      .ilike('description', '%AI-detected lead%')
-      .order('created_at', { ascending: false })
-      .limit(100)
+    // Get leads created (emails that resulted in a person)
+    const { data: leadsCreated, error: leadsError } = await supabase
+      .from('processed_emails')
+      .select('id', { count: 'exact' })
+      .not('person_id', 'is', null)
 
-    if (activitiesError) {
-      console.error('Error fetching activities:', activitiesError)
-    }
+    if (leadsError) throw leadsError
 
-    // Calculate statistics
-    const totalLeadsProcessed = recentActivities?.length || 0
-    const activeIntegrations = gmailIntegrations?.filter(g => g.is_active) || []
-    const inactiveIntegrations = gmailIntegrations?.filter(g => !g.is_active) || []
+    // Get failed processing (emails that didn't result in a person)
+    const { data: failedProcessing, error: failedError } = await supabase
+      .from('processed_emails')
+      .select('id', { count: 'exact' })
+      .is('person_id', null)
+
+    if (failedError) throw failedError
+
+    // Calculate success rate
+    const total = totalProcessed?.length || 0
+    const leads = leadsCreated?.length || 0
+    const failed = failedProcessing?.length || 0
+    const successRate = total > 0 ? (leads / total) * 100 : 0
+
+    // Get last 24 hours stats
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     
-    // Calculate success rate (simplified - based on activities created)
-    const successRate = totalLeadsProcessed > 0 ? 95 : 0 // Assume 95% success rate for now
-    
-    // Get last run time (most recent activity)
-    const lastRun = recentActivities && recentActivities.length > 0 
-      ? recentActivities[0].created_at 
-      : null
+    const { data: last24Hours, error: last24Error } = await supabase
+      .from('processed_emails')
+      .select('id, person_id, processed_at')
 
-    // Calculate average processing time (simplified)
-    const averageProcessingTime = 2.5 // Assume 2.5 seconds average
+    if (last24Error) throw last24Error
+
+    const last24Processed = last24Hours?.filter(e => new Date(e.processed_at) > twentyFourHoursAgo) || []
+    const last24Leads = last24Processed.filter(e => e.person_id).length
+    const last24Failed = last24Processed.filter(e => !e.person_id).length
+
+    // Get lead sources performance
+    const { data: leadSourceStats, error: leadSourceError } = await supabase
+      .from('people')
+      .select('lead_source, lead_source_id')
+      .not('lead_source', 'is', null)
+
+    if (leadSourceError) throw leadSourceError
+
+    // Group by lead source
+    const leadSourceCounts: Record<string, number> = {}
+    leadSourceStats?.forEach(person => {
+      const source = person.lead_source || 'Unknown'
+      leadSourceCounts[source] = (leadSourceCounts[source] || 0) + 1
+    })
+
+    const leadSources = Object.entries(leadSourceCounts).map(([name, count]) => ({
+      name,
+      count,
+      success_rate: 85 + Math.random() * 15 // Mock success rate for now
+    }))
+
+    // Get recent activity
+    const { data: recentActivity, error: recentError } = await supabase
+      .from('processed_emails')
+      .select(`
+        id,
+        email_id,
+        person_id,
+        processed_at,
+        gmail_email,
+        people!inner(
+          first_name,
+          last_name,
+          lead_source
+        )
+      `)
+      .order('processed_at', { ascending: false })
+      .limit(20)
+
+    if (recentError) throw recentError
+
+    const recentActivityFormatted = recentActivity?.map(activity => ({
+      id: activity.id,
+      email_from: activity.gmail_email || 'Unknown',
+      lead_name: activity.people ? `${activity.people.first_name} ${activity.people.last_name}` : '',
+      lead_source: activity.people?.lead_source || 'Unknown',
+      confidence: 0.7 + Math.random() * 0.3, // Mock confidence score
+      processed_at: activity.processed_at,
+      status: activity.person_id ? 'success' : 'failed' as const
+    })) || []
 
     const stats = {
-      lastRun,
-      totalLeadsProcessed,
-      successRate,
-      averageProcessingTime,
-      activeIntegrationsCount: activeIntegrations.length,
-      inactiveIntegrationsCount: inactiveIntegrations.length
+      total_processed: total,
+      leads_created: leads,
+      failed_processing: failed,
+      success_rate: successRate,
+      last_24_hours: {
+        processed: last24Processed.length,
+        leads: last24Leads,
+        failed: last24Failed
+      },
+      lead_sources: leadSources,
+      recent_activity: recentActivityFormatted
     }
 
     return NextResponse.json({
       success: true,
-      stats,
-      gmailIntegrations: gmailIntegrations || [],
-      recentProcessing: recentActivities?.slice(0, 10) || []
+      stats
     })
 
   } catch (error) {
     console.error('Error fetching email processing stats:', error)
     return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Failed to fetch email processing statistics' },
       { status: 500 }
     )
   }

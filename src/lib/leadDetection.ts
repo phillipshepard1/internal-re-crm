@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
 import type { 
   LeadSource, 
   LeadDetectionRule, 
@@ -7,15 +6,25 @@ import type {
   LeadDetectionConditions 
 } from './types/leadSources'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Only create Supabase client on server side
+let supabase: any = null
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+function getSupabaseClient() {
+  if (typeof window === 'undefined' && !supabase) {
+    // Server-side only
+    const { createClient } = require('@supabase/supabase-js')
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    
+    supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
   }
-})
+  return supabase
+}
 
 export class LeadDetectionService {
   
@@ -133,6 +142,10 @@ export class LeadDetectionService {
       // Extract property information
       const propertyAddress = this.extractPropertyAddress(emailData.subject, emailData.body)
       const propertyDetails = this.extractPropertyDetails(emailData.subject, emailData.body)
+      const priceRange = this.extractPriceRange(emailData.subject, emailData.body)
+      const propertyType = this.extractPropertyType(emailData.subject, emailData.body)
+      const locationPreferences = this.extractLocationPreferences(emailData.subject, emailData.body)
+      const timeline = this.extractTimeline(emailData.subject, emailData.body)
       
       const leadData = {
         first_name: name.firstName,
@@ -144,6 +157,10 @@ export class LeadDetectionService {
         message: extracted_data.message || emailData.body.substring(0, 500),
         property_address: propertyAddress,
         property_details: propertyDetails,
+        price_range: priceRange || undefined,
+        property_type: propertyType || undefined,
+        location_preferences: locationPreferences || undefined,
+        timeline: timeline || undefined,
         lead_source: detected_source?.name || 'Email',
         lead_source_id: detected_source?.id,
         confidence_score
@@ -421,12 +438,106 @@ export class LeadDetectionService {
     
     return details.join(' ')
   }
+
+  /**
+   * Extract price range from email content
+   */
+  private static extractPriceRange(subject: string, body: string): string | null {
+    const text = `${subject} ${body}`.toLowerCase()
+    
+    // Common price patterns
+    const pricePatterns = [
+      /\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*-\s*\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g, // $500k - $750k
+      /\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*to\s*\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g, // $500k to $750k
+      /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*-\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:k|thousand|k\s*dollars)/gi, // 500k - 750k
+      /budget.*?\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/gi, // budget $500k
+      /price.*?\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/gi, // price $500k
+    ]
+    
+    for (const pattern of pricePatterns) {
+      const match = text.match(pattern)
+      if (match) {
+        return match[0].trim()
+      }
+    }
+    
+    return null
+  }
+
+  /**
+   * Extract property type from email content
+   */
+  private static extractPropertyType(subject: string, body: string): string | null {
+    const text = `${subject} ${body}`.toLowerCase()
+    
+    const propertyTypes = [
+      'single family home', 'single-family home', 'single family', 'house',
+      'condo', 'condominium', 'apartment', 'townhouse', 'town home',
+      'duplex', 'triplex', 'multi-family', 'commercial', 'land', 'lot',
+      'investment property', 'rental property', 'vacation home'
+    ]
+    
+    for (const type of propertyTypes) {
+      if (text.includes(type)) {
+        return type
+      }
+    }
+    
+    return null
+  }
+
+  /**
+   * Extract location preferences from email content
+   */
+  private static extractLocationPreferences(subject: string, body: string): string | null {
+    const text = `${subject} ${body}`.toLowerCase()
+    
+    // Look for location keywords
+    const locationKeywords = [
+      'neighborhood', 'area', 'location', 'near', 'close to', 'in', 'around',
+      'downtown', 'suburban', 'rural', 'urban', 'school district', 'zip code'
+    ]
+    
+    const sentences = text.split(/[.!?]/)
+    for (const sentence of sentences) {
+      for (const keyword of locationKeywords) {
+        if (sentence.includes(keyword)) {
+          return sentence.trim()
+        }
+      }
+    }
+    
+    return null
+  }
+
+  /**
+   * Extract timeline from email content
+   */
+  private static extractTimeline(subject: string, body: string): string | null {
+    const text = `${subject} ${body}`.toLowerCase()
+    
+    const timelinePatterns = [
+      /(?:buy|purchase|move|relocate|sell).*?(?:in|within|by|before|after).*?(?:month|year|week|day)/gi,
+      /(?:timeline|timeframe|when).*?(?:month|year|week|day)/gi,
+      /(?:urgent|asap|soon|immediate|quick)/gi
+    ]
+    
+    for (const pattern of timelinePatterns) {
+      const match = text.match(pattern)
+      if (match) {
+        return match[0].trim()
+      }
+    }
+    
+    return null
+  }
   
   /**
    * Get all active lead sources
    */
   private static async getActiveLeadSources(): Promise<LeadSource[]> {
     try {
+      const supabase = getSupabaseClient()
       const { data, error } = await supabase
         .from('lead_sources')
         .select('*')
@@ -445,6 +556,7 @@ export class LeadDetectionService {
    */
   private static async getActiveDetectionRules(): Promise<LeadDetectionRule[]> {
     try {
+      const supabase = getSupabaseClient()
       const { data, error } = await supabase
         .from('lead_detection_rules')
         .select('*')

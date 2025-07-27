@@ -1,4 +1,4 @@
-import { EmailLeadProcessor } from './emailProcessor'
+
 import { LeadDetectionService } from './leadDetection'
 import { createClient } from '@supabase/supabase-js'
 
@@ -169,28 +169,105 @@ export class GmailIntegration {
       const emails = await this.getRecentEmails(maxResults)
       let processedCount = 0
       
+      console.log(`Processing ${emails.length} recent emails for user ${this.userId}`)
+      
       for (const email of emails) {
-        // Use AI-powered lead detection
-        const leadResult = await LeadDetectionService.extractLeadData({
-          from: email.from as string,
-          subject: email.subject as string,
-          body: email.body as string,
-          to: email.to as string,
-          date: email.internalDate as string
-        })
-        
-        if (leadResult.success && leadResult.lead_data) {
-          // Create person from detected lead data
-          const person = await EmailLeadProcessor.createPersonFromLeadData(leadResult.lead_data)
-          if (person) {
-            processedCount++
+        try {
+          // Check if email is already processed
+          const isProcessed = await this.isEmailProcessed(email.id as string)
+          if (isProcessed) {
+            console.log(`Email ${email.id} already processed, skipping`)
+            continue
           }
+          
+          // Use AI-powered lead detection
+          const leadResult = await LeadDetectionService.extractLeadData({
+            from: email.from as string,
+            subject: email.subject as string,
+            body: email.body as string,
+            to: email.to as string,
+            date: email.internalDate as string
+          })
+          
+          if (leadResult.success && leadResult.lead_data) {
+            // Use our new email processing function with person-based detection
+            const { processEmailAsLead } = await import('./emailProcessing')
+            
+            const processingResult = await processEmailAsLead({
+              emailData: {
+                from: email.from as string,
+                subject: email.subject as string,
+                body: email.body as string,
+                to: email.to as string,
+                date: email.internalDate as string
+              },
+              userId: this.userId
+            })
+            
+            if (processingResult.success && processingResult.person) {
+              // Mark email as processed
+              await this.markEmailAsProcessed(email.id as string, processingResult.person.id)
+              processedCount++
+              
+              console.log(`Successfully processed lead from ${email.from}: ${processingResult.person.first_name} ${processingResult.person.last_name}`)
+            } else {
+              console.log(`Failed to process lead from ${email.from}: ${processingResult.message}`)
+              // Mark as processed to avoid reprocessing
+              await this.markEmailAsProcessed(email.id as string, null)
+            }
+          } else {
+            console.log(`Email from ${email.from} not identified as lead: ${leadResult.error}`)
+            // Mark as processed to avoid reprocessing
+            await this.markEmailAsProcessed(email.id as string, null)
+          }
+        } catch (error) {
+          console.error(`Error processing email ${email.id}:`, error)
+          // Mark as processed to avoid infinite retries
+          await this.markEmailAsProcessed(email.id as string, null)
         }
       }
       
+      console.log(`Processed ${processedCount} leads from ${emails.length} emails`)
       return processedCount
     } catch (error) {
+      console.error('Error in processRecentEmails:', error)
       return 0
+    }
+  }
+
+  /**
+   * Check if an email has already been processed
+   */
+  private async isEmailProcessed(emailId: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('processed_emails')
+        .select('id')
+        .eq('email_id', emailId)
+        .single()
+      
+      return !error && !!data
+    } catch (error) {
+      return false
+    }
+  }
+
+  /**
+   * Mark an email as processed
+   */
+  private async markEmailAsProcessed(emailId: string, personId: string | null): Promise<void> {
+    try {
+      await supabase
+        .from('processed_emails')
+        .insert({
+          email_id: emailId,
+          user_id: this.userId,
+          person_id: personId,
+          processed_at: new Date().toISOString(),
+          gmail_email: this.config.emailAddress
+        })
+    } catch (error) {
+      console.error('Error marking email as processed:', error)
     }
   }
   

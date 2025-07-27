@@ -1,99 +1,104 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Mail, RefreshCw, Clock, CheckCircle, AlertCircle, Users, Activity } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { toast } from 'sonner'
+import { 
+  Mail, 
+  Users, 
+  TrendingUp, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  RefreshCw,
+  Activity,
+  BarChart3
+} from 'lucide-react'
 
-interface ProcessingResult {
-  userId: string
-  email: string
-  processed: number
-  error?: string
-}
-
-interface ProcessingSummary {
-  totalProcessed: number
-  totalUsers: number
-  successfulUsers: number
-  failedUsers: number
-}
-
-interface ProcessingStats {
-  lastRun: string | null
-  totalLeadsProcessed: number
-  successRate: number
-  averageProcessingTime: number
+interface EmailProcessingStats {
+  total_processed: number
+  leads_created: number
+  failed_processing: number
+  success_rate: number
+  last_24_hours: {
+    processed: number
+    leads: number
+    failed: number
+  }
+  lead_sources: Array<{
+    name: string
+    count: number
+    success_rate: number
+  }>
+  recent_activity: Array<{
+    id: string
+    email_from: string
+    lead_name: string
+    lead_source: string
+    confidence: number
+    processed_at: string
+    status: 'success' | 'failed' | 'duplicate'
+  }>
 }
 
 export function EmailProcessingDashboard() {
-  const [loading, setLoading] = useState(false)
-  const [stats, setStats] = useState<ProcessingStats>({
-    lastRun: null,
-    totalLeadsProcessed: 0,
-    successRate: 0,
-    averageProcessingTime: 0
-  })
-  const [lastResults, setLastResults] = useState<{
-    summary: ProcessingSummary
-    results: ProcessingResult[]
-  } | null>(null)
-  const [gmailIntegrations, setGmailIntegrations] = useState<Array<{
-    user_id: string
-    gmail_email: string
-    is_active: boolean
-    last_used: string | null
-  }>>([])
+  const [stats, setStats] = useState<EmailProcessingStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
 
   const loadStats = async () => {
     try {
+      setLoading(true)
+      setError('')
+      
       const response = await fetch('/api/admin/email-processing/stats')
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data.stats)
-        setGmailIntegrations(data.gmailIntegrations || [])
+      if (!response.ok) {
+        throw new Error('Failed to fetch email processing stats')
       }
-    } catch (error) {
-      console.error('Error loading email processing stats:', error)
+      
+      const data = await response.json()
+      setStats(data.stats)
+    } catch (err) {
+      setError('Failed to load email processing statistics')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const triggerProcessing = async () => {
-    setLoading(true)
+  const refreshStats = async () => {
+    setRefreshing(true)
+    await loadStats()
+    setRefreshing(false)
+  }
+
+  const triggerEmailProcessing = async () => {
     try {
-      // Get the cron secret token from environment or generate a temporary one
-      // For admin dashboard access, we'll use a different approach
-      const response = await fetch('/api/admin/email-processing/trigger', {
+      setRefreshing(true)
+      
+      const response = await fetch('/api/cron/email-processing', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET_TOKEN || 'test-token'}`
         }
       })
 
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        setLastResults({
-          summary: data.summary,
-          results: data.results
-        })
-        toast.success('Email Processing Completed', {
-          description: `Processed ${data.summary.totalProcessed} leads from ${data.summary.successfulUsers} users`
-        })
-        await loadStats() // Refresh stats
-      } else {
-        throw new Error(data.error || 'Failed to process emails')
+      if (!response.ok) {
+        throw new Error('Failed to trigger email processing')
       }
+
+      // Wait a moment then refresh stats
+      setTimeout(() => {
+        loadStats()
+      }, 2000)
+
     } catch (error) {
       console.error('Error triggering email processing:', error)
-      toast.error('Failed to Process Emails', {
-        description: error instanceof Error ? error.message : 'An error occurred'
-      })
     } finally {
-      setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -101,8 +106,61 @@ export function EmailProcessingDashboard() {
     loadStats()
   }, [])
 
-  const activeIntegrations = gmailIntegrations.filter(g => g.is_active)
-  const inactiveIntegrations = gmailIntegrations.filter(g => !g.is_active)
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Email Processing Dashboard</CardTitle>
+            <CardDescription>
+              Monitor automated email-to-lead parsing performance
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-muted-foreground">Loading email processing statistics...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Email Processing Dashboard</CardTitle>
+            <CardDescription>
+              Monitor automated email-to-lead parsing performance
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Alert>
+              <AlertDescription className="text-destructive">{error}</AlertDescription>
+              <Button onClick={loadStats} className="mt-4">
+                Try Again
+              </Button>
+            </Alert>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!stats) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-muted-foreground">No email processing data available.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -110,34 +168,52 @@ export function EmailProcessingDashboard() {
         <div>
           <h2 className="text-2xl font-bold">Email Processing Dashboard</h2>
           <p className="text-muted-foreground">
-            Monitor automated email-to-lead processing and Gmail integrations
+            Monitor automated email-to-lead parsing performance and system health
           </p>
         </div>
-        <Button 
-          onClick={triggerProcessing} 
-          disabled={loading}
-          className="flex items-center gap-2"
-        >
-          {loading ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Mail className="h-4 w-4" />
-          )}
-          {loading ? 'Processing...' : 'Process Emails Now'}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={refreshStats}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button 
+            onClick={triggerEmailProcessing}
+            disabled={refreshing}
+          >
+            <Activity className="h-4 w-4 mr-2" />
+            Process Emails Now
+          </Button>
+        </div>
       </div>
 
-      {/* Statistics Cards */}
+      {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads Processed</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Processed</CardTitle>
+            <Mail className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalLeadsProcessed}</div>
+            <div className="text-2xl font-bold">{stats.total_processed.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              All time processed leads
+              +{stats.last_24_hours.processed} in last 24h
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Leads Created</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.leads_created.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              +{stats.last_24_hours.leads} in last 24h
             </p>
           </CardContent>
         </Card>
@@ -145,169 +221,120 @@ export function EmailProcessingDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.successRate.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{stats.success_rate.toFixed(1)}%</div>
             <p className="text-xs text-muted-foreground">
-              Successful processing rate
+              {stats.failed_processing} failed attempts
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Integrations</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeIntegrations.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Connected Gmail accounts
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Last Run</CardTitle>
+            <CardTitle className="text-sm font-medium">Last 24 Hours</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.lastRun ? new Date(stats.lastRun).toLocaleDateString() : 'Never'}
-            </div>
+            <div className="text-2xl font-bold">{stats.last_24_hours.processed}</div>
             <p className="text-xs text-muted-foreground">
-              Last automated run
+              {stats.last_24_hours.leads} leads, {stats.last_24_hours.failed} failed
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Gmail Integrations Status */}
+      {/* Lead Sources Performance */}
       <Card>
         <CardHeader>
-          <CardTitle>Gmail Integrations</CardTitle>
+          <CardTitle>Lead Sources Performance</CardTitle>
           <CardDescription>
-            Status of connected Gmail accounts for automated email processing
+            Success rates by lead source
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {gmailIntegrations.length === 0 ? (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                No Gmail integrations found. Users need to connect their Gmail accounts in the inbox page.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-4">
-              {activeIntegrations.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Active Integrations ({activeIntegrations.length})</h4>
-                  <div className="space-y-2">
-                    {activeIntegrations.map((integration) => (
-                      <div key={integration.user_id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="font-medium">{integration.gmail_email}</span>
-                        </div>
-                        <Badge variant="secondary">Active</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {inactiveIntegrations.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Inactive Integrations ({inactiveIntegrations.length})</h4>
-                  <div className="space-y-2">
-                    {inactiveIntegrations.map((integration) => (
-                      <div key={integration.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4 text-gray-600" />
-                          <span className="font-medium">{integration.gmail_email}</span>
-                        </div>
-                        <Badge variant="outline">Inactive</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead Source</TableHead>
+                <TableHead>Leads Created</TableHead>
+                <TableHead>Success Rate</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {stats.lead_sources.map((source) => (
+                <TableRow key={source.name}>
+                  <TableCell className="font-medium">{source.name}</TableCell>
+                  <TableCell>{source.count}</TableCell>
+                  <TableCell>{source.success_rate.toFixed(1)}%</TableCell>
+                  <TableCell>
+                    <Badge variant={source.success_rate >= 80 ? 'default' : 'secondary'}>
+                      {source.success_rate >= 80 ? 'Excellent' : 'Good'}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
-      {/* Last Processing Results */}
-      {lastResults && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Last Processing Results</CardTitle>
-            <CardDescription>
-              Results from the most recent email processing run
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {lastResults.summary.totalProcessed}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Leads Processed</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {lastResults.summary.successfulUsers}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Successful Users</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">
-                    {lastResults.summary.failedUsers}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Failed Users</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">
-                    {lastResults.summary.totalUsers}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Total Users</div>
-                </div>
-              </div>
-
-              {lastResults.results.length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Processing Details</h4>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {lastResults.results.map((result, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                        <div className="flex items-center gap-2">
-                          {result.error ? (
-                            <AlertCircle className="h-4 w-4 text-red-600" />
-                          ) : (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          )}
-                          <span className="font-medium">{result.email}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {result.error ? (
-                            <Badge variant="destructive">Error</Badge>
-                          ) : (
-                            <Badge variant="secondary">{result.processed} processed</Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Email Processing Activity</CardTitle>
+          <CardDescription>
+            Latest email processing results
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Email From</TableHead>
+                <TableHead>Lead Name</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Confidence</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Processed</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {stats.recent_activity.map((activity) => (
+                <TableRow key={activity.id}>
+                  <TableCell className="font-medium">
+                    <div className="truncate max-w-[200px]" title={activity.email_from}>
+                      {activity.email_from}
+                    </div>
+                  </TableCell>
+                  <TableCell>{activity.lead_name || '-'}</TableCell>
+                  <TableCell>{activity.lead_source}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {(activity.confidence * 100).toFixed(0)}%
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={
+                      activity.status === 'success' ? 'default' : 
+                      activity.status === 'duplicate' ? 'secondary' : 'destructive'
+                    }>
+                      {activity.status === 'success' && <CheckCircle className="h-3 w-3 mr-1" />}
+                      {activity.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
+                      {activity.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {new Date(activity.processed_at).toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 } 

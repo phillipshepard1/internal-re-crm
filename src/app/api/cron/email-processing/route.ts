@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
           processed: processedCount
         })
 
-        console.log(`Processed ${processedCount} emails for ${token.gmail_email}`)
+        console.log(`Processed ${processedCount} leads from ${token.gmail_email} using person-based detection`)
 
       } catch (error) {
         console.error(`Error processing emails for user ${token.user_id}:`, error)
@@ -150,7 +150,8 @@ export async function GET() {
     features: [
       'Monitors all active Gmail integrations',
       'Automatically processes new emails as leads',
-      'Uses AI-powered lead detection',
+      'Uses AI-powered lead detection with person-based duplicate prevention',
+      'Creates new leads or updates existing leads based on person matching',
       'Creates leads in staging for admin review'
     ]
   })

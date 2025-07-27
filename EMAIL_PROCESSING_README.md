@@ -1,327 +1,276 @@
-# Automated Email-to-Lead Processing System
+# Automated Email-to-Lead Parsing System
 
-This document describes the automated email-to-lead processing system that monitors Gmail inboxes and automatically creates leads in the CRM.
+## Overview
 
-## 🎯 Overview
+This system automatically monitors Gmail inboxes for incoming emails from configured lead sources and converts them into leads in the CRM. The system uses AI-powered detection to identify and extract lead information from emails.
 
-The system automatically:
-- Monitors connected Gmail accounts for new emails
-- Uses AI-powered lead detection to identify potential leads
-- Extracts contact information and property details
-- Creates leads in the CRM staging area
-- Provides monitoring and control through the admin dashboard
+## Features
 
-## 🏗️ Architecture
+### 🔍 **Smart Lead Detection**
+- **AI-Powered Analysis**: Uses machine learning to identify potential leads from emails
+- **Configurable Lead Sources**: Admin can configure email patterns, domains, and keywords
+- **Confidence Scoring**: Each detected lead gets a confidence score (0-100%)
+- **Duplicate Prevention**: Automatically checks for existing leads to prevent duplicates
 
-### Components
+### 📧 **Email Processing**
+- **Automated Monitoring**: Continuously monitors Gmail inboxes for new emails
+- **Batch Processing**: Processes multiple emails efficiently
+- **Error Handling**: Robust error handling with detailed logging
+- **Processing History**: Tracks all processed emails for analytics
 
-1. **Lead Detection Service** (`src/lib/leadDetection.ts`)
+### 🎯 **Lead Extraction**
+- **Contact Information**: Extracts name, email, phone numbers
+- **Property Details**: Identifies property addresses, types, and preferences
+- **Price Information**: Extracts price ranges and budget information
+- **Timeline Data**: Identifies urgency and timeline preferences
+- **Company Information**: Extracts company names and positions
+
+### 📊 **Admin Dashboard**
+- **Real-time Statistics**: Shows processing performance and success rates
+- **Lead Source Analytics**: Performance metrics by lead source
+- **Recent Activity**: Latest email processing results
+- **Manual Trigger**: Ability to manually trigger email processing
+
+## System Architecture
+
+### Core Components
+
+1. **Gmail Integration** (`src/lib/gmailIntegration.ts`)
+   - Handles Gmail API authentication and email fetching
+   - Processes emails in batches
+   - Tracks processed emails to prevent duplicates
+
+2. **Lead Detection Service** (`src/lib/leadDetection.ts`)
    - AI-powered email analysis
-   - Pattern matching against lead sources
-   - Data extraction from email content
+   - Extracts lead information using pattern matching
+   - Calculates confidence scores
 
-2. **Gmail Integration** (`src/lib/gmailIntegration.ts`)
-   - OAuth2 authentication
-   - Email fetching and processing
-   - Token management
-
-3. **Automated Processing** (`src/app/api/cron/email-processing/route.ts`)
-   - Cron job endpoint
-   - Batch email processing
-   - Error handling and logging
+3. **Email Processing** (`src/lib/emailProcessing.ts`)
+   - Main processing logic
+   - Creates lead records in the database
+   - Handles validation and error cases
 
 4. **Admin Dashboard** (`src/components/admin/EmailProcessingDashboard.tsx`)
-   - Processing statistics
-   - Gmail integration status
-   - Manual processing triggers
-
-## 🚀 Setup
-
-### 1. Environment Variables
-
-Add these to your `.env.local` file:
-
-```bash
-# Gmail API Configuration
-GMAIL_CLIENT_ID=your_gmail_client_id
-GMAIL_CLIENT_SECRET=your_gmail_client_secret
-
-# Cron Job Security
-CRON_SECRET_TOKEN=your_secret_token
-
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-```
-
-### 2. Gmail API Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Gmail API
-4. Create OAuth 2.0 credentials
-5. Add authorized redirect URIs:
-   - `http://localhost:3000/api/gmail/setup` (development)
-   - `https://your-domain.com/api/gmail/setup` (production)
-
-### 3. Deploy Cron Jobs
-
-#### Option A: Vercel Cron Jobs (Recommended)
-
-The `vercel.json` file is already configured. Deploy to Vercel and cron jobs will be automatically set up.
-
-#### Option B: Traditional Cron Jobs
-
-Add to your server's crontab:
-
-```bash
-# Check for new emails every 15 minutes
-*/15 * * * * curl -X POST https://your-app.vercel.app/api/cron/email-processing \
-  -H "Authorization: Bearer your-secret-token" \
-  -H "Content-Type: application/json"
-```
-
-#### Option C: GitHub Actions
-
-Create `.github/workflows/email-processing.yml`:
-
-```yaml
-name: Email Processing
-on:
-  schedule:
-    - cron: "*/15 * * * *"
-jobs:
-  process-emails:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Process Emails
-        run: |
-          curl -X POST ${{ secrets.APP_URL }}/api/cron/email-processing \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET_TOKEN }}" \
-            -H "Content-Type: application/json"
-```
-
-## 📧 Lead Sources Configuration
-
-### Default Lead Sources
-
-The system comes with pre-configured lead sources:
-
-- **Zillow**: `noreply@zillow.com`, `leads@zillow.com`
-- **Realtor.com**: `noreply@realtor.com`, `leads@realtor.com`
-- **HomeStack**: `noreply@homestack.com`, `leads@homestack.com`
-- **Website Form**: Generic contact form patterns
-- **Referral**: Referral-based leads
-
-### Adding Custom Lead Sources
-
-1. Go to Admin Panel → Lead Sources
-2. Click "Add Lead Source"
-3. Configure:
-   - **Name**: Display name for the lead source
-   - **Email Patterns**: Email addresses to match (e.g., `form@yourdomain.com`)
-   - **Domain Patterns**: Domain patterns (e.g., `yourdomain.com`)
-   - **Keywords**: Keywords in subject or body
-   - **Status**: Active/Inactive
-
-### Lead Detection Rules
-
-You can create custom detection rules with:
-- Subject keywords
-- Body keywords
-- Sender patterns
-- Domain patterns
-- Confidence thresholds
-
-## 🔍 Data Extraction
-
-The system extracts the following information from emails:
-
-### Contact Information
-- **Name**: First and last name
-- **Email**: Email addresses
-- **Phone**: Phone numbers
-- **Company**: Company name
-- **Position**: Job title
-
-### Property Information
-- **Property Address**: Street addresses
-- **Property Details**: Bedrooms, bathrooms, square footage
-- **Price Range**: Budget and price preferences
-- **Location Preferences**: Preferred areas and neighborhoods
-- **Property Type**: Single-family, condo, townhouse, etc.
-- **Timeline**: Buying timeline and urgency
-
-### Message Content
-- **Full Message**: Complete email body
-- **Notes**: Extracted information summary
-
-## 📊 Monitoring
-
-### Admin Dashboard
-
-Access the email processing dashboard at `/admin` → "Email Processing" tab:
-
-- **Statistics**: Total leads processed, success rate, active integrations
-- **Gmail Integrations**: Status of connected accounts
-- **Processing Results**: Last run results and details
-- **Manual Processing**: Trigger processing on demand
-
-### Logs and Debugging
-
-1. **Vercel Function Logs**: Check Vercel dashboard for function logs
-2. **Database Activities**: Monitor the `activities` table for processing events
-3. **Gmail Token Status**: Check `user_gmail_tokens` table for integration health
-
-### Key Metrics
-
-- **Total Leads Processed**: All-time count of processed leads
-- **Success Rate**: Percentage of successful processing
-- **Active Integrations**: Number of connected Gmail accounts
-- **Last Run**: Timestamp of last automated processing
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### 1. "Failed to Import Lead" Error
-
-**Causes:**
-- Missing required fields (name, email)
-- Database constraint violations
-- Gmail authentication issues
-- Low confidence detection
-
-**Solutions:**
-- Check email content for required information
-- Verify database schema and constraints
-- Refresh Gmail tokens
-- Adjust lead detection confidence threshold
-
-#### 2. Gmail Authentication Errors
-
-**Causes:**
-- Expired access tokens
-- Invalid refresh tokens
-- Missing OAuth permissions
-
-**Solutions:**
-- Reconnect Gmail in the inbox page
-- Check OAuth configuration
-- Verify API credentials
-
-#### 3. No Emails Being Processed
-
-**Causes:**
-- No active Gmail integrations
-- Cron job not running
-- Email filtering issues
-
-**Solutions:**
-- Connect Gmail accounts in inbox
-- Verify cron job configuration
-- Check email filters and labels
-
-### Debug Mode
-
-Enable debug logging by setting:
-
-```bash
-DEBUG_EMAIL_PROCESSING=true
-```
-
-This will log detailed information about:
-- Email analysis results
-- Lead detection confidence scores
-- Data extraction details
-- Processing errors
-
-## 🔒 Security
-
-### Authentication
-
-- **Cron Jobs**: Protected with `CRON_SECRET_TOKEN`
-- **Gmail API**: OAuth2 authentication
-- **Admin Access**: Role-based permissions
-
-### Data Privacy
-
-- Emails are processed securely
-- No email content is stored permanently
-- Only extracted lead data is saved
-- Gmail tokens are encrypted
-
-## 📈 Performance
-
-### Optimization
-
-- **Batch Processing**: Multiple emails processed together
-- **Caching**: Lead source patterns cached
-- **Rate Limiting**: Respects Gmail API limits
-- **Error Handling**: Graceful failure recovery
-
-### Scaling
-
-- **Multiple Integrations**: Supports multiple Gmail accounts
-- **Parallel Processing**: Concurrent email processing
-- **Queue Management**: Handles processing backlogs
-
-## 🚀 Advanced Features
-
-### Custom Data Extraction
-
-Extend the system by adding custom extraction patterns in `src/lib/leadDetection.ts`:
-
-```typescript
-private static extractCustomField(text: string): string {
-  // Add your custom extraction logic
-  const pattern = /your-pattern/g
-  const match = text.match(pattern)
-  return match ? match[0] : ''
+   - Real-time monitoring interface
+   - Statistics and analytics
+   - Manual processing controls
+
+### Database Tables
+
+1. **`lead_sources`** - Configured lead sources and detection rules
+2. **`processed_emails`** - Tracks all processed emails
+3. **`people`** - Lead records created from emails
+4. **`activities`** - Audit trail of lead creation
+
+## Configuration
+
+### Setting Up Lead Sources
+
+1. **Access Admin Panel**: Go to Admin → Lead Sources
+2. **Add New Source**: Click "Add Lead Source"
+3. **Configure Patterns**:
+   - **Email Patterns**: Specific email addresses (e.g., `noreply@zillow.com`)
+   - **Domain Patterns**: Domain patterns (e.g., `*.zillow.com`)
+   - **Keywords**: Keywords in subject/body that indicate leads
+
+### Example Lead Source Configuration
+
+```json
+{
+  "name": "Zillow Leads",
+  "description": "Leads from Zillow.com",
+  "email_patterns": ["noreply@zillow.com", "leads@zillow.com"],
+  "domain_patterns": ["zillow.com"],
+  "keywords": ["property inquiry", "home inquiry", "zillow"],
+  "is_active": true
 }
 ```
 
-### Webhook Integration
+## Usage
 
-Set up webhooks for real-time notifications:
+### Automated Processing
 
-```typescript
-// Add to lead creation process
-await fetch('your-webhook-url', {
-  method: 'POST',
-  body: JSON.stringify({
-    type: 'lead_created',
-    lead: newLead,
-    source: 'email_processing'
-  })
-})
+The system runs automatically via cron job every 15-30 minutes:
+
+```bash
+# Cron job configuration
+*/15 * * * * curl -X POST https://your-domain.com/api/cron/email-processing \
+  -H "Authorization: Bearer YOUR_CRON_SECRET_TOKEN"
 ```
 
-### Custom Lead Sources
+### Manual Processing
 
-Create specialized lead sources for different industries:
+1. **Admin Dashboard**: Go to Admin → Email Processing
+2. **Click "Process Emails Now"**: Manually trigger processing
+3. **Monitor Results**: View real-time processing statistics
 
-```sql
-INSERT INTO lead_sources (name, email_patterns, keywords) VALUES
-('Mortgage Leads', ARRAY['mortgage@example.com'], ARRAY['mortgage', 'loan', 'refinance']),
-('Rental Leads', ARRAY['rental@example.com'], ARRAY['rental', 'lease', 'apartment']);
+### Manual Email Processing
+
+1. **Inbox Page**: Go to Inbox
+2. **Select Email**: Choose an email to process
+3. **Click "Process as Lead"**: Convert email to lead manually
+
+## Data Extraction
+
+### Supported Fields
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| **Name** | First and last name | "John Doe" |
+| **Email** | Email addresses | "john@example.com" |
+| **Phone** | Phone numbers | "(555) 123-4567" |
+| **Company** | Company name | "ABC Corp" |
+| **Position** | Job title | "Manager" |
+| **Property Address** | Property location | "123 Main St, City, State" |
+| **Property Type** | Type of property | "Single family home" |
+| **Price Range** | Budget/price info | "$500k - $750k" |
+| **Timeline** | Urgency/timeline | "Need to move in 3 months" |
+
+### Extraction Patterns
+
+The system uses advanced pattern matching to extract information:
+
+```javascript
+// Price range patterns
+/\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*-\s*\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g
+
+// Property type detection
+['single family home', 'condo', 'apartment', 'townhouse']
+
+// Timeline patterns
+/(?:buy|purchase|move).*?(?:in|within|by).*?(?:month|year|week)/gi
 ```
 
-## 📞 Support
+## Error Handling
 
-For issues and questions:
+### Common Issues
 
-1. Check the troubleshooting section above
-2. Review Vercel function logs
-3. Check database for error details
-4. Contact support with specific error messages
+1. **"Failed to import Lead"**
+   - **Cause**: Insufficient information in email
+   - **Solution**: Check email content and lead source configuration
 
-## 🔄 Updates
+2. **Duplicate Leads**
+   - **Cause**: Email already processed
+   - **Solution**: System automatically prevents duplicates
 
-The system is designed to be easily extensible. Future updates may include:
+3. **Low Confidence Scores**
+   - **Cause**: Email doesn't match lead source patterns
+   - **Solution**: Adjust lead source configuration
 
-- Enhanced AI detection models
-- Additional data extraction fields
-- Real-time processing capabilities
-- Advanced filtering options
-- Integration with more email providers 
+### Debugging
+
+1. **Check Logs**: Monitor console logs for processing details
+2. **Review Configuration**: Verify lead source settings
+3. **Test Email**: Use manual processing to test specific emails
+
+## Monitoring & Analytics
+
+### Key Metrics
+
+- **Total Processed**: Number of emails processed
+- **Leads Created**: Successful lead conversions
+- **Success Rate**: Percentage of successful conversions
+- **Lead Source Performance**: Success rates by source
+
+### Dashboard Features
+
+- **Real-time Updates**: Live statistics and activity feed
+- **Performance Trends**: 24-hour processing statistics
+- **Error Tracking**: Failed processing attempts
+- **Lead Source Analytics**: Performance by source
+
+## Security
+
+### Authentication
+
+- **Gmail OAuth**: Secure Gmail API access
+- **Admin Access**: Role-based access control
+- **API Protection**: Cron job authentication
+
+### Data Protection
+
+- **Encrypted Storage**: All data encrypted at rest
+- **Access Logs**: Complete audit trail
+- **Privacy Compliance**: GDPR-compliant data handling
+
+## Troubleshooting
+
+### Setup Issues
+
+1. **Gmail Integration Not Working**
+   ```bash
+   # Check Gmail API credentials
+   # Verify OAuth configuration
+   # Test Gmail connection
+   ```
+
+2. **Migration Errors**
+   ```bash
+   # Run migration script
+   node scripts/run-email-processing-migration.js
+   ```
+
+3. **Cron Job Not Running**
+   ```bash
+   # Verify cron job configuration
+   # Check server logs
+   # Test manual trigger
+   ```
+
+### Performance Issues
+
+1. **Slow Processing**
+   - Reduce batch size
+   - Optimize database queries
+   - Check server resources
+
+2. **High Error Rates**
+   - Review lead source configuration
+   - Check email format compatibility
+   - Monitor system logs
+
+## API Endpoints
+
+### Email Processing
+
+- `POST /api/cron/email-processing` - Automated processing
+- `POST /api/leads/process-email` - Manual email processing
+- `GET /api/admin/email-processing/stats` - Processing statistics
+
+### Lead Sources
+
+- `GET /api/admin/lead-sources` - List lead sources
+- `POST /api/admin/lead-sources` - Create lead source
+- `PUT /api/admin/lead-sources` - Update lead source
+- `DELETE /api/admin/lead-sources` - Delete lead source
+
+## Development
+
+### Adding New Lead Sources
+
+1. **Create Migration**: Add new lead source patterns
+2. **Update Detection**: Enhance pattern matching
+3. **Test Processing**: Verify extraction accuracy
+4. **Monitor Performance**: Track success rates
+
+### Customizing Extraction
+
+1. **Pattern Matching**: Add new regex patterns
+2. **Field Extraction**: Extend extraction logic
+3. **Confidence Scoring**: Adjust scoring algorithms
+4. **Validation Rules**: Customize validation logic
+
+## Support
+
+For technical support or questions about the email processing system:
+
+1. **Check Documentation**: Review this README
+2. **Monitor Logs**: Check system logs for errors
+3. **Test Configuration**: Verify lead source settings
+4. **Contact Support**: Reach out to development team
+
+---
+
+**Last Updated**: January 2025  
+**Version**: 1.0.0  
+**Status**: Production Ready 

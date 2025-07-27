@@ -765,85 +765,144 @@ export default function InboxPage() {
     
     setProcessingEmail(true)
     try {
-      // Use AI-powered lead detection first
-      const { LeadDetectionService } = await import('@/lib/leadDetection')
-      const leadResult = await LeadDetectionService.extractLeadData({
-        from: selectedEmail.from,
-        subject: selectedEmail.subject,
-        body: selectedEmail.body,
-        to: selectedEmail.to,
-        date: selectedEmail.lastUpdated
+      // Use the API endpoint for lead processing (server-side)
+      const response = await fetch('/api/leads/process-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          emailData: {
+            from: selectedEmail.from,
+            subject: selectedEmail.subject,
+            body: selectedEmail.body,
+            to: selectedEmail.to,
+            date: selectedEmail.lastUpdated
+          },
+          userId: user.id
+        })
       })
 
-      if (leadResult.success && leadResult.lead_data) {
-        // Create person from detected lead data
-        const { EmailLeadProcessor } = await import('@/lib/emailProcessor')
-        const person = await EmailLeadProcessor.createPersonFromLeadData(leadResult.lead_data)
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        // Mark email as processed
+        setEmails(emails.map(email => 
+          email.id === selectedEmail.id 
+            ? { ...email, isRead: true }
+            : email
+        ))
         
-        if (person) {
-          // Mark email as processed
-          setEmails(emails.map(email => 
-            email.id === selectedEmail.id 
-              ? { ...email, isRead: true }
-              : email
-          ))
+        // Show success message with detection details
+        const confidence = result.analysis?.confidence ? (result.analysis.confidence * 100).toFixed(1) : 'Unknown'
+        const source = result.analysis?.source || 'Email'
+        const reasons = result.analysis?.reasons?.join(', ') || 'AI analysis'
+        
+        toast.success('Lead Imported Successfully', {
+          description: `${selectedEmail.from} has been added as a new lead from ${source} (${confidence}% confidence). ${reasons}`,
+          duration: 6000,
+        })
+      } else {
+        // Handle specific error cases
+        const errorMessage = result.error || result.message || 'Unknown error'
+        const errorDetails = result.details || ''
+        
+        if (errorMessage.includes('does not appear to be a lead') || 
+            errorMessage.includes('not from a recognized lead source') ||
+            errorMessage.includes('Insufficient lead information')) {
           
-          // Show success message with detection details
-          const confidence = (leadResult.lead_data.confidence_score * 100).toFixed(1)
-          const source = leadResult.lead_data.lead_source
-          const reasons = leadResult.analysis_result?.reasons.join(', ') || 'AI analysis'
-          
-          toast.success('Lead Imported Successfully', {
-            description: `${selectedEmail.from} has been added as a new lead from ${source} (${confidence}% confidence). ${reasons}`,
+          // Email doesn't match lead sources - show helpful message
+          toast.error('Not a Lead Email', {
+            description: `This email from ${selectedEmail.from} doesn't match any configured lead sources. You can add this email address as a lead source in Admin → Lead Sources.`,
+            duration: 8000,
+          })
+        } else if (errorMessage.includes('already exists') || errorMessage.includes('Duplicate sender detected')) {
+          // Duplicate lead or sender
+          toast.warning('Lead Already Exists', {
+            description: result.details || `A lead from ${selectedEmail.from} already exists in the system.`,
+            duration: 6000,
+          })
+        } else if (result.message && result.message.includes('updated with new information')) {
+          // Existing lead was updated
+          toast.success('Lead Updated Successfully', {
+            description: result.details || `Existing lead has been updated with new information from ${selectedEmail.from}.`,
+            duration: 5000,
+          })
+        } else if (errorMessage.includes('Could not extract valid name') || 
+                   errorMessage.includes('Could not extract valid email')) {
+          // Missing required information
+          toast.error('Insufficient Information', {
+            description: `Could not extract required information (name/email) from this email. Please check the email content.`,
             duration: 6000,
           })
         } else {
-          throw new Error('Failed to create lead record')
-        }
-      } else {
-        // Fallback to manual processing if AI detection fails
-        const response = await fetch('/api/gmail/process-emails', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            maxResults: 1, // Process just this one email
-            emailId: selectedEmail.id // Pass the specific email ID
-          })
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to process email as lead')
-        }
-
-        if (data.success) {
-          // Mark email as processed
-          setEmails(emails.map(email => 
-            email.id === selectedEmail.id 
-              ? { ...email, isRead: true }
-              : email
-          ))
+          // Generic error - try fallback processing
+          console.log('Primary processing failed, trying fallback:', errorMessage)
           
-          // Show success message
-          toast.success('Lead Imported Successfully', {
-            description: `${selectedEmail.from} has been added as a new lead and assigned to an agent via Round Robin.`,
-            duration: 5000,
+          const fallbackResponse = await fetch('/api/gmail/process-emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              maxResults: 1, // Process just this one email
+              emailId: selectedEmail.id // Pass the specific email ID
+            })
           })
-        } else {
-          throw new Error(data.message || 'Failed to process email')
+
+          const fallbackData = await fallbackResponse.json()
+
+          if (!fallbackResponse.ok) {
+            throw new Error(fallbackData.error || 'Failed to process email as lead')
+          }
+
+          if (fallbackData.success) {
+            // Mark email as processed
+            setEmails(emails.map(email => 
+              email.id === selectedEmail.id 
+                ? { ...email, isRead: true }
+                : email
+            ))
+            
+            // Show success message
+            toast.success('Lead Imported Successfully', {
+              description: `${selectedEmail.from} has been added as a new lead using fallback processing.`,
+              duration: 5000,
+            })
+          } else {
+            throw new Error(fallbackData.message || 'Failed to process email')
+          }
         }
       }
       
     } catch (error) {
       console.error('Error processing email as lead:', error)
-      toast.error('Failed to Import Lead', {
-        description: error instanceof Error ? error.message : 'There was an error processing this email. Please try again.',
-        duration: 6000,
-      })
+      
+      // Enhanced error handling with specific messages
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        toast.error('Network Error', {
+          description: 'Unable to connect to the server. Please check your internet connection and try again.',
+          duration: 6000,
+        })
+      } else if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+        toast.error('Authentication Error', {
+          description: 'Your session has expired. Please refresh the page and try again.',
+          duration: 6000,
+        })
+      } else if (errorMessage.includes('Internal server error') || errorMessage.includes('500')) {
+        toast.error('Server Error', {
+          description: 'A server error occurred. Please try again later or contact support.',
+          duration: 6000,
+        })
+      } else {
+        toast.error('Failed to Import Lead', {
+          description: errorMessage || 'There was an error processing this email. Please try again.',
+          duration: 6000,
+        })
+      }
     } finally {
       setProcessingEmail(false)
     }
