@@ -322,21 +322,32 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
 
                // Create an activity log entry for the update
          try {
-           const { error: activityError } = await supabase
-             .from('activities')
-             .insert({
-               person_id: existingPerson.id,
-               type: 'note_added',
-               description: `Lead updated with new information from ${leadResult.lead_data.lead_source} (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
-               created_by: userId,
-             })
+           // Get admin user for activity creation (since userId might not exist in users table)
+           const { data: adminUser, error: adminError } = await supabase
+             .from('users')
+             .select('id')
+             .eq('role', 'admin')
+             .single()
+           
+           if (!adminError && adminUser) {
+             const { error: activityError } = await supabase
+               .from('activities')
+               .insert({
+                 person_id: existingPerson.id,
+                 type: 'note_added',
+                 description: `Lead updated with new information from ${leadResult.lead_data.lead_source} (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
+                 created_by: adminUser.id,
+               })
 
-        if (activityError) {
-          console.error('Error creating activity:', activityError)
-        }
-      } catch (activityError) {
-        console.error('Error creating activity:', activityError)
-      }
+             if (activityError) {
+               console.error('Error creating activity:', activityError)
+             }
+                       } else {
+              console.error('Error finding admin user for activity:', adminError)
+            }
+         } catch (activityError) {
+           console.error('Error creating activity:', activityError)
+         }
 
       return {
         success: true,
