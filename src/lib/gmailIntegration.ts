@@ -159,43 +159,17 @@ export class GmailIntegration {
   /**
    * Get recent emails and process them for leads
    */
-  async processRecentEmails(maxResults: number = 10, supabaseClient?: any): Promise<number> {
+  async processRecentEmails(maxResults: number = 10): Promise<number> {
     try {
       if (!this.accessToken) {
         await this.initialize()
       }
       
-      // Clean up old processed email records (do this periodically)
-      await this.cleanupOldProcessedEmails(supabaseClient)
-      
       // Get recent emails
       const emails = await this.getRecentEmails(maxResults)
       let processedCount = 0
-      let skippedCount = 0
-      let alreadyProcessedCount = 0
-      
-      console.log(`Processing ${emails.length} recent emails for user ${this.userId}`)
       
       for (const email of emails) {
-        // Check if this email has already been processed
-        const emailId = email.id as string
-        const hasBeenProcessed = await this.hasEmailBeenProcessed(emailId, supabaseClient)
-        
-        if (hasBeenProcessed) {
-          console.log(`Email ${emailId} already processed, skipping`)
-          alreadyProcessedCount++
-          continue
-        }
-        
-        // Pre-filter common non-lead emails
-        if (this.shouldSkipEmail(email)) {
-          console.log(`Skipping email from ${email.from}: ${email.subject}`)
-          // Mark as processed even if skipped to avoid reprocessing
-          await this.markEmailAsProcessed(emailId, 'skipped', supabaseClient)
-          skippedCount++
-          continue
-        }
-        
         // Use AI-powered lead detection
         const leadResult = await LeadDetectionService.extractLeadData({
           from: email.from as string,
@@ -203,207 +177,21 @@ export class GmailIntegration {
           body: email.body as string,
           to: email.to as string,
           date: email.internalDate as string
-        }, supabaseClient)
+        })
         
         if (leadResult.success && leadResult.lead_data) {
-          // Create person from detected lead data using shared function
-          try {
-            // Import the shared processing function
-            const { processEmailAsLead } = await import('@/lib/emailProcessing')
-            
-            const result = await processEmailAsLead({
-              emailData: {
-                from: email.from as string,
-                subject: email.subject as string,
-                body: email.body as string,
-                to: email.to as string,
-                date: email.internalDate as string
-              },
-              userId: this.userId
-            })
-            
-            if (result.success) {
-              processedCount++
-              // Mark email as successfully processed
-              await this.markEmailAsProcessed(emailId, 'lead_created', supabaseClient)
-            } else {
-              // Mark email as processed even if lead creation failed to avoid infinite retries
-              await this.markEmailAsProcessed(emailId, 'lead_creation_failed', supabaseClient)
-            }
-          } catch (error) {
-            console.error('Error creating person from lead data:', error)
-            // Mark email as processed even if there was an error to avoid infinite retries
-            await this.markEmailAsProcessed(emailId, 'error', supabaseClient)
+          // Create person from detected lead data
+          const person = await EmailLeadProcessor.createPersonFromLeadData(leadResult.lead_data)
+          if (person) {
+            processedCount++
           }
-        } else {
-          // Mark email as processed even if no lead detected to avoid reprocessing
-          await this.markEmailAsProcessed(emailId, 'no_lead_detected', supabaseClient)
         }
       }
       
-      console.log(`Email processing summary for user ${this.userId}: ${processedCount} leads created, ${skippedCount} skipped, ${alreadyProcessedCount} already processed`)
       return processedCount
     } catch (error) {
       return 0
     }
-  }
-
-  /**
-   * Check if an email has already been processed
-   */
-  private async hasEmailBeenProcessed(emailId: string, supabaseClient?: any): Promise<boolean> {
-    try {
-      const client = supabaseClient || supabase
-      const { data, error } = await client
-        .from('processed_emails')
-        .select('id')
-        .eq('email_id', emailId)
-        .eq('user_id', this.userId)
-        .single()
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error checking if email was processed:', error)
-        return false
-      }
-
-      return !!data
-    } catch (error) {
-      console.error('Error checking if email was processed:', error)
-      return false
-    }
-  }
-
-  /**
-   * Mark an email as processed
-   */
-  private async markEmailAsProcessed(emailId: string, status: string, supabaseClient?: any): Promise<void> {
-    try {
-      const client = supabaseClient || supabase
-      await client
-        .from('processed_emails')
-        .insert({
-          email_id: emailId,
-          user_id: this.userId,
-          status: status,
-          processed_at: new Date().toISOString()
-        })
-    } catch (error) {
-      console.error('Error marking email as processed:', error)
-    }
-  }
-
-  /**
-   * Clean up old processed email records (older than 30 days)
-   */
-  private async cleanupOldProcessedEmails(supabaseClient?: any): Promise<void> {
-    try {
-      const client = supabaseClient || supabase
-      const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      
-      const { error } = await client
-        .from('processed_emails')
-        .delete()
-        .lt('processed_at', thirtyDaysAgo.toISOString())
-        .eq('user_id', this.userId)
-
-      if (error) {
-        console.error('Error cleaning up old processed emails:', error)
-      } else {
-        console.log('Cleaned up old processed email records')
-      }
-    } catch (error) {
-      console.error('Error cleaning up old processed emails:', error)
-    }
-  }
-  
-  /**
-   * Check if email should be skipped (common non-lead emails)
-   */
-  private shouldSkipEmail(email: Record<string, unknown>): boolean {
-    const from = (email.from as string || '').toLowerCase()
-    const subject = (email.subject as string || '').toLowerCase()
-    
-         // Skip internal team emails (ADD YOUR COMPANY DOMAINS HERE WHEN READY)
-     // if (from.includes('@yourcompany.com') || from.includes('@yourdomain.com')) {
-     //   return true
-     // }
-    
-    // Skip common non-lead email patterns
-    const skipPatterns = [
-      'noreply@',
-      'donotreply@',
-      'no-reply@',
-      'mailer-daemon@',
-      'postmaster@',
-      'bounce@',
-      'unsubscribe@',
-      'newsletter@',
-      'marketing@',
-      'promotions@',
-      'offers@',
-      'deals@',
-      'sales@',
-      'support@',
-      'help@',
-      'info@',
-      'admin@',
-      'system@',
-      'notification@',
-      'alert@',
-      'update@',
-      'digest@',
-      'summary@',
-      'report@'
-    ]
-    
-    for (const pattern of skipPatterns) {
-      if (from.includes(pattern)) {
-        return true
-      }
-    }
-    
-    // Skip emails with common non-lead subjects
-    const skipSubjects = [
-      'unsubscribe',
-      'newsletter',
-      'promotion',
-      'offer',
-      'deal',
-      'sale',
-      'discount',
-      'coupon',
-      'newsletter',
-      'digest',
-      'summary',
-      'report',
-      'notification',
-      'alert',
-      'update',
-      'welcome',
-      'confirmation',
-      'receipt',
-      'invoice',
-      'statement',
-      'billing',
-      'payment',
-      'subscription',
-      'membership',
-      'account',
-      'password',
-      'security',
-      'verification',
-      'activation',
-      'registration'
-    ]
-    
-    for (const skipSubject of skipSubjects) {
-      if (subject.includes(skipSubject)) {
-        return true
-      }
-    }
-    
-    return false
   }
   
   /**

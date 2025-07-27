@@ -48,10 +48,6 @@ export interface EmailAnalysisResult {
     message?: string
     property_address?: string
     property_details?: string
-    price_range?: string
-    location_preferences?: string
-    property_type?: string
-    timeline?: string
   }
   reasons: string[]
 }
@@ -68,10 +64,6 @@ export interface LeadExtractionResult {
     message?: string
     property_address?: string
     property_details?: string
-    price_range?: string
-    location_preferences?: string
-    property_type?: string
-    timeline?: string
     lead_source: string
     lead_source_id?: string
     confidence_score: number

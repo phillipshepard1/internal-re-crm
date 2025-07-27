@@ -765,56 +765,77 @@ export default function InboxPage() {
     
     setProcessingEmail(true)
     try {
-      // Use the new API route for processing emails as leads
-      const response = await fetch('/api/leads/process-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          emailData: {
-            from: selectedEmail.from,
-            subject: selectedEmail.subject,
-            body: selectedEmail.body,
-            to: selectedEmail.to,
-            date: selectedEmail.lastUpdated
-          }
-        })
+      // Use AI-powered lead detection first
+      const { LeadDetectionService } = await import('@/lib/leadDetection')
+      const leadResult = await LeadDetectionService.extractLeadData({
+        from: selectedEmail.from,
+        subject: selectedEmail.subject,
+        body: selectedEmail.body,
+        to: selectedEmail.to,
+        date: selectedEmail.lastUpdated
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process email as lead')
-      }
-
-      if (data.success) {
-        // Mark email as processed
-        setEmails(emails.map(email => 
-          email.id === selectedEmail.id 
-            ? { ...email, isRead: true }
-            : email
-        ))
+      if (leadResult.success && leadResult.lead_data) {
+        // Create person from detected lead data
+        const { EmailLeadProcessor } = await import('@/lib/emailProcessor')
+        const person = await EmailLeadProcessor.createPersonFromLeadData(leadResult.lead_data)
         
-        // Show success message with detection details
-        const confidence = (data.analysis.confidence * 100).toFixed(1)
-        const source = data.analysis.source
-        const reasons = data.analysis.reasons.join(', ')
-        
-        toast.success('Lead Imported Successfully', {
-          description: `${selectedEmail.from} has been added as a new lead from ${source} (${confidence}% confidence). ${reasons}`,
-          duration: 6000,
-        })
+        if (person) {
+          // Mark email as processed
+          setEmails(emails.map(email => 
+            email.id === selectedEmail.id 
+              ? { ...email, isRead: true }
+              : email
+          ))
+          
+          // Show success message with detection details
+          const confidence = (leadResult.lead_data.confidence_score * 100).toFixed(1)
+          const source = leadResult.lead_data.lead_source
+          const reasons = leadResult.analysis_result?.reasons.join(', ') || 'AI analysis'
+          
+          toast.success('Lead Imported Successfully', {
+            description: `${selectedEmail.from} has been added as a new lead from ${source} (${confidence}% confidence). ${reasons}`,
+            duration: 6000,
+          })
+        } else {
+          throw new Error('Failed to create lead record')
+        }
       } else {
-        // If not detected as a lead, show the reason
-        const confidence = (data.confidence * 100).toFixed(1)
-        const reasons = data.reasons.join(', ')
-        
-        toast.error('Not a Lead', {
-          description: `This email was not detected as a lead (${confidence}% confidence). ${reasons}`,
-          duration: 5000,
+        // Fallback to manual processing if AI detection fails
+        const response = await fetch('/api/gmail/process-emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            maxResults: 1, // Process just this one email
+            emailId: selectedEmail.id // Pass the specific email ID
+          })
         })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to process email as lead')
+        }
+
+        if (data.success) {
+          // Mark email as processed
+          setEmails(emails.map(email => 
+            email.id === selectedEmail.id 
+              ? { ...email, isRead: true }
+              : email
+          ))
+          
+          // Show success message
+          toast.success('Lead Imported Successfully', {
+            description: `${selectedEmail.from} has been added as a new lead and assigned to an agent via Round Robin.`,
+            duration: 5000,
+          })
+        } else {
+          throw new Error(data.message || 'Failed to process email')
+        }
       }
       
     } catch (error) {

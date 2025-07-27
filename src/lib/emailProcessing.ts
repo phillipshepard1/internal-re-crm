@@ -160,17 +160,8 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       }
     }
 
-    // Create comprehensive notes with all extracted information
-    const notes = [
-      `AI-detected lead from ${leadResult.lead_data.lead_source} (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
-      leadResult.lead_data.message && `Message: ${leadResult.lead_data.message}`,
-      leadResult.lead_data.price_range && `Price Range: ${leadResult.lead_data.price_range}`,
-      leadResult.lead_data.location_preferences && `Location Preferences: ${leadResult.lead_data.location_preferences}`,
-      leadResult.lead_data.property_type && `Property Type: ${leadResult.lead_data.property_type}`,
-      leadResult.lead_data.timeline && `Timeline: ${leadResult.lead_data.timeline}`,
-      leadResult.lead_data.property_address && `Property Address: ${leadResult.lead_data.property_address}`,
-      leadResult.lead_data.property_details && `Property Details: ${leadResult.lead_data.property_details}`
-    ].filter(Boolean).join('\n')
+    // Create comprehensive notes from extracted data
+    const notes = createStructuredNotesFromLeadData(leadResult.lead_data, emailData)
 
     // Create the person record
     const personData = {
@@ -270,3 +261,78 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     }
   }
 } 
+
+/**
+ * Create structured notes from extracted lead data
+ */
+function createStructuredNotesFromLeadData(leadData: any, emailData: any): string {
+    const sections: string[] = []
+    
+    // Header section
+    sections.push(`🤖 AI-Detected Lead from ${leadData.lead_source}`)
+    sections.push(`📧 Processed on ${new Date().toLocaleString()}`)
+    sections.push(`🎯 Confidence: ${(leadData.confidence_score * 100).toFixed(1)}%`)
+    sections.push('')
+    
+    // Contact Information
+    if (leadData.email && leadData.email.length > 0) {
+      sections.push('📞 Contact Information:')
+      sections.push(`   Email: ${leadData.email.join(', ')}`)
+      if (leadData.phone && leadData.phone.length > 0) {
+        sections.push(`   Phone: ${leadData.phone.join(', ')}`)
+      }
+      if (leadData.company) {
+        sections.push(`   Company: ${leadData.company}`)
+      }
+      if (leadData.position) {
+        sections.push(`   Position: ${leadData.position}`)
+      }
+      sections.push('')
+    }
+    
+    // Property Information
+    const propertyInfo: string[] = []
+    if (leadData.property_address) {
+      propertyInfo.push(`📍 Address: ${leadData.property_address}`)
+    }
+    if (leadData.property_details) {
+      propertyInfo.push(`🏠 Details: ${leadData.property_details}`)
+    }
+    if (leadData.property_type) {
+      propertyInfo.push(`🏘️ Type: ${leadData.property_type}`)
+    }
+    if (leadData.price_range) {
+      propertyInfo.push(`💰 Price Range: ${leadData.price_range}`)
+    }
+    if (leadData.location_preferences) {
+      propertyInfo.push(`🗺️ Location Preferences: ${leadData.location_preferences}`)
+    }
+    if (leadData.timeline) {
+      propertyInfo.push(`⏰ Timeline: ${leadData.timeline}`)
+    }
+    
+    if (propertyInfo.length > 0) {
+      sections.push('🏠 Property Information:')
+      sections.push(...propertyInfo.map(info => `   ${info}`))
+      sections.push('')
+    }
+    
+    // Original Message (truncated)
+    if (leadData.message) {
+      const truncatedMessage = leadData.message.length > 500 
+        ? leadData.message.substring(0, 500) + '...'
+        : leadData.message
+      
+      sections.push('💬 Original Message:')
+      sections.push(truncatedMessage.split('\n').map((line: string) => `   ${line}`).join('\n'))
+      sections.push('')
+    }
+    
+    // Email Metadata
+    sections.push('📧 Email Details:')
+    sections.push(`   From: ${emailData.from}`)
+    sections.push(`   Subject: ${emailData.subject}`)
+    sections.push(`   Date: ${emailData.date ? new Date(emailData.date).toLocaleString() : 'Unknown'}`)
+    
+    return sections.join('\n')
+  } 
