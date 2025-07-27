@@ -36,6 +36,31 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 })
 
 /**
+ * Strip HTML tags and clean up text content
+ */
+function stripHtmlAndCleanText(html: string): string {
+  if (!html) return ''
+  
+  // Remove HTML tags
+  let text = html.replace(/<[^>]*>/g, '')
+  
+  // Decode HTML entities
+  text = text.replace(/&amp;/g, '&')
+  text = text.replace(/&lt;/g, '<')
+  text = text.replace(/&gt;/g, '>')
+  text = text.replace(/&quot;/g, '"')
+  text = text.replace(/&#39;/g, "'")
+  text = text.replace(/&nbsp;/g, ' ')
+  
+  // Remove extra whitespace and normalize line breaks
+  text = text.replace(/\s+/g, ' ')
+  text = text.replace(/\n\s*\n/g, '\n')
+  text = text.trim()
+  
+  return text
+}
+
+/**
  * Create structured notes from lead data and email
  */
 function createStructuredNotesFromLeadData(leadData: any, emailData: any): string {
@@ -54,11 +79,12 @@ function createStructuredNotesFromLeadData(leadData: any, emailData: any): strin
   if (leadData.property_address) notes.push(`Property Address: ${leadData.property_address}`)
   if (leadData.property_details) notes.push(`Property Details: ${leadData.property_details}`)
   
-  // Add message content (truncated)
+  // Add cleaned message content (truncated)
   if (leadData.message) {
-    const truncatedMessage = leadData.message.length > 500 
-      ? leadData.message.substring(0, 500) + '...'
-      : leadData.message
+    const cleanedMessage = stripHtmlAndCleanText(leadData.message)
+    const truncatedMessage = cleanedMessage.length > 500 
+      ? cleanedMessage.substring(0, 500) + '...'
+      : cleanedMessage
     notes.push(`Message: ${truncatedMessage}`)
   }
   

@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 
+/**
+ * Strip HTML tags and clean up text content
+ */
+function stripHtmlAndCleanText(html: string): string {
+  if (!html) return ''
+  
+  // Remove HTML tags
+  let text = html.replace(/<[^>]*>/g, '')
+  
+  // Decode HTML entities
+  text = text.replace(/&amp;/g, '&')
+  text = text.replace(/&lt;/g, '<')
+  text = text.replace(/&gt;/g, '>')
+  text = text.replace(/&quot;/g, '"')
+  text = text.replace(/&#39;/g, "'")
+  text = text.replace(/&nbsp;/g, ' ')
+  
+  // Remove extra whitespace and normalize line breaks
+  text = text.replace(/\s+/g, ' ')
+  text = text.replace(/\n\s*\n/g, '\n')
+  text = text.trim()
+  
+  return text
+}
+
 // Zapier webhook authentication
 const ZAPIER_WEBHOOK_SECRET = process.env.ZAPIER_WEBHOOK_SECRET
 
@@ -41,6 +66,9 @@ async function handleLeadCreated(data: any) {
       )
     }
 
+    // Clean message content
+    const cleanedMessage = stripHtmlAndCleanText(message || subject || 'Lead created via Zapier')
+    
     // Create lead in database
     const { data: lead, error } = await supabase
       .from('people')
@@ -50,7 +78,7 @@ async function handleLeadCreated(data: any) {
         phone: phone || null,
         stage: 'New Lead',
         lead_source: source,
-        notes: message || subject || 'Lead created via Zapier',
+        notes: cleanedMessage,
         additional_data: additional_data
       })
       .select()
@@ -101,11 +129,14 @@ async function handleEmailReceived(data: any) {
       .single()
 
     if (existingContact) {
+      // Clean email body content
+      const cleanedBody = stripHtmlAndCleanText(body)
+      
       // Update existing contact with new email
       await supabase
         .from('people')
         .update({
-          notes: `Latest email: ${subject}\n\n${body}`,
+          notes: `Latest email: ${subject}\n\n${cleanedBody}`,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingContact.id)
@@ -116,6 +147,9 @@ async function handleEmailReceived(data: any) {
         contact_id: existingContact.id
       })
     } else {
+      // Clean email body content
+      const cleanedBody = stripHtmlAndCleanText(body)
+      
       // Create new contact from email
       const { data: newContact, error } = await supabase
         .from('people')
@@ -124,7 +158,7 @@ async function handleEmailReceived(data: any) {
           email: from,
           stage: 'New Lead',
           lead_source: source,
-          notes: `Email received: ${subject}\n\n${body}`,
+          notes: `Email received: ${subject}\n\n${cleanedBody}`,
           additional_data: { attachments }
         })
         .select()
@@ -222,6 +256,9 @@ async function handleFormSubmitted(data: any) {
       )
     }
 
+    // Clean message content
+    const cleanedMessage = stripHtmlAndCleanText(message || 'No message')
+    
     // Create lead from form submission
     const { data: lead, error } = await supabase
       .from('people')
@@ -231,7 +268,7 @@ async function handleFormSubmitted(data: any) {
         phone: phone || null,
         stage: 'New Lead',
         lead_source: source,
-        notes: `Form: ${form_name}\nSubject: ${subject || 'No subject'}\nMessage: ${message || 'No message'}\nAdditional: ${JSON.stringify(additionalFields)}`
+        notes: `Form: ${form_name}\nSubject: ${subject || 'No subject'}\nMessage: ${cleanedMessage}\nAdditional: ${JSON.stringify(additionalFields)}`
       })
       .select()
       .single()
@@ -268,6 +305,9 @@ async function handleSocialMessage(data: any) {
       source = 'Social Media'
     } = data
 
+    // Clean message content
+    const cleanedMessage = stripHtmlAndCleanText(message)
+    
     // Create or update contact from social message
     const { data: contact, error } = await supabase
       .from('people')
@@ -276,7 +316,7 @@ async function handleSocialMessage(data: any) {
         email: `${sender}@${platform}.com`, // Placeholder email
         stage: 'New Lead',
         lead_source: `${source} - ${platform}`,
-        notes: `Social message from ${platform}:\n${message}\nTimestamp: ${timestamp}`,
+        notes: `Social message from ${platform}:\n${cleanedMessage}\nTimestamp: ${timestamp}`,
         additional_data: { platform, original_message: message }
       }, {
         onConflict: 'email'

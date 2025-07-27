@@ -29,6 +29,31 @@ async function getSupabaseClient() {
 export class LeadDetectionService {
   
   /**
+   * Strip HTML tags and clean up text content
+   */
+  private static stripHtmlAndCleanText(html: string): string {
+    if (!html) return ''
+    
+    // Remove HTML tags
+    let text = html.replace(/<[^>]*>/g, '')
+    
+    // Decode HTML entities
+    text = text.replace(/&amp;/g, '&')
+    text = text.replace(/&lt;/g, '<')
+    text = text.replace(/&gt;/g, '>')
+    text = text.replace(/&quot;/g, '"')
+    text = text.replace(/&#39;/g, "'")
+    text = text.replace(/&nbsp;/g, ' ')
+    
+    // Remove extra whitespace and normalize line breaks
+    text = text.replace(/\s+/g, ' ')
+    text = text.replace(/\n\s*\n/g, '\n')
+    text = text.trim()
+    
+    return text
+  }
+  
+  /**
    * Analyze an email to determine if it's a lead
    */
   static async analyzeEmail(
@@ -154,7 +179,7 @@ export class LeadDetectionService {
         phone: phones,
         company: extracted_data.company,
         position: extracted_data.position,
-        message: extracted_data.message || emailData.body.substring(0, 500),
+        message: extracted_data.message || this.stripHtmlAndCleanText(emailData.body.substring(0, 500)),
         property_address: propertyAddress,
         property_details: propertyDetails,
         price_range: priceRange || undefined,
@@ -306,7 +331,7 @@ export class LeadDetectionService {
       phone: this.extractPhoneNumbers(body),
       company: this.extractCompany(body),
       position: this.extractPosition(body),
-      message: body.substring(0, 1000), // First 1000 characters
+      message: this.stripHtmlAndCleanText(body), // First 1000 characters
       property_address: this.extractPropertyAddress(subject, body),
       property_details: this.extractPropertyDetails(subject, body)
     }

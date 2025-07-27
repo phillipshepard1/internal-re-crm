@@ -16,8 +16,34 @@ export interface EmailLead {
 }
 
 export class EmailLeadProcessor {
+  
   /**
-   * Process incoming email and extract lead information
+   * Strip HTML tags and clean up text content
+   */
+  private static stripHtmlAndCleanText(html: string): string {
+    if (!html) return ''
+    
+    // Remove HTML tags
+    let text = html.replace(/<[^>]*>/g, '')
+    
+    // Decode HTML entities
+    text = text.replace(/&amp;/g, '&')
+    text = text.replace(/&lt;/g, '<')
+    text = text.replace(/&gt;/g, '>')
+    text = text.replace(/&quot;/g, '"')
+    text = text.replace(/&#39;/g, "'")
+    text = text.replace(/&nbsp;/g, ' ')
+    
+    // Remove extra whitespace and normalize line breaks
+    text = text.replace(/\s+/g, ' ')
+    text = text.replace(/\n\s*\n/g, '\n')
+    text = text.trim()
+    
+    return text
+  }
+  
+  /**
+   * Process an email and extract lead information
    */
   static async processEmail(emailData: Record<string, unknown>): Promise<EmailLead | null> {
     try {
@@ -233,12 +259,13 @@ export class EmailLeadProcessor {
     const [firstName, ...lastNameParts] = fullName.split(' ')
     const lastName = lastNameParts.join(' ')
     
+    const cleanedMessage = this.stripHtmlAndCleanText(body)
     return {
       firstName: firstName || '',
       lastName: lastName || '',
       email: emailMatch || [],
       phone: phoneMatch || [],
-      message: body.length > 200 ? body.substring(0, 200) + '...' : body
+      message: cleanedMessage.length > 200 ? cleanedMessage.substring(0, 200) + '...' : cleanedMessage
     }
   }
   
