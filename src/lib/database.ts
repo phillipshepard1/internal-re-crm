@@ -1303,11 +1303,12 @@ export async function applyFollowUpFrequencyToLead(leadId: string, frequency: 't
     await updatePerson(leadId, {
       follow_up_frequency: frequency,
       follow_up_day_of_week: dayOfWeek,
-      assigned_at: new Date().toISOString()
+      assigned_at: new Date().toISOString(),
+      has_initial_followup: false // Reset flag for new assignment
     })
     
-    // Create the first follow-up using the database function
-    const { data, error } = await supabase.rpc('create_next_followup_for_person', {
+    // Create the INITIAL follow-up for the next day (regardless of frequency)
+    const { data, error } = await supabase.rpc('create_initial_followup_for_person', {
       person_id: leadId
     })
     
@@ -1316,11 +1317,16 @@ export async function applyFollowUpFrequencyToLead(leadId: string, frequency: 't
       throw error
     }
     
+    // Mark that this person has had their initial follow-up
+    await updatePerson(leadId, {
+      has_initial_followup: true
+    })
+    
     // Create activity log
     await createActivity({
       person_id: leadId,
       type: 'follow_up',
-      description: `Follow-up frequency set to ${frequency} (${getFrequencyDisplayName(frequency)})`,
+      description: `Initial follow-up scheduled for next day. Frequency set to ${frequency} (${getFrequencyDisplayName(frequency)}) for subsequent follow-ups.`,
       created_by: assignedUserId,
     })
     

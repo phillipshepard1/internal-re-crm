@@ -6,12 +6,14 @@ import { createClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Plus, Calendar, Clock, User, CheckCircle, AlertCircle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDataLoader } from '@/hooks/useDataLoader'
 import type { FollowUp, Person } from '@/lib/supabase';
+
 type FollowUpWithPerson = FollowUp & { people?: Person };
 
 const FOLLOWUP_TYPE_OPTIONS = [
@@ -75,7 +77,7 @@ const loadFollowUpsData = async (userId: string, userRole: string) => {
 export default function FollowUpsPage() {
   const { user, userRole } = useAuth()
   const [filter, setFilter] = useState<'upcoming' | 'overdue'>('upcoming')
-  const [viewMode, setViewMode] = useState<'list' | 'week'>('list')
+  const [viewMode, setViewMode] = useState<'list' | 'week'>('list') // Keep list as default
   const [currentWeek, setCurrentWeek] = useState(() => {
     const now = new Date()
     const startOfWeek = new Date(now)
@@ -220,13 +222,17 @@ export default function FollowUpsPage() {
           <Button 
             variant={viewMode === 'list' ? 'default' : 'outline'}
             onClick={() => setViewMode('list')}
+            className="flex items-center gap-2"
           >
+            <Calendar className="h-4 w-4" />
             List View
           </Button>
           <Button 
             variant={viewMode === 'week' ? 'default' : 'outline'}
             onClick={() => setViewMode('week')}
+            className="flex items-center gap-2"
           >
+            <Clock className="h-4 w-4" />
             Week View
           </Button>
           <Button className="flex items-center gap-2" variant="default" onClick={openScheduleModal}>
@@ -345,7 +351,7 @@ export default function FollowUpsPage() {
   )
 }
 
-// Weekly List View Component
+// Weekly List View Component - Redesigned for workflow
 interface WeeklyListViewProps {
   followUps: FollowUpWithPerson[]
   currentWeek: Date
@@ -390,142 +396,211 @@ function WeeklyListView({
     onWeekChange(startOfWeek)
   }
 
-  const hasFollowUpsInWeek = weekDays.some(day => getFollowUpsForDay(followUps, day).length > 0)
+  // Get all follow-ups for the week in one unified list
+  const weeklyFollowUps = weekDays.flatMap(day => {
+    const dayFollowUps = getFollowUpsForDay(followUps, day)
+    return dayFollowUps.map(followUp => ({ ...followUp, day }))
+  })
+
+  const hasFollowUpsInWeek = weeklyFollowUps.length > 0
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Weekly Follow-ups</CardTitle>
-            <CardDescription>
-              {currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString()}
-            </CardDescription>
+    <div className="space-y-6">
+      {/* Week Navigation Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl">Weekly Follow-ups</CardTitle>
+              <CardDescription>
+                {currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString()}
+              </CardDescription>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+                ← Previous Week
+              </Button>
+              <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
+                This Week
+              </Button>
+              <Button variant="outline" size="sm" onClick={goToNextWeek}>
+                Next Week →
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-              ← Previous
+          
+          {/* Filter Tabs */}
+          <div className="flex gap-2 mt-4">
+            <Button 
+              variant={filter === 'upcoming' ? 'default' : 'outline'} 
+              onClick={() => setFilter('upcoming')}
+              className="flex items-center gap-2"
+            >
+              <CheckCircle className="h-4 w-4" />
+              Upcoming/Due
             </Button>
-            <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
-              Today
-            </Button>
-            <Button variant="outline" size="sm" onClick={goToNextWeek}>
-              Next →
+            <Button 
+              variant={filter === 'overdue' ? 'default' : 'outline'} 
+              onClick={() => setFilter('overdue')}
+              className="flex items-center gap-2"
+            >
+              <AlertCircle className="h-4 w-4" />
+              Missed/Overdue
             </Button>
           </div>
-        </div>
-        <div className="flex gap-4">
-          <Button variant={filter === 'upcoming' ? 'default' : 'outline'} onClick={() => setFilter('upcoming')}>
-            Upcoming/Due
-          </Button>
-          <Button variant={filter === 'overdue' ? 'default' : 'outline'} onClick={() => setFilter('overdue')}>
-            Missed/Overdue
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {(error || localError) && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{error || localError}</AlertDescription>
-          </Alert>
-        )}
-        
-        {loading ? (
-          <div className="text-center py-12">
+        </CardHeader>
+      </Card>
+
+      {/* Error Display */}
+      {(error || localError) && (
+        <Alert variant="destructive">
+          <AlertDescription>{error || localError}</AlertDescription>
+        </Alert>
+      )}
+      
+      {/* Loading State */}
+      {loading ? (
+        <Card>
+          <CardContent className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
             <p className="mt-4 text-muted-foreground">Loading follow-ups...</p>
-          </div>
-        ) : !hasFollowUpsInWeek ? (
-          <div className="p-6 text-muted-foreground text-center">
-            No follow-ups found for this week. Schedule your first follow-up to get started.
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {weekDays.map((day, index) => {
-              const dayFollowUps = getFollowUpsForDay(followUps, day)
-              const isCurrentDay = isToday(day)
-              
-              if (dayFollowUps.length === 0) return null
-              
-              return (
-                <div key={index} className="space-y-3">
-                  <div className={`flex items-center space-x-3 pb-2 border-b ${
-                    isCurrentDay ? 'border-primary' : 'border-muted'
-                  }`}>
-                    <div className={`text-lg font-semibold ${
-                      isCurrentDay ? 'text-primary' : 'text-foreground'
-                    }`}>
-                      {getDayName(day)}
+          </CardContent>
+        </Card>
+      ) : !hasFollowUpsInWeek ? (
+        /* Empty State */
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Calendar className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No follow-ups this week</h3>
+            <p className="text-muted-foreground mb-4">
+              Schedule your first follow-up to get started with your workflow.
+            </p>
+            <Button variant="outline">
+              <Plus className="h-4 w-4 mr-2" />
+              Schedule Follow-up
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        /* Unified Weekly List - No Pagination */
+        <div className="space-y-4">
+          {weekDays.map((day, index) => {
+            const dayFollowUps = getFollowUpsForDay(followUps, day)
+            const isCurrentDay = isToday(day)
+            
+            if (dayFollowUps.length === 0) return null
+            
+            return (
+              <Card key={index} className={`${isCurrentDay ? 'ring-2 ring-primary/20' : ''}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`text-lg font-semibold ${
+                        isCurrentDay ? 'text-primary' : 'text-foreground'
+                      }`}>
+                        {getDayName(day)}
+                      </div>
+                      <Badge variant={isCurrentDay ? 'default' : 'secondary'}>
+                        {day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </Badge>
+                      {isCurrentDay && (
+                        <Badge variant="default" className="bg-primary">
+                          Today
+                        </Badge>
+                      )}
                     </div>
-                    <div className={`text-sm px-2 py-1 rounded ${
-                      isCurrentDay ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                    }`}>
-                      {day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    <div className="text-sm text-muted-foreground">
+                      {dayFollowUps.length} follow-up{dayFollowUps.length !== 1 ? 's' : ''}
                     </div>
-                    {isCurrentDay && (
-                      <div className="text-sm text-primary font-medium">Today</div>
-                    )}
                   </div>
-                  
-                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                </CardHeader>
+                
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
                     {dayFollowUps.map((followUp) => (
-                      <Card 
-                        key={followUp.id} 
-                        className={`cursor-pointer transition-colors hover:bg-muted/50 ${
-                          isOverdue(followUp) ? 'border-destructive bg-destructive/5' : ''
+                      <div
+                        key={followUp.id}
+                        className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md hover:border-primary/50 ${
+                          isOverdue(followUp) 
+                            ? 'border-destructive/50 bg-destructive/5 hover:border-destructive' 
+                            : 'border-border hover:bg-muted/30'
                         }`}
                         onClick={() => onFollowUpClick(followUp)}
                       >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="font-medium">
-                              {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown Person'}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center space-x-3">
+                            <User className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <div className="font-medium">
+                                {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown Person'}
+                              </div>
+                              {followUp.people?.company && (
+                                <div className="text-sm text-muted-foreground">
+                                  {followUp.people.company}
+                                </div>
+                              )}
                             </div>
-                            <div className={`text-xs px-2 py-1 rounded capitalize ${
-                              followUp.type === 'call' ? 'bg-blue-100 text-blue-800' :
-                              followUp.type === 'email' ? 'bg-green-100 text-green-800' :
-                              followUp.type === 'meeting' ? 'bg-purple-100 text-purple-800' :
-                              followUp.type === 'task' ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge 
+                              variant={
+                                followUp.type === 'call' ? 'default' :
+                                followUp.type === 'email' ? 'secondary' :
+                                followUp.type === 'meeting' ? 'outline' :
+                                'secondary'
+                              }
+                              className="capitalize"
+                            >
                               {followUp.type}
-                            </div>
+                            </Badge>
+                            {isOverdue(followUp) && (
+                              <Badge variant="destructive" className="text-xs">
+                                Overdue
+                              </Badge>
+                            )}
                           </div>
-                          
-                          <div className="text-sm text-muted-foreground mb-2">
-                            {new Date(followUp.scheduled_date).toLocaleTimeString('en-US', { 
-                              hour: 'numeric', 
-                              minute: '2-digit',
-                              hour12: true 
-                            })}
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                            <div className="flex items-center space-x-1">
+                              <Clock className="h-3 w-3" />
+                              <span>
+                                {new Date(followUp.scheduled_date).toLocaleTimeString('en-US', { 
+                                  hour: 'numeric', 
+                                  minute: '2-digit',
+                                  hour12: true 
+                                })}
+                              </span>
+                            </div>
+                            {followUp.people?.lead_source && (
+                              <div className="flex items-center space-x-1">
+                                <span>•</span>
+                                <span>{followUp.people.lead_source}</span>
+                              </div>
+                            )}
                           </div>
-                          
-                          {followUp.notes && (
-                            <div className="text-sm text-muted-foreground line-clamp-2">
-                              {followUp.notes}
-                            </div>
-                          )}
-                          
-                          {isOverdue(followUp) && (
-                            <div className="text-xs text-destructive font-medium mt-2">
-                              Overdue
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
+                        </div>
+                        
+                        {followUp.notes && (
+                          <div className="mt-3 text-sm text-muted-foreground line-clamp-2 bg-muted/30 p-2 rounded">
+                            {followUp.notes}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
-// WeekView Component
+// WeekView Component (Calendar Grid View)
 interface WeekViewProps {
   followUps: FollowUpWithPerson[]
   currentWeek: Date
