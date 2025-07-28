@@ -26,6 +26,9 @@ interface EmailProcessingRequest {
       timeline?: string
       message?: string
       lead_source?: string
+      lead_source_id?: string
+      confidence_score?: number
+      location_preferences?: string[]
       urgency?: 'high' | 'medium' | 'low'
     }
     analysis: {
@@ -97,7 +100,7 @@ function createStructuredNotesFromLeadData(leadData: any, emailData: any): strin
   notes.push(`Subject: ${emailData.subject}`)
   notes.push(`Date: ${emailData.date || new Date().toISOString()}`)
   notes.push(`Lead Source: ${leadData.lead_source}`)
-  notes.push(`Confidence Score: ${(leadData.confidence_score * 100).toFixed(1)}%`)
+  notes.push(`Confidence Score: ${((leadData.confidence_score ?? 0) * 100).toFixed(1)}%`)
   
   // Add extracted information
   if (leadData.company) notes.push(`Company: ${leadData.company}`)
@@ -142,53 +145,53 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
 
     console.log('Processing email:', { from, subject: subject.substring(0, 50) + '...' })
 
-    // Import the lead detection service
-    const { LeadDetectionService } = await import('@/lib/leadDetection')
-    
-    // Extract lead data using AI-powered detection
-    const leadResult = await LeadDetectionService.extractLeadData({
-      from,
-      subject,
-      body: emailBody,
-      to,
-      date
-    })
-
-    console.log('Lead extraction result:', {
-      success: leadResult.success,
-      has_data: !!leadResult.lead_data,
-      error: leadResult.error,
-      confidence: leadResult.lead_data?.confidence_score
-    })
-
-    if (!leadResult.success || !leadResult.lead_data) {
+    // Use the AI analysis data if provided, otherwise return error
+    if (!request.aiAnalysis) {
       return {
         success: false,
-        message: leadResult.error || 'Failed to extract lead data from email',
-        details: 'The email content could not be parsed into a valid lead. This may be because the email is not from a recognized lead source or the content does not contain sufficient lead information.',
-        analysis: leadResult.analysis_result,
-        error: leadResult.error || 'Email does not appear to be a lead'
+        message: 'No AI analysis data provided',
+        details: 'This function now requires AI analysis data from N8N. Manual processing should use the inbox interface.',
+        error: 'Missing AI analysis data'
+      }
+    }
+
+    const leadData = request.aiAnalysis.lead_data
+    const confidence = request.aiAnalysis.confidence
+
+    console.log('AI analysis result:', {
+      success: request.aiAnalysis.is_lead,
+      has_data: !!leadData,
+      confidence: confidence
+    })
+
+    if (!request.aiAnalysis.is_lead || !leadData) {
+      return {
+        success: false,
+        message: 'Email does not appear to be a lead',
+        details: 'The AI analysis indicates this email is not a valid lead.',
+        analysis: request.aiAnalysis,
+        error: 'Not a lead according to AI analysis'
       }
     }
 
     // Enhanced validation with better error messages
     const validationErrors = []
     
-    if (!leadResult.lead_data.first_name || !leadResult.lead_data.last_name) {
+    if (!leadData.first_name || !leadData.last_name) {
       validationErrors.push('Could not extract valid name from email')
     }
     
-    if (!leadResult.lead_data.email || leadResult.lead_data.email.length === 0) {
+    if (!leadData.email || leadData.email.length === 0) {
       validationErrors.push('Could not extract valid email address from email')
     }
     
     // Check if we have at least some basic information
-    if (validationErrors.length > 0 && leadResult.lead_data.confidence_score < 0.3) {
+    if (validationErrors.length > 0 && confidence < 0.3) {
       return {
         success: false,
         message: 'Insufficient lead information found',
         details: validationErrors.join('. ') + '. The email may not contain enough information to create a valid lead.',
-        analysis: leadResult.analysis_result,
+        analysis: request.aiAnalysis,
         error: 'Insufficient lead information'
       }
     }
@@ -198,7 +201,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     let existingError: any = null
     
     // Log the emails we're checking for duplicates
-    console.log('Checking for duplicates with emails:', leadResult.lead_data.email)
+    console.log('Checking for duplicates with emails:', leadData.email)
     
     // Also log the email data for debugging
     console.log('Email data being processed:', {
@@ -208,7 +211,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     })
     
     // First, check for exact email matches (same person's email)
-    for (const email of leadResult.lead_data.email) {
+    for (const email of leadData.email) {
       try {
         console.log(`Checking for existing person with email: ${email}`)
         
@@ -279,20 +282,20 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     }
 
     // If no exact email match, check for name and phone matches (same person, different contact info)
-    if (!existingPerson && leadResult.lead_data.first_name && leadResult.lead_data.last_name) {
+    if (!existingPerson && leadData.first_name && leadData.last_name) {
       try {
         const { data: nameMatches, error: nameError } = await supabase
           .from('people')
           .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-          .ilike('first_name', leadResult.lead_data.first_name)
-          .ilike('last_name', leadResult.lead_data.last_name)
+          .ilike('first_name', leadData.first_name)
+          .ilike('last_name', leadData.last_name)
           .order('created_at', { ascending: false })
           .limit(5)
 
         if (nameMatches && nameMatches.length > 0) {
           // Check if any name match also has phone number match
-          if (leadResult.lead_data.phone && leadResult.lead_data.phone.length > 0) {
-            for (const phone of leadResult.lead_data.phone) {
+          if (leadData.phone && leadData.phone.length > 0) {
+            for (const phone of leadData.phone) {
               const phoneMatch = nameMatches.find(person => 
                 person.phone && person.phone.includes(phone)
               )
@@ -308,8 +311,8 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
           if (!existingPerson && nameMatches.length === 1) {
             const nameMatch = nameMatches[0]
             // Only consider it a match if the names are exactly the same (case insensitive)
-            if (nameMatch.first_name.toLowerCase() === leadResult.lead_data.first_name.toLowerCase() &&
-                nameMatch.last_name.toLowerCase() === leadResult.lead_data.last_name.toLowerCase()) {
+            if (nameMatch.first_name.toLowerCase() === leadData.first_name.toLowerCase() &&
+                nameMatch.last_name.toLowerCase() === leadData.last_name.toLowerCase()) {
               existingPerson = nameMatch
               console.log('Found existing person with exact name match:', nameMatch.email)
             }
@@ -336,25 +339,25 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       }
 
       // Add new information if available
-      if (leadResult.lead_data.company && !existingPerson.company) {
-        updateData.company = leadResult.lead_data.company
+      if (leadData.company && !existingPerson.company) {
+        updateData.company = leadData.company
       }
-      if (leadResult.lead_data.position && !existingPerson.position) {
-        updateData.position = leadResult.lead_data.position
+      if (leadData.position && !existingPerson.position) {
+        updateData.position = leadData.position
       }
-      if (leadResult.lead_data.property_address && !existingPerson.address) {
-        updateData.address = leadResult.lead_data.property_address
+      if (leadData.property_address && !existingPerson.address) {
+        updateData.address = leadData.property_address
       }
 
       // Update notes with new email information
-      const newNote = createStructuredNotesFromLeadData(leadResult.lead_data, emailData)
+      const newNote = createStructuredNotesFromLeadData(leadData, emailData)
       const updatedNotes = existingPerson.notes 
         ? `${existingPerson.notes}\n\n--- NEW EMAIL ---\n${newNote}`
         : newNote
       
       updateData.notes = updatedNotes
 
-      // Update the existing person
+      // Update the person
       const { data: updatedPerson, error: updateError } = await supabase
         .from('people')
         .update(updateData)
@@ -364,53 +367,27 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
 
       if (updateError) {
         console.error('Error updating existing person:', updateError)
-        return {
-          success: false,
-          message: 'Error updating existing lead',
-          details: updateError.message,
-          error: 'Update failed'
-        }
+        throw new Error('Failed to update existing person')
       }
 
-               // Create an activity log entry for the update
-         try {
-           // Get admin user for activity creation (since userId might not exist in users table)
-           const { data: adminUser, error: adminError } = await supabase
-             .from('users')
-             .select('id')
-             .eq('role', 'admin')
-             .single()
-           
-           if (!adminError && adminUser) {
-             const { error: activityError } = await supabase
-               .from('activities')
-               .insert({
-                 person_id: existingPerson.id,
-                 type: 'note_added',
-                 description: `Lead updated with new information from ${leadResult.lead_data.lead_source} (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
-                 created_by: adminUser.id,
-               })
-
-             if (activityError) {
-               console.error('Error creating activity:', activityError)
-             }
-                       } else {
-              console.error('Error finding admin user for activity:', adminError)
-            }
-         } catch (activityError) {
-           console.error('Error creating activity:', activityError)
-         }
+        // Log the activity
+        await supabase.from('activities').insert({
+          person_id: existingPerson.id,
+          type: 'note_added',
+          description: `Lead updated with new information from ${leadData.lead_source} (Confidence: ${((leadData.confidence_score ?? confidence ?? 0) * 100).toFixed(1)}%)`,
+          created_by: request.userId,
+        })
 
       return {
         success: true,
-        message: 'Existing lead updated with new information',
+        message: 'Lead updated successfully',
         person: updatedPerson,
         analysis: {
-          confidence: leadResult.analysis_result?.confidence_score || leadResult.lead_data.confidence_score,
-          reasons: leadResult.analysis_result?.reasons || ['Lead source matched'],
-          source: leadResult.lead_data.lead_source,
-          extracted_fields: leadResult.lead_data ? Object.keys(leadResult.lead_data).filter(key => 
-            (leadResult.lead_data as any)[key] && 
+          confidence: request.aiAnalysis.confidence,
+          reasons: request.aiAnalysis.is_lead ? ['Lead source matched'] : ['Not a lead'],
+          source: leadData.lead_source,
+          extracted_fields: leadData ? Object.keys(leadData).filter(key => 
+            (leadData as any)[key] && 
             !['confidence_score', 'lead_source_id'].includes(key)
           ) : []
         }
@@ -443,17 +420,17 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     }
 
     // Create comprehensive notes from extracted data
-    const notes = createStructuredNotesFromLeadData(leadResult.lead_data, emailData)
+    const notes = createStructuredNotesFromLeadData(leadData, emailData)
 
     // Prepare person data with enhanced field mapping
     const personData = {
-      first_name: leadResult.lead_data.first_name || 'Unknown',
-      last_name: leadResult.lead_data.last_name || 'Lead',
-      email: leadResult.lead_data.email,
-      phone: leadResult.lead_data.phone || [],
+      first_name: leadData.first_name || 'Unknown',
+      last_name: leadData.last_name || 'Lead',
+      email: leadData.email,
+      phone: leadData.phone || [],
       client_type: 'lead',
-      lead_source: leadResult.lead_data.lead_source,
-      lead_source_id: leadResult.lead_data.lead_source_id,
+      lead_source: leadData.lead_source,
+      lead_source_id: leadData.lead_source_id,
       lead_status: 'staging', // New leads go to staging
       assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
       notes: notes,
@@ -466,19 +443,19 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
       best_to_reach_by: null,
       lists: [],
-      company: leadResult.lead_data.company || null,
-      position: leadResult.lead_data.position || null,
-      address: leadResult.lead_data.property_address || null,
+      company: leadData.company || null,
+      position: leadData.position || null,
+      address: leadData.property_address || null,
       city: null,
       state: null,
       zip_code: null,
       country: null,
       looking_for: [
-        leadResult.lead_data.property_details,
-        leadResult.lead_data.price_range,
-        leadResult.lead_data.location_preferences,
-        leadResult.lead_data.property_type,
-        leadResult.lead_data.timeline
+        leadData.property_details,
+        leadData.price_range,
+        leadData.location_preferences,
+        leadData.property_type,
+        leadData.timeline
       ].filter(Boolean).join(' | ') || null,
       selling: null,
       closed: null,
@@ -491,7 +468,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       email_type: typeof personData.email,
       email_is_array: Array.isArray(personData.email),
       lead_source: personData.lead_source,
-      confidence: leadResult.lead_data.confidence_score
+      confidence: leadData.confidence_score
     })
 
     // Insert the person record
@@ -527,7 +504,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         console.log('Duplicate email detected during insertion, attempting to find existing person')
         
                  // Try to find the existing person that caused the duplicate error
-         for (const email of leadResult.lead_data.email) {
+         for (const email of leadData.email) {
            try {
              // Try multiple approaches to find the existing person
              let existingPerson = null
@@ -561,11 +538,11 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
                 message: 'Lead already exists (found during duplicate error handling)',
                 person: existingPerson,
                 analysis: {
-                  confidence: leadResult.analysis_result?.confidence_score || leadResult.lead_data.confidence_score,
-                  reasons: leadResult.analysis_result?.reasons || ['Lead source matched'],
-                  source: leadResult.lead_data.lead_source,
-                  extracted_fields: leadResult.lead_data ? Object.keys(leadResult.lead_data).filter(key => 
-                    (leadResult.lead_data as any)[key] && 
+                  confidence: request.aiAnalysis.confidence,
+                  reasons: request.aiAnalysis.is_lead ? ['Lead source matched'] : ['Not a lead'],
+                  source: leadData.lead_source,
+                  extracted_fields: leadData ? Object.keys(leadData).filter(key => 
+                    (leadData as any)[key] && 
                     !['confidence_score', 'lead_source_id'].includes(key)
                   ) : []
                 }
@@ -592,8 +569,8 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         .insert({
           person_id: newPerson.id,
           type: 'created',
-          description: `AI-detected lead from ${leadResult.lead_data.lead_source} and placed in staging (Confidence: ${(leadResult.lead_data.confidence_score * 100).toFixed(1)}%)`,
-          created_by: adminUser.id,
+          description: `AI-detected lead from ${leadData.lead_source} and placed in staging (Confidence: ${((leadData.confidence_score ?? 0) * 100).toFixed(1)}%)`,
+          created_by: request.userId,
         })
 
       if (activityError) {
@@ -609,11 +586,11 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       message: 'Lead processed successfully and placed in staging',
       person: newPerson,
       analysis: {
-        confidence: leadResult.analysis_result?.confidence_score || leadResult.lead_data.confidence_score,
-        reasons: leadResult.analysis_result?.reasons || ['Lead source matched'],
-        source: leadResult.lead_data.lead_source,
-        extracted_fields: leadResult.lead_data ? Object.keys(leadResult.lead_data).filter(key => 
-          (leadResult.lead_data as any)[key] && 
+        confidence: request.aiAnalysis.confidence,
+        reasons: request.aiAnalysis.is_lead ? ['Lead source matched'] : ['Not a lead'],
+        source: leadData.lead_source,
+        extracted_fields: leadData ? Object.keys(leadData).filter(key => 
+          (leadData as any)[key] && 
           !['confidence_score', 'lead_source_id'].includes(key)
         ) : []
       }

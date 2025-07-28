@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { google } from 'googleapis'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -58,9 +59,6 @@ export class GmailIntegration {
       })
 
       // Initialize Gmail API client
-      const { google } = require('googleapis')
-      console.log('Googleapis package loaded successfully')
-      
       const oauth2Client = new google.auth.OAuth2(
         this.config.clientId,
         this.config.clientSecret,
@@ -100,8 +98,6 @@ export class GmailIntegration {
         throw new Error('Gmail not initialized')
       }
 
-      const { google } = require('googleapis')
-      
       // Create email message
       const message = {
         to: emailData.to,
