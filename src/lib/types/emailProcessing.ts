@@ -15,12 +15,8 @@ export interface EmailProcessingRequest {
       last_name: string
       email: string[]
       phone: string[]
-      company?: string
-      position?: string
-      property_address?: string
       property_details?: string
       price_range?: string
-      property_type?: string
       timeline?: string
       message?: string
       lead_source?: string
@@ -31,6 +27,12 @@ export interface EmailProcessingRequest {
       property_type: 'residential' | 'commercial' | 'land'
       budget_range?: string
       location_preferences?: string[]
+    }
+    lead_source_match?: {
+      matched: boolean
+      source_name?: string
+      confidence: number
+      reasons: string[]
     }
   }
 }

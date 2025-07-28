@@ -1,0 +1,136 @@
+{
+  "name": "Enhanced Email Lead Processing with Lead Sources",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "gmailOAuth2",
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": true,
+        "maxResults": 10,
+        "simple": true
+      },
+      "id": "gmail-trigger",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "openAiApi",
+        "resource": "chat",
+        "operation": "message",
+        "model": "gpt-4",
+        "messages": {
+          "message": [
+            {
+              "role": "system",
+              "content": "You are an expert real estate lead detection AI. Analyze emails to identify potential real estate leads and extract structured data. Focus on emails that contain real estate inquiries, property interest, buying/selling intent, or investment opportunities."
+            },
+            {
+              "role": "user",
+              "content": "Analyze this real estate email and extract lead information. Return ONLY valid JSON:\n\nFrom: {{ $json.From }}\nSubject: {{ $json.Subject }}\nBody: {{ $json.snippet }}\n\n{\n  \"is_lead\": true/false,\n  \"confidence\": 0.0-1.0,\n  \"lead_data\": {\n    \"first_name\": \"string\",\n    \"last_name\": \"string\",\n    \"email\": [\"string\"],\n    \"phone\": [\"string\"],\n    \"property_details\": \"string\",\n    \"price_range\": \"string\",\n    \"timeline\": \"string\",\n    \"message\": \"string\",\n    \"lead_source\": \"email\",\n    \"urgency\": \"high/medium/low\"\n  },\n  \"analysis\": {\n    \"intent\": \"buying/selling/investing/general_inquiry\",\n    \"property_type\": \"residential/commercial/land\",\n    \"budget_range\": \"string\",\n    \"location_preferences\": [\"string\"]\n  }\n}\n\nIMPORTANT: Only mark as lead (is_lead: true) if the email contains clear real estate interest, property inquiries, buying/selling intent, or investment opportunities. Be conservative - it's better to miss a lead than create false positives."
+            }
+          ]
+        }
+      },
+      "id": "openAI-analysis",
+      "name": "OpenAI Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://app.stresslesscrm.com/api/n8n/process-lead",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.N8N_WEBHOOK_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email_id",
+              "value": "{{ $json.id }}"
+            },
+            {
+              "name": "from",
+              "value": "{{ $json.From }}"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.Subject }}"
+            },
+            {
+              "name": "body",
+              "value": "{{ $json.snippet }}"
+            },
+            {
+              "name": "date",
+              "value": "{{ $json.internalDate }}"
+            },
+            {
+              "name": "user_id",
+              "value": "system"
+            },
+            {
+              "name": "ai_analysis",
+              "value": "{{ $('OpenAI Analysis').json }}"
+            }
+          ]
+        }
+      },
+      "id": "send-to-crm",
+      "name": "Send to CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Send to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+} 

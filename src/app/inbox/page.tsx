@@ -30,7 +30,10 @@ import {
   MessageSquare,
   RefreshCw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Image,
+  Maximize2,
+  FolderOpen
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -67,6 +70,12 @@ const sanitizeHtml = (html: string): string => {
     .replace(/<a\s+href\s*=\s*["']?javascript:/gi, '<a href="#"')
     .replace(/<img\s+[^>]*src\s*=\s*["']?javascript:/gi, '<img src="#"')
   
+  // Allow images but ensure they're safe and properly styled
+  sanitized = sanitized.replace(
+    /<img([^>]*)>/gi,
+    '<img$1 style="max-width: 100%; height: auto; display: block; margin: 10px 0; opacity: 0; transition: opacity 0.3s ease;" onerror="this.style.display=\'none\'; console.warn(\'Failed to load email image:\', this.src);" onload="this.style.opacity=\'1\';" />'
+  )
+  
   // Enhance button styling and functionality
   sanitized = sanitized.replace(
     /<button([^>]*)>/gi,
@@ -77,12 +86,6 @@ const sanitizeHtml = (html: string): string => {
   sanitized = sanitized.replace(
     /<a\s+([^>]*href\s*=\s*["']([^"']+)["'][^>]*)>([^<]*?(?:verify|confirm|sign|login|register|subscribe|download|view|open|click)[^<]*?)<\/a>/gi,
     '<a $1 class="email-button-link" style="display: inline-block; padding: 8px 16px; margin: 4px; background-color: #007bff; color: white; border: none; border-radius: 4px; text-decoration: none; cursor: pointer; font-size: 14px; line-height: 1.4;">$3</a>'
-  )
-  
-  // Add error handling for images with better fallback
-  sanitized = sanitized.replace(
-    /<img([^>]*)>/gi,
-    '<img$1 onerror="this.style.display=\'none\'; console.warn(\'Failed to load email image:\', this.src);" onload="this.style.opacity=\'1\';" style="opacity: 0; transition: opacity 0.3s ease;">'
   )
   
   // Enhance table styling for better email display
@@ -96,6 +99,18 @@ const sanitizeHtml = (html: string): string => {
     /<a\s+([^>]*href\s*=\s*["']([^"']*(?:facebook|twitter|x|linkedin|instagram|youtube|slack)[^"']*)["'][^>]*)>([^<]*?)<\/a>/gi,
     '<a $1 class="social-media-link" style="display: inline-block; margin: 4px; padding: 8px 12px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; text-decoration: none; color: #495057; font-size: 12px;">$3</a>'
   )
+  
+  // Ensure proper styling for email content
+  sanitized = sanitized.replace(
+    /<body([^>]*)>/gi,
+    '<div$1 style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; line-height: 1.6; color: #333;">'
+  )
+  
+  sanitized = sanitized.replace(/<\/body>/gi, '</div>')
+  
+  // Fix common email client issues
+  sanitized = sanitized.replace(/<p[^>]*>/gi, '<p style="margin: 0 0 16px 0;">')
+  sanitized = sanitized.replace(/<div[^>]*>/gi, '<div style="margin: 0 0 16px 0;">')
   
   return sanitized
 }
@@ -116,6 +131,7 @@ interface Email {
     attachmentId: string
   }>
   body: string
+  images?: Array<{ src: string, alt: string }>
   to: string
   lastUpdated?: string
 }
@@ -157,47 +173,106 @@ const isConnectionStatus = (status: string): status is ConnectionStatusType => {
 
 // Move load functions outside component to prevent recreation
 const loadGmailStatus = async (userId: string, userRole: string) => {
-  const response = await fetch(`/api/gmail/status?userId=${userId}`)
-  const data = await response.json()
-  return data
+  try {
+    console.log('Checking Gmail status for user:', userId)
+    const response = await fetch(`/api/gmail/status?userId=${userId}`)
+    
+    if (!response.ok) {
+      console.error('Gmail status check failed:', response.status, response.statusText)
+      throw new Error(`Gmail status check failed: ${response.status} ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    console.log('Gmail status response:', data)
+    return data
+  } catch (error) {
+    console.error('Error in loadGmailStatus:', error)
+    throw error
+  }
 }
 
 const loadGmailLabels = async (userId: string, userRole: string) => {
-  const response = await fetch('/api/gmail/labels', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ userId })
-  })
-  
-  if (!response.ok) {
-    throw new Error(`Failed to load Gmail labels: ${response.status} ${response.statusText}`)
+  try {
+    console.log('Loading Gmail labels for user:', userId)
+    const response = await fetch('/api/gmail/labels', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load Gmail labels: ${response.status} ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    console.log('Labels loaded successfully:', data.labels?.length || 0, 'labels')
+    return data.labels || []
+  } catch (error) {
+    console.error('Error loading Gmail labels:', error)
+    throw error
   }
-  
-  const data = await response.json()
-  return data.labels || []
 }
 
-const loadGmailEmails = async (userId: string, userRole: string) => {
-  const response = await fetch('/api/gmail/fetch-emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ userId })
-  })
-  
-  if (!response.ok) {
-    throw new Error(`Failed to load Gmail emails: ${response.status} ${response.statusText}`)
-  }
-  
-  const data = await response.json()
-  return data.emails || []
-}
+
 
 export default function InboxPage() {
   const { user, userRole } = useAuth()
+  
+  // Add CSS for email content styling
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.textContent = `
+      .email-content {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.6;
+        color: #333;
+      }
+      .email-content img {
+        max-width: 100% !important;
+        height: auto !important;
+        display: block !important;
+        margin: 10px 0 !important;
+        border-radius: 4px !important;
+        border: 1px solid #e0e0e0 !important;
+        cursor: pointer !important;
+        transition: opacity 0.3s ease !important;
+      }
+      .email-content img:hover {
+        opacity: 0.8 !important;
+      }
+      .email-content a {
+        color: #007bff !important;
+        text-decoration: underline !important;
+      }
+      .email-content a:hover {
+        color: #0056b3 !important;
+      }
+      .email-content p {
+        margin: 0 0 16px 0 !important;
+      }
+      .email-content div {
+        margin: 0 0 16px 0 !important;
+      }
+      .email-content table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+        margin: 8px 0 !important;
+        border: 1px solid #e0e0e0 !important;
+      }
+      .email-content table td,
+      .email-content table th {
+        padding: 8px !important;
+        border: 1px solid #e0e0e0 !important;
+      }
+    `
+    document.head.appendChild(style)
+    
+    return () => {
+      document.head.removeChild(style)
+    }
+  }, [])
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
@@ -254,6 +329,7 @@ export default function InboxPage() {
   const [isResizing, setIsResizing] = useState(false)
   const [resizeStartX, setResizeStartX] = useState(0)
   const [resizeStartWidth, setResizeStartWidth] = useState(0)
+  const [loadingLabels, setLoadingLabels] = useState(false)
 
   // Load text content when preview attachment changes
   useEffect(() => {
@@ -409,78 +485,225 @@ export default function InboxPage() {
 
       if (data.success && data.emails) {
         // Transform Gmail API response to our Email interface
-        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
-          id: gmailEmail.id,
-          from: gmailEmail.from,
-          subject: gmailEmail.subject,
-          preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
-          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric' 
-          }),
-          isRead: gmailEmail.isRead ?? false,
-          hasAttachments: gmailEmail.hasAttachments ?? false,
-          attachments: gmailEmail.attachments || [],
-          body: gmailEmail.body || '',
-          to: gmailEmail.to || 'me',
-          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
-        }))
+        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => {
+          // Extract headers from Gmail API response
+          const headers = gmailEmail.payload?.headers || []
+          const from = headers.find((h: any) => h.name === 'From')?.value || 'Unknown'
+          const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'No Subject'
+          const to = headers.find((h: any) => h.name === 'To')?.value || 'me'
+          
+          // Extract body content with image support
+          let body = ''
+          let images: Array<{ src: string, alt: string }> = []
+          let allParts: any[] = []
+          
+          if (gmailEmail.payload?.body?.data) {
+            body = Buffer.from(gmailEmail.payload.body.data, 'base64').toString('utf-8')
+          } else if (gmailEmail.payload?.parts) {
+            // Handle multipart messages - prioritize HTML over plain text
+            let htmlPart = gmailEmail.payload.parts.find((part: any) => 
+              part.mimeType === 'text/html'
+            )
+            let textPart = gmailEmail.payload.parts.find((part: any) => 
+              part.mimeType === 'text/plain'
+            )
+            
+            // If no HTML part found in top level, check nested parts
+            if (!htmlPart) {
+              for (const part of gmailEmail.payload.parts) {
+                if (part.mimeType === 'multipart/alternative' && part.parts) {
+                  htmlPart = part.parts.find((p: any) => p.mimeType === 'text/html')
+                  textPart = part.parts.find((p: any) => p.mimeType === 'text/plain')
+                  break
+                } else if (part.mimeType === 'multipart/related' && part.parts) {
+                  htmlPart = part.parts.find((p: any) => p.mimeType === 'text/html')
+                  textPart = part.parts.find((p: any) => p.mimeType === 'text/plain')
+                  break
+                }
+              }
+            }
+            
+            // Use HTML part if available, otherwise fall back to plain text
+            if (htmlPart?.body?.data) {
+              body = Buffer.from(htmlPart.body.data, 'base64').toString('utf-8')
+              console.log('Using HTML part for email:', gmailEmail.id)
+            } else if (textPart?.body?.data) {
+              body = Buffer.from(textPart.body.data, 'base64').toString('utf-8')
+              console.log('Using plain text part for email:', gmailEmail.id)
+            }
+            
+            // Extract images from parts (attachments) - including nested parts
+            const getAllParts = (parts: any[]): any[] => {
+              let allParts: any[] = []
+              for (const part of parts) {
+                allParts.push(part)
+                if (part.parts) {
+                  allParts = allParts.concat(getAllParts(part.parts))
+                }
+              }
+              return allParts
+            }
+            
+            allParts = getAllParts(gmailEmail.payload.parts)
+            const imageParts = allParts.filter((part: any) => 
+              part.mimeType?.startsWith('image/') && part.body?.data
+            )
+            
+            images = imageParts.map((part: any) => ({
+              src: `data:${part.mimeType};base64,${part.body.data}`,
+              alt: part.filename || 'Email image'
+            }))
+          }
+          
+          // Also extract embedded images from HTML body content
+          if (body && body.includes('<img')) {
+            console.log('Found HTML with images in email:', gmailEmail.id)
+            const imgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi
+            const embeddedImages: Array<{ src: string, alt: string }> = []
+            let match
+            
+            while ((match = imgRegex.exec(body)) !== null) {
+              const imgSrc = match[1]
+              console.log('Found image src:', imgSrc)
+              // Extract alt text if available
+              const altMatch = body.substring(match.index).match(/alt\s*=\s*["']([^"']+)["']/i)
+              const altText = altMatch ? altMatch[1] : 'Embedded image'
+              
+              // Handle different image source types
+              if (imgSrc.startsWith('data:')) {
+                // Data URL - already encoded
+                console.log('Processing data URL image')
+                embeddedImages.push({
+                  src: imgSrc,
+                  alt: altText
+                })
+              } else if (imgSrc.startsWith('cid:')) {
+                // Content-ID reference - need to find the corresponding part
+                console.log('Processing CID image:', imgSrc)
+                const contentId = imgSrc.replace('cid:', '')
+                const imagePart = allParts.find((part: any) => 
+                  part.headers?.some((h: any) => h.name === 'Content-ID' && h.value === `<${contentId}>`)
+                )
+                
+                if (imagePart?.body?.data) {
+                  console.log('Found CID image part, converting to data URL')
+                  embeddedImages.push({
+                    src: `data:${imagePart.mimeType};base64,${imagePart.body.data}`,
+                    alt: altText
+                  })
+                } else {
+                  console.log('CID image part not found for:', contentId)
+                }
+              } else if (imgSrc.startsWith('http')) {
+                // External URL - keep as is
+                console.log('Processing external URL image:', imgSrc)
+                embeddedImages.push({
+                  src: imgSrc,
+                  alt: altText
+                })
+              }
+            }
+            
+            console.log('Total embedded images found:', embeddedImages.length)
+            // Add embedded images to the images array
+            images = [...images, ...embeddedImages]
+          }
+          
+          // Check for attachments (excluding images that are displayed inline)
+          const hasAttachments = gmailEmail.payload?.parts?.some((part: any) => 
+            part.filename && part.filename.length > 0 && !part.mimeType?.startsWith('image/')
+          ) || false
+          
+          // Extract attachments (excluding images)
+          const attachments = gmailEmail.payload?.parts?.filter((part: any) => 
+            part.filename && part.filename.length > 0 && !part.mimeType?.startsWith('image/')
+          ).map((part: any) => ({
+            filename: part.filename,
+            mimeType: part.mimeType,
+            size: part.body?.size || 0,
+            attachmentId: part.body?.attachmentId || ''
+          })) || []
+
+          return {
+            id: gmailEmail.id,
+            from: from,
+            subject: subject,
+            preview: gmailEmail.snippet || body.substring(0, 100) || '',
+            date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric' 
+            }),
+            isRead: !gmailEmail.labelIds?.includes('UNREAD'),
+            hasAttachments: hasAttachments,
+            attachments: attachments,
+            body: body,
+            images: images, // Add images array
+            to: to,
+            lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+          }
+        })
 
         setEmails(transformedEmails)
         setCurrentFolder(folderId)
         
         // Store the next page token and check if there are more emails to load
         setNextPageToken(data.nextPageToken)
-        
-        // For now, just check if there's a next page token to determine if there are more emails
-        // We'll update the hasMoreEmails state when labels are available
         setHasMoreEmails(!!data.nextPageToken)
-      } else {
-        throw new Error(data.message || 'Failed to load emails')
       }
     } catch (error) {
       console.error('Error loading emails for folder:', error)
-      toast.error('Failed to Load Emails', {
-        description: error instanceof Error ? error.message : 'There was an error loading emails for this folder.',
-        duration: 4000,
-      })
-      // Fallback to empty emails
-      setEmails([])
+      toast.error('Failed to load emails for this folder')
     } finally {
       setLoadingFolder(null)
     }
-  }, [user?.id, userRole, gmailConnected])
+  }, [user?.id, gmailConnected])
 
   // Load Gmail labels
   const loadLabels = useCallback(async () => {
     if (!user?.id || !gmailConnected) return
 
+    // Prevent multiple simultaneous requests
+    if (loadingLabels) return
+
     try {
+      setLoadingLabels(true)
+      console.log('Loading Gmail labels for user:', user.id)
       const labels = await loadGmailLabels(user.id, userRole || 'agent')
+      console.log('Labels loaded successfully:', labels.length, 'labels')
       setGmailLabels(labels)
       
-      // After loading labels, automatically load emails for the inbox
-      if (labels.length > 0) {
-        await loadEmailsForFolder('INBOX')
+      // Only load emails if we don't have any yet or if the folder changed
+      if (labels.length > 0 && emails.length === 0) {
+        await loadEmailsForFolder(currentFolder)
       }
     } catch (error) {
       console.error('Error loading Gmail labels:', error)
-      toast.error('Failed to load Gmail labels')
+      
+      // Show specific error messages based on the error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
+      if (errorMessage.includes('404')) {
+        toast.error('Gmail Not Connected', {
+          description: 'Please connect your Gmail account to view emails.',
+          duration: 8000,
+        })
+      } else if (errorMessage.includes('500')) {
+        toast.error('Gmail Connection Error', {
+          description: 'There was an error connecting to Gmail. Please try reconnecting your account.',
+          duration: 8000,
+        })
+      } else {
+        toast.error('Failed to Load Labels', {
+          description: errorMessage,
+          duration: 6000,
+        })
+      }
+    } finally {
+      setLoadingLabels(false)
     }
-  }, [user?.id, userRole, gmailConnected, loadEmailsForFolder])
+  }, [user?.id, gmailConnected, userRole, currentFolder, loadEmailsForFolder, emails.length, loadingLabels])
 
-  // Load Gmail emails
-  const loadEmails = useCallback(async () => {
-    if (!user?.id || !gmailConnected) return
 
-    try {
-      const emailsData = await loadGmailEmails(user.id, userRole || 'agent')
-      setEmails(emailsData)
-    } catch (error) {
-      console.error('Error loading Gmail emails:', error)
-      toast.error('Failed to load emails')
-    }
-  }, [user?.id, userRole, gmailConnected])
 
   // Initialize Gmail connection and data
   useEffect(() => {
@@ -498,12 +721,18 @@ export default function InboxPage() {
     if (!gmailConnected || !user?.id) return
 
     const loadData = async () => {
-      await loadLabels()
-      // Emails will be loaded automatically when labels are loaded
+      // Only load labels if we don't have them yet
+      if (gmailLabels.length === 0) {
+        await loadLabels()
+      }
+      // Only load emails if we don't have any yet
+      if (emails.length === 0 && currentFolder) {
+        await loadEmailsForFolder(currentFolder)
+      }
     }
 
     loadData()
-  }, [gmailConnected, user?.id, loadLabels])
+  }, [gmailConnected, user?.id, gmailLabels.length, emails.length, currentFolder, loadLabels, loadEmailsForFolder])
 
   // Update hasMoreEmails when labels are loaded
   useEffect(() => {
@@ -643,22 +872,163 @@ export default function InboxPage() {
 
       if (response.ok && data.success && data.emails) {
         // Transform Gmail API response to our Email interface
-        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => ({
-          id: gmailEmail.id,
-          from: gmailEmail.from,
-          subject: gmailEmail.subject,
-          preview: gmailEmail.snippet || gmailEmail.body?.substring(0, 100) || '',
-          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric' 
-          }),
-          isRead: false,
-          hasAttachments: gmailEmail.hasAttachments ?? false,
-          attachments: gmailEmail.attachments || [],
-          body: gmailEmail.body || '',
-          to: gmailEmail.to || 'me',
-          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
-        }))
+        const transformedEmails: Email[] = data.emails.map((gmailEmail: any) => {
+          // Extract headers from Gmail API response
+          const headers = gmailEmail.payload?.headers || []
+          const from = headers.find((h: any) => h.name === 'From')?.value || 'Unknown'
+          const subject = headers.find((h: any) => h.name === 'Subject')?.value || 'No Subject'
+          const to = headers.find((h: any) => h.name === 'To')?.value || 'me'
+          
+          // Extract body content with image support
+          let body = ''
+          let images: Array<{ src: string, alt: string }> = []
+          let allParts: any[] = []
+          
+          if (gmailEmail.payload?.body?.data) {
+            body = Buffer.from(gmailEmail.payload.body.data, 'base64').toString('utf-8')
+          } else if (gmailEmail.payload?.parts) {
+            // Handle multipart messages - prioritize HTML over plain text
+            let htmlPart = gmailEmail.payload.parts.find((part: any) => 
+              part.mimeType === 'text/html'
+            )
+            let textPart = gmailEmail.payload.parts.find((part: any) => 
+              part.mimeType === 'text/plain'
+            )
+            
+            // If no HTML part found in top level, check nested parts
+            if (!htmlPart) {
+              for (const part of gmailEmail.payload.parts) {
+                if (part.mimeType === 'multipart/alternative' && part.parts) {
+                  htmlPart = part.parts.find((p: any) => p.mimeType === 'text/html')
+                  textPart = part.parts.find((p: any) => p.mimeType === 'text/plain')
+                  break
+                } else if (part.mimeType === 'multipart/related' && part.parts) {
+                  htmlPart = part.parts.find((p: any) => p.mimeType === 'text/html')
+                  textPart = part.parts.find((p: any) => p.mimeType === 'text/plain')
+                  break
+                }
+              }
+            }
+            
+            // Use HTML part if available, otherwise fall back to plain text
+            if (htmlPart?.body?.data) {
+              body = Buffer.from(htmlPart.body.data, 'base64').toString('utf-8')
+              console.log('Using HTML part for email:', gmailEmail.id)
+            } else if (textPart?.body?.data) {
+              body = Buffer.from(textPart.body.data, 'base64').toString('utf-8')
+              console.log('Using plain text part for email:', gmailEmail.id)
+            }
+            
+            // Extract images from parts (attachments) - including nested parts
+            const getAllParts = (parts: any[]): any[] => {
+              let allParts: any[] = []
+              for (const part of parts) {
+                allParts.push(part)
+                if (part.parts) {
+                  allParts = allParts.concat(getAllParts(part.parts))
+                }
+              }
+              return allParts
+            }
+            
+            allParts = getAllParts(gmailEmail.payload.parts)
+            const imageParts = allParts.filter((part: any) => 
+              part.mimeType?.startsWith('image/') && part.body?.data
+            )
+            
+            images = imageParts.map((part: any) => ({
+              src: `data:${part.mimeType};base64,${part.body.data}`,
+              alt: part.filename || 'Email image'
+            }))
+          }
+          
+          // Also extract embedded images from HTML body content
+          if (body && body.includes('<img')) {
+            console.log('Found HTML with images in email:', gmailEmail.id)
+            const imgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi
+            const embeddedImages: Array<{ src: string, alt: string }> = []
+            let match
+            
+            while ((match = imgRegex.exec(body)) !== null) {
+              const imgSrc = match[1]
+              console.log('Found image src:', imgSrc)
+              // Extract alt text if available
+              const altMatch = body.substring(match.index).match(/alt\s*=\s*["']([^"']+)["']/i)
+              const altText = altMatch ? altMatch[1] : 'Embedded image'
+              
+              // Handle different image source types
+              if (imgSrc.startsWith('data:')) {
+                // Data URL - already encoded
+                console.log('Processing data URL image')
+                embeddedImages.push({
+                  src: imgSrc,
+                  alt: altText
+                })
+              } else if (imgSrc.startsWith('cid:')) {
+                // Content-ID reference - need to find the corresponding part
+                console.log('Processing CID image:', imgSrc)
+                const contentId = imgSrc.replace('cid:', '')
+                const imagePart = allParts.find((part: any) => 
+                  part.headers?.some((h: any) => h.name === 'Content-ID' && h.value === `<${contentId}>`)
+                )
+                
+                if (imagePart?.body?.data) {
+                  console.log('Found CID image part, converting to data URL')
+                  embeddedImages.push({
+                    src: `data:${imagePart.mimeType};base64,${imagePart.body.data}`,
+                    alt: altText
+                  })
+                } else {
+                  console.log('CID image part not found for:', contentId)
+                }
+              } else if (imgSrc.startsWith('http')) {
+                // External URL - keep as is
+                console.log('Processing external URL image:', imgSrc)
+                embeddedImages.push({
+                  src: imgSrc,
+                  alt: altText
+                })
+              }
+            }
+            
+            console.log('Total embedded images found:', embeddedImages.length)
+            // Add embedded images to the images array
+            images = [...images, ...embeddedImages]
+          }
+          
+          // Check for attachments (excluding images that are displayed inline)
+          const hasAttachments = gmailEmail.payload?.parts?.some((part: any) => 
+            part.filename && part.filename.length > 0 && !part.mimeType?.startsWith('image/')
+          ) || false
+          
+          // Extract attachments (excluding images)
+          const attachments = gmailEmail.payload?.parts?.filter((part: any) => 
+            part.filename && part.filename.length > 0 && !part.mimeType?.startsWith('image/')
+          ).map((part: any) => ({
+            filename: part.filename,
+            mimeType: part.mimeType,
+            size: part.body?.size || 0,
+            attachmentId: part.body?.attachmentId || ''
+          })) || []
+
+          return {
+            id: gmailEmail.id,
+            from: from,
+            subject: subject,
+            preview: gmailEmail.snippet || body.substring(0, 100) || '',
+            date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric' 
+            }),
+            isRead: !gmailEmail.labelIds?.includes('UNREAD'),
+            hasAttachments: hasAttachments,
+            attachments: attachments,
+            body: body,
+            images: images, // Add images array
+            to: to,
+            lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+          }
+        })
 
         // Append new emails to existing ones
         setEmails(prevEmails => [...prevEmails, ...transformedEmails])
@@ -676,10 +1046,7 @@ export default function InboxPage() {
       }
     } catch (error) {
       console.error('Error loading more emails:', error)
-      toast.error('Failed to Load More Emails', {
-        description: error instanceof Error ? error.message : 'There was an error loading more emails.',
-        duration: 4000,
-      })
+      toast.error('Failed to load more emails')
     } finally {
       setLoadingMore(false)
     }
@@ -696,9 +1063,9 @@ export default function InboxPage() {
   const filteredEmails = emails.filter(email => {
     // First apply search filter
     const matchesSearch = 
-      email.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.preview.toLowerCase().includes(searchQuery.toLowerCase())
+      (email.from?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (email.subject?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+      (email.preview?.toLowerCase() || '').includes(searchQuery.toLowerCase())
     
     if (!matchesSearch) return false
     
@@ -836,73 +1203,19 @@ export default function InboxPage() {
             duration: 6000,
           })
         } else {
-          // Generic error - try fallback processing
-          console.log('Primary processing failed, trying fallback:', errorMessage)
-          
-          const fallbackResponse = await fetch('/api/gmail/process-emails', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              userId: user.id,
-              maxResults: 1, // Process just this one email
-              emailId: selectedEmail.id // Pass the specific email ID
-            })
+          // Generic error - show the error message
+          toast.error('Processing Failed', {
+            description: errorMessage,
+            duration: 6000,
           })
-
-          const fallbackData = await fallbackResponse.json()
-
-          if (!fallbackResponse.ok) {
-            throw new Error(fallbackData.error || 'Failed to process email as lead')
-          }
-
-          if (fallbackData.success) {
-            // Mark email as processed
-            setEmails(emails.map(email => 
-              email.id === selectedEmail.id 
-                ? { ...email, isRead: true }
-                : email
-            ))
-            
-            // Show success message
-            toast.success('Lead Imported Successfully', {
-              description: `${selectedEmail.from} has been added as a new lead using fallback processing.`,
-              duration: 5000,
-            })
-          } else {
-            throw new Error(fallbackData.message || 'Failed to process email')
-          }
         }
       }
-      
     } catch (error) {
       console.error('Error processing email as lead:', error)
-      
-      // Enhanced error handling with specific messages
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
-      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-        toast.error('Network Error', {
-          description: 'Unable to connect to the server. Please check your internet connection and try again.',
-          duration: 6000,
-        })
-      } else if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
-        toast.error('Authentication Error', {
-          description: 'Your session has expired. Please refresh the page and try again.',
-          duration: 6000,
-        })
-      } else if (errorMessage.includes('Internal server error') || errorMessage.includes('500')) {
-        toast.error('Server Error', {
-          description: 'A server error occurred. Please try again later or contact support.',
-          duration: 6000,
-        })
-      } else {
-        toast.error('Failed to Import Lead', {
-          description: errorMessage || 'There was an error processing this email. Please try again.',
-          duration: 6000,
-        })
-      }
+      toast.error('Processing Failed', {
+        description: 'An error occurred while processing the email. Please try again.',
+        duration: 6000,
+      })
     } finally {
       setProcessingEmail(false)
     }
@@ -989,6 +1302,9 @@ export default function InboxPage() {
   }
 
   const getLabelIcon = (labelId: string, labelName: string) => {
+    // Safety check for labelName
+    if (!labelName) return Mail
+
     // Map Gmail label IDs to appropriate icons
     const iconMap: Record<string, any> = {
       'INBOX': Mail,
@@ -1006,7 +1322,7 @@ export default function InboxPage() {
       'CATEGORY_FORUMS': MessageSquare,
     }
 
-    // Check for exact match first
+    // Check for exact matches first
     if (iconMap[labelId]) {
       return iconMap[labelId]
     }
@@ -1078,10 +1394,10 @@ export default function InboxPage() {
               label.name === 'TRASH' ? 'Trash' :
               label.name === 'IMPORTANT' ? 'Important' :
               label.name === 'STARRED' ? 'Starred' :
-              label.name.replace('CATEGORY_', '').charAt(0).toUpperCase() + 
-              label.name.replace('CATEGORY_', '').slice(1).toLowerCase(),
+              (label.name || '').replace('CATEGORY_', '').charAt(0).toUpperCase() + 
+              (label.name || '').replace('CATEGORY_', '').slice(1).toLowerCase(),
         count: label.messagesTotal || 0,
-        icon: getLabelIcon(label.id, label.name),
+        icon: getLabelIcon(label.id, label.name || ''),
         unreadCount: label.messagesUnread || 0
       }))
     } else {
@@ -1320,6 +1636,26 @@ export default function InboxPage() {
             </nav>
           )}
           
+          {gmailConnected && loadingLabels && (
+            <div className="mt-4 p-3 bg-muted/20 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                <span className="text-sm text-muted-foreground">Loading Gmail labels...</span>
+              </div>
+            </div>
+          )}
+          
+          {gmailConnected && !loadingLabels && folders.length === 0 && (
+            <div className="mt-4 p-3 bg-muted/20 rounded-lg">
+              <div className="text-center">
+                <FolderOpen className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">
+                  No Gmail labels found
+                </p>
+              </div>
+            </div>
+          )}
+          
           {!gmailConnected && (
             <div className="mt-4 p-3 bg-muted/20 rounded-lg">
               <div className="text-center">
@@ -1542,11 +1878,24 @@ export default function InboxPage() {
                     // Handle any post-load processing for email content
                     const target = e.target as HTMLElement
                     if (target) {
-                      // Ensure all images are properly sized
+                      // Ensure all images are properly sized and clickable
                       const images = target.querySelectorAll('img')
                       images.forEach(img => {
                         img.style.maxWidth = '100%'
                         img.style.height = 'auto'
+                        img.style.cursor = 'pointer'
+                        img.style.borderRadius = '4px'
+                        img.style.border = '1px solid #e0e0e0'
+                        
+                        // Make images clickable for preview
+                        img.addEventListener('click', () => {
+                          setPreviewAttachment({
+                            filename: img.alt || 'Email image',
+                            mimeType: 'image/*',
+                            previewUrl: img.src
+                          })
+                          setShowAttachmentPreview(true)
+                        })
                       })
                       
                       // Ensure all buttons are clickable
@@ -1560,6 +1909,15 @@ export default function InboxPage() {
                           }
                         })
                       })
+                      
+                      // Style links properly
+                      const links = target.querySelectorAll('a')
+                      links.forEach(link => {
+                        link.style.color = '#007bff'
+                        link.style.textDecoration = 'underline'
+                        link.target = '_blank'
+                        link.rel = 'noopener noreferrer'
+                      })
                     }
                   }}
                 />
@@ -1567,6 +1925,43 @@ export default function InboxPage() {
                 <div className="text-sm text-muted-foreground p-4 bg-muted/20 rounded-lg">
                   <p>No email content available</p>
                   <p className="text-xs mt-2">This email may contain only attachments or the content could not be loaded.</p>
+                </div>
+              )}
+              
+              {/* Email Images */}
+              {selectedEmail.images && selectedEmail.images.length > 0 && (
+                <div className="mt-6 p-4 border rounded-lg bg-muted/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Image className="h-4 w-4 flex-shrink-0" />
+                    <span className="text-sm font-medium">Images ({selectedEmail.images.length})</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {selectedEmail.images.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={image.src}
+                          alt={image.alt}
+                          className="w-full h-auto rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => {
+                            setPreviewAttachment({
+                              filename: image.alt,
+                              mimeType: 'image/*',
+                              previewUrl: image.src
+                            })
+                            setShowAttachmentPreview(true)
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg flex items-center justify-center">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="secondary" size="sm" className="bg-white/90 text-black">
+                              <Maximize2 className="h-3 w-3 mr-1" />
+                              View
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               

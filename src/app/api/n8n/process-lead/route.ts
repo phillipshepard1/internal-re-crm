@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { LeadDetectionService } from '@/lib/leadDetection'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -26,12 +25,8 @@ interface N8NLeadData {
       last_name: string
       email: string[]
       phone: string[]
-      company?: string
-      position?: string
-      property_address?: string
       property_details?: string
       price_range?: string
-      property_type?: string
       timeline?: string
       message?: string
       lead_source?: string
@@ -46,11 +41,95 @@ interface N8NLeadData {
   }
   attachments?: Array<{
     filename: string
-    mime_type: string
     size: number
-    data: string // base64
+    mime_type: string
   }>
-  user_id?: string // Optional: if N8N knows which user's email this is
+  user_id?: string
+}
+
+// Function to check if email matches configured lead sources
+async function checkLeadSourceMatch(from: string, subject: string, body: string): Promise<{
+  matched: boolean
+  source_name?: string
+  confidence: number
+  reasons: string[]
+}> {
+  try {
+    // Get all active lead sources
+    const { data: leadSources, error } = await supabase
+      .from('lead_sources')
+      .select('*')
+      .eq('is_active', true)
+    
+    if (error || !leadSources) {
+      console.error('Error fetching lead sources:', error)
+      return { matched: false, confidence: 0, reasons: ['Error fetching lead sources'] }
+    }
+
+    let maxConfidence = 0
+    let matchedSource: any = null
+    const reasons: string[] = []
+
+    for (const source of leadSources) {
+      let sourceConfidence = 0
+      const sourceReasons: string[] = []
+
+      // Check email patterns
+      for (const pattern of source.email_patterns || []) {
+        if (pattern.includes('*')) {
+          // Wildcard pattern (e.g., *@zillow.com)
+          const domain = pattern.split('@')[1]
+          if (from.toLowerCase().includes(domain.toLowerCase())) {
+            sourceConfidence += 0.8
+            sourceReasons.push(`Email domain matches pattern: ${pattern}`)
+          }
+        } else {
+          // Exact email pattern
+          if (from.toLowerCase() === pattern.toLowerCase()) {
+            sourceConfidence += 1.0
+            sourceReasons.push(`Exact email match: ${pattern}`)
+          }
+        }
+      }
+
+      // Check domain patterns
+      for (const pattern of source.domain_patterns || []) {
+        const emailDomain = from.split('@')[1]?.toLowerCase()
+        if (emailDomain && emailDomain.includes(pattern.toLowerCase())) {
+          sourceConfidence += 0.6
+          sourceReasons.push(`Domain matches pattern: ${pattern}`)
+        }
+      }
+
+      // Check keywords in subject and body
+      const combinedText = `${subject} ${body}`.toLowerCase()
+      for (const keyword of source.keywords || []) {
+        if (combinedText.includes(keyword.toLowerCase())) {
+          sourceConfidence += 0.4
+          sourceReasons.push(`Keyword found: ${keyword}`)
+        }
+      }
+
+      // Update max confidence if this source has higher confidence
+      if (sourceConfidence > maxConfidence) {
+        maxConfidence = sourceConfidence
+        matchedSource = source
+        reasons.length = 0
+        reasons.push(...sourceReasons)
+      }
+    }
+
+    return {
+      matched: maxConfidence >= 0.3, // Minimum threshold for lead source match
+      source_name: matchedSource?.name,
+      confidence: Math.min(maxConfidence, 1.0),
+      reasons
+    }
+
+  } catch (error) {
+    console.error('Error checking lead source match:', error)
+    return { matched: false, confidence: 0, reasons: ['Error checking lead sources'] }
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -99,9 +178,45 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Process the lead if AI analysis indicates it's a lead
-    if (leadData.ai_analysis.is_lead && leadData.ai_analysis.confidence >= 0.7) {
+    // Check against configured lead sources
+    const leadSourceMatch = await checkLeadSourceMatch(
+      leadData.from,
+      leadData.subject,
+      leadData.body
+    )
+
+    console.log('Lead source check result:', {
+      matched: leadSourceMatch.matched,
+      source: leadSourceMatch.source_name,
+      confidence: leadSourceMatch.confidence,
+      reasons: leadSourceMatch.reasons
+    })
+
+    // Determine if this should be processed as a lead
+    const shouldProcessAsLead = (
+      leadData.ai_analysis.is_lead && 
+      leadData.ai_analysis.confidence >= 0.7 &&
+      leadSourceMatch.matched
+    )
+
+    if (shouldProcessAsLead) {
       const { processEmailAsLead } = await import('@/lib/emailProcessing')
+      
+      // Enhance AI analysis with lead source information
+      const enhancedAiAnalysis = {
+        ...leadData.ai_analysis,
+        lead_data: {
+          ...leadData.ai_analysis.lead_data,
+          lead_source: leadSourceMatch.source_name || 'email',
+          lead_source_confidence: leadSourceMatch.confidence
+        },
+        lead_source_match: {
+          matched: leadSourceMatch.matched,
+          source_name: leadSourceMatch.source_name,
+          confidence: leadSourceMatch.confidence,
+          reasons: leadSourceMatch.reasons
+        }
+      }
       
       const processingResult = await processEmailAsLead({
         emailData: {
@@ -110,8 +225,8 @@ export async function POST(request: NextRequest) {
           body: leadData.body,
           date: leadData.date
         },
-        userId: leadData.user_id || 'system', // Use system if no specific user
-        aiAnalysis: leadData.ai_analysis // Pass AI analysis for enhanced processing
+        userId: leadData.user_id || 'system',
+        aiAnalysis: enhancedAiAnalysis
       })
 
       if (processingResult.success && processingResult.person) {
@@ -125,7 +240,8 @@ export async function POST(request: NextRequest) {
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
             ai_confidence: leadData.ai_analysis.confidence,
-            ai_analysis: leadData.ai_analysis
+            ai_analysis: enhancedAiAnalysis,
+            processing_source: 'n8n'
           })
 
         // Handle attachments if any
@@ -152,7 +268,9 @@ export async function POST(request: NextRequest) {
           success: true,
           message: 'Lead processed successfully',
           person_id: processingResult.person.id,
-          confidence: leadData.ai_analysis.confidence
+          confidence: leadData.ai_analysis.confidence,
+          lead_source: leadSourceMatch.source_name,
+          lead_source_confidence: leadSourceMatch.confidence
         })
       } else {
         // Mark as processed even if failed to avoid reprocessing
@@ -165,13 +283,15 @@ export async function POST(request: NextRequest) {
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
             ai_confidence: leadData.ai_analysis.confidence,
-            ai_analysis: leadData.ai_analysis
+            ai_analysis: enhancedAiAnalysis,
+            processing_source: 'n8n'
           })
 
         return NextResponse.json({
           success: false,
           message: processingResult.message || 'Failed to process lead',
-          confidence: leadData.ai_analysis.confidence
+          confidence: leadData.ai_analysis.confidence,
+          lead_source: leadSourceMatch.source_name
         })
       }
     } else {
@@ -185,14 +305,25 @@ export async function POST(request: NextRequest) {
           processed_at: new Date().toISOString(),
           gmail_email: leadData.from,
           ai_confidence: leadData.ai_analysis.confidence,
-          ai_analysis: leadData.ai_analysis
+          ai_analysis: leadData.ai_analysis,
+          processing_source: 'n8n'
         })
+
+      const reason = !leadData.ai_analysis.is_lead 
+        ? 'AI did not identify as lead'
+        : leadData.ai_analysis.confidence < 0.7 
+        ? 'Low AI confidence'
+        : !leadSourceMatch.matched 
+        ? 'No lead source match'
+        : 'Unknown reason'
 
       return NextResponse.json({
         success: true,
         message: 'Email processed (not a lead)',
         is_lead: false,
-        confidence: leadData.ai_analysis.confidence
+        confidence: leadData.ai_analysis.confidence,
+        reason: reason,
+        lead_source_match: leadSourceMatch
       })
     }
 
