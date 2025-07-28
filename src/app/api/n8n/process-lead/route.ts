@@ -194,8 +194,8 @@ export async function POST(request: NextRequest) {
       email_id: leadData.email_id,
       from: leadData.from,
       subject: leadData.subject,
-      confidence: leadData.ai_analysis?.confidence,
-      is_lead: leadData.ai_analysis?.is_lead
+      ai_analysis_type: typeof leadData.ai_analysis,
+      ai_analysis: leadData.ai_analysis
     })
 
     // Validate required fields
@@ -213,11 +213,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate AI analysis structure
-    if (!leadData.ai_analysis || typeof leadData.ai_analysis !== 'object') {
+    // Validate AI analysis structure and handle string conversion
+    if (!leadData.ai_analysis) {
       return NextResponse.json(
         { 
-          error: 'Invalid AI analysis structure',
+          error: 'Missing AI analysis',
+          received_ai_analysis: leadData.ai_analysis
+        },
+        { status: 400 }
+      )
+    }
+
+    // Handle case where ai_analysis is sent as a string (n8n serialization)
+    if (typeof leadData.ai_analysis === 'string') {
+      try {
+        leadData.ai_analysis = JSON.parse(leadData.ai_analysis)
+        console.log('Parsed AI analysis from string:', leadData.ai_analysis)
+      } catch (error) {
+        return NextResponse.json(
+          { 
+            error: 'Invalid AI analysis JSON string',
+            received_ai_analysis: leadData.ai_analysis,
+            parse_error: error instanceof Error ? error.message : 'Unknown error'
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Final validation after potential string parsing
+    if (typeof leadData.ai_analysis !== 'object') {
+      return NextResponse.json(
+        { 
+          error: 'Invalid AI analysis structure after parsing',
           received_ai_analysis: leadData.ai_analysis
         },
         { status: 400 }
