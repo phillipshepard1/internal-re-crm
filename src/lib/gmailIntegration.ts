@@ -34,12 +34,12 @@ export class GmailIntegration {
   private config: GmailConfig
   private userId: string
   private gmail: any
-
+  
   constructor(config: GmailConfig, userId: string) {
     this.config = config
     this.userId = userId
   }
-
+  
   async initialize(): Promise<boolean> {
     try {
       console.log('Initializing Gmail integration for user:', this.userId)
@@ -47,7 +47,7 @@ export class GmailIntegration {
       // Check if already initialized
       if (this.gmail) {
         console.log('Gmail already initialized, skipping...')
-        return true
+          return true
       }
 
       console.log('Config check:', {
@@ -91,7 +91,7 @@ export class GmailIntegration {
       return false
     }
   }
-
+  
   async sendEmail(emailData: EmailData): Promise<boolean> {
     try {
       if (!this.gmail) {
@@ -304,6 +304,25 @@ export class GmailIntegration {
       return null
     } catch (error) {
       console.error('Error downloading attachment:', error)
+      return null
+    }
+  }
+
+  async getEmailMetadata(messageId: string): Promise<any> {
+    try {
+      if (!this.gmail) {
+        throw new Error('Gmail not initialized')
+      }
+
+      const response = await this.gmail.users.messages.get({
+        userId: 'me',
+        id: messageId,
+        format: 'full'
+      })
+
+      return response.data
+    } catch (error) {
+      console.error('Error getting email metadata:', error)
       return null
     }
   }

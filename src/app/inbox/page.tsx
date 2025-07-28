@@ -175,16 +175,16 @@ const isConnectionStatus = (status: string): status is ConnectionStatusType => {
 const loadGmailStatus = async (userId: string, userRole: string) => {
   try {
     console.log('Checking Gmail status for user:', userId)
-    const response = await fetch(`/api/gmail/status?userId=${userId}`)
+  const response = await fetch(`/api/gmail/status?userId=${userId}`)
     
     if (!response.ok) {
       console.error('Gmail status check failed:', response.status, response.statusText)
       throw new Error(`Gmail status check failed: ${response.status} ${response.statusText}`)
     }
     
-    const data = await response.json()
+  const data = await response.json()
     console.log('Gmail status response:', data)
-    return data
+  return data
   } catch (error) {
     console.error('Error in loadGmailStatus:', error)
     throw error
@@ -194,21 +194,21 @@ const loadGmailStatus = async (userId: string, userRole: string) => {
 const loadGmailLabels = async (userId: string, userRole: string) => {
   try {
     console.log('Loading Gmail labels for user:', userId)
-    const response = await fetch('/api/gmail/labels', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ userId })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`Failed to load Gmail labels: ${response.status} ${response.statusText}`)
-    }
-    
-    const data = await response.json()
+  const response = await fetch('/api/gmail/labels', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ userId })
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to load Gmail labels: ${response.status} ${response.statusText}`)
+  }
+  
+  const data = await response.json()
     console.log('Labels loaded successfully:', data.labels?.length || 0, 'labels')
-    return data.labels || []
+  return data.labels || []
   } catch (error) {
     console.error('Error loading Gmail labels:', error)
     throw error
@@ -625,21 +625,21 @@ export default function InboxPage() {
           })) || []
 
           return {
-            id: gmailEmail.id,
+          id: gmailEmail.id,
             from: from,
             subject: subject,
             preview: gmailEmail.snippet || body.substring(0, 100) || '',
-            date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric' 
-            }),
+          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
             isRead: !gmailEmail.labelIds?.includes('UNREAD'),
             hasAttachments: hasAttachments,
             attachments: attachments,
             body: body,
             images: images, // Add images array
             to: to,
-            lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
           }
         })
 
@@ -723,7 +723,7 @@ export default function InboxPage() {
     const loadData = async () => {
       // Only load labels if we don't have them yet
       if (gmailLabels.length === 0) {
-        await loadLabels()
+      await loadLabels()
       }
       // Only load emails if we don't have any yet
       if (emails.length === 0 && currentFolder) {
@@ -1012,21 +1012,21 @@ export default function InboxPage() {
           })) || []
 
           return {
-            id: gmailEmail.id,
+          id: gmailEmail.id,
             from: from,
             subject: subject,
             preview: gmailEmail.snippet || body.substring(0, 100) || '',
-            date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric' 
-            }),
+          date: new Date(parseInt(gmailEmail.internalDate)).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          }),
             isRead: !gmailEmail.labelIds?.includes('UNREAD'),
             hasAttachments: hasAttachments,
             attachments: attachments,
             body: body,
             images: images, // Add images array
             to: to,
-            lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
+          lastUpdated: new Date(parseInt(gmailEmail.internalDate)).toISOString()
           }
         })
 
@@ -1214,8 +1214,8 @@ export default function InboxPage() {
       console.error('Error processing email as lead:', error)
       toast.error('Processing Failed', {
         description: 'An error occurred while processing the email. Please try again.',
-        duration: 6000,
-      })
+          duration: 6000,
+        })
     } finally {
       setProcessingEmail(false)
     }

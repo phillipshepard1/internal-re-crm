@@ -61,11 +61,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Get attachment metadata from the email
-      const email = await gmail.gmail.users.messages.get({
-        userId: 'me',
-        id: messageId,
-        format: 'full'
-      })
+      const email = await gmail.getEmailMetadata(messageId)
 
       // Find the attachment part
       const findAttachmentPart = (parts: any[]): any => {
@@ -81,7 +77,7 @@ export async function POST(request: NextRequest) {
         return null
       }
 
-      const attachmentPart = findAttachmentPart(email.data.payload?.parts || [])
+      const attachmentPart = findAttachmentPart(email.payload?.parts || [])
       
       if (!attachmentPart) {
         return NextResponse.json({
