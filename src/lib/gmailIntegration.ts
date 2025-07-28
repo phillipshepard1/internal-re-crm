@@ -21,6 +21,8 @@ interface GmailConfig {
 
 interface EmailData {
   to: string
+  cc?: string
+  bcc?: string
   subject: string
   body: string
   attachments?: Array<{
@@ -101,19 +103,28 @@ export class GmailIntegration {
       // Create email message
       const message = {
         to: emailData.to,
+        cc: emailData.cc,
+        bcc: emailData.bcc,
         subject: emailData.subject,
         text: emailData.body,
         attachments: emailData.attachments || []
       }
 
+      // Build email headers
+      let headers = `To: ${message.to}\r\n`
+      if (message.cc) {
+        headers += `Cc: ${message.cc}\r\n`
+      }
+      if (message.bcc) {
+        headers += `Bcc: ${message.bcc}\r\n`
+      }
+      headers += `Subject: ${message.subject}\r\n`
+      headers += `Content-Type: text/plain; charset=utf-8\r\n`
+      headers += `\r\n`
+      headers += `${message.text}`
+
       // Encode the message
-      const encodedMessage = Buffer.from(
-        `To: ${message.to}\r\n` +
-        `Subject: ${message.subject}\r\n` +
-        `Content-Type: text/plain; charset=utf-8\r\n` +
-        `\r\n` +
-        `${message.text}`
-      ).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+      const encodedMessage = Buffer.from(headers).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
       // Send the email
       await this.gmail.users.messages.send({
