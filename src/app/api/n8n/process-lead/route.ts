@@ -146,19 +146,80 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const leadData: N8NLeadData = body
+    
+    // Enhanced logging for debugging
+    console.log('Raw request body:', JSON.stringify(body, null, 2))
+    
+    // Handle different data structures that might come from n8n
+    let leadData: N8NLeadData
+    
+    // Check if the body is an array (OpenAI response format)
+    if (Array.isArray(body)) {
+      console.log('Received array format, extracting first item')
+      if (body.length === 0) {
+        return NextResponse.json(
+          { error: 'Empty array received' },
+          { status: 400 }
+        )
+      }
+      
+      // If it's the OpenAI response format, extract the content
+      if (body[0]?.message?.content) {
+        const aiAnalysis = body[0].message.content
+        console.log('Extracted AI analysis from OpenAI response:', aiAnalysis)
+        
+        // You'll need to reconstruct the lead data here
+        // This assumes you have the Gmail data available
+        leadData = {
+          email_id: body[0]?.email_id || 'unknown',
+          from: body[0]?.from || 'unknown',
+          subject: body[0]?.subject || 'unknown',
+          body: body[0]?.body || 'unknown',
+          date: body[0]?.date || new Date().toISOString(),
+          ai_analysis: aiAnalysis,
+          user_id: body[0]?.user_id || 'system'
+        }
+      } else {
+        return NextResponse.json(
+          { error: 'Invalid OpenAI response format' },
+          { status: 400 }
+        )
+      }
+    } else {
+      // Direct object format
+      leadData = body
+    }
 
-    console.log('Received N8N lead data:', {
+    console.log('Processed lead data:', {
       email_id: leadData.email_id,
       from: leadData.from,
       subject: leadData.subject,
-      confidence: leadData.ai_analysis.confidence
+      confidence: leadData.ai_analysis?.confidence,
+      is_lead: leadData.ai_analysis?.is_lead
     })
 
     // Validate required fields
     if (!leadData.email_id || !leadData.from || !leadData.subject) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { 
+          error: 'Missing required fields',
+          received: {
+            email_id: leadData.email_id,
+            from: leadData.from,
+            subject: leadData.subject
+          }
+        },
+        { status: 400 }
+      )
+    }
+
+    // Validate AI analysis structure
+    if (!leadData.ai_analysis || typeof leadData.ai_analysis !== 'object') {
+      return NextResponse.json(
+        { 
+          error: 'Invalid AI analysis structure',
+          received_ai_analysis: leadData.ai_analysis
+        },
         { status: 400 }
       )
     }
@@ -194,8 +255,8 @@ export async function POST(request: NextRequest) {
 
     // Determine if this should be processed as a lead
     const shouldProcessAsLead = (
-      leadData.ai_analysis.is_lead && 
-      leadData.ai_analysis.confidence >= 0.7 &&
+      leadData.ai_analysis?.is_lead && 
+      leadData.ai_analysis?.confidence >= 0.7 &&
       leadSourceMatch.matched
     )
 
@@ -206,7 +267,7 @@ export async function POST(request: NextRequest) {
       const enhancedAiAnalysis = {
         ...leadData.ai_analysis,
         lead_data: {
-          ...leadData.ai_analysis.lead_data,
+          ...leadData.ai_analysis?.lead_data,
           lead_source: leadSourceMatch.source_name || 'email',
           lead_source_confidence: leadSourceMatch.confidence
         },
@@ -239,7 +300,7 @@ export async function POST(request: NextRequest) {
             person_id: processingResult.person.id,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
-            ai_confidence: leadData.ai_analysis.confidence,
+            ai_confidence: leadData.ai_analysis?.confidence,
             ai_analysis: enhancedAiAnalysis,
             processing_source: 'n8n'
           })
@@ -268,7 +329,7 @@ export async function POST(request: NextRequest) {
           success: true,
           message: 'Lead processed successfully',
           person_id: processingResult.person.id,
-          confidence: leadData.ai_analysis.confidence,
+          confidence: leadData.ai_analysis?.confidence,
           lead_source: leadSourceMatch.source_name,
           lead_source_confidence: leadSourceMatch.confidence
         })
@@ -282,7 +343,7 @@ export async function POST(request: NextRequest) {
             person_id: null,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
-            ai_confidence: leadData.ai_analysis.confidence,
+            ai_confidence: leadData.ai_analysis?.confidence,
             ai_analysis: enhancedAiAnalysis,
             processing_source: 'n8n'
           })
@@ -290,28 +351,28 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           message: processingResult.message || 'Failed to process lead',
-          confidence: leadData.ai_analysis.confidence,
+          confidence: leadData.ai_analysis?.confidence,
           lead_source: leadSourceMatch.source_name
         })
       }
     } else {
       // Mark non-lead emails as processed
-      await supabase
-        .from('processed_emails')
-        .insert({
-          email_id: leadData.email_id,
-          user_id: leadData.user_id || 'system',
-          person_id: null,
-          processed_at: new Date().toISOString(),
-          gmail_email: leadData.from,
-          ai_confidence: leadData.ai_analysis.confidence,
-          ai_analysis: leadData.ai_analysis,
-          processing_source: 'n8n'
-        })
+              await supabase
+          .from('processed_emails')
+          .insert({
+            email_id: leadData.email_id,
+            user_id: leadData.user_id || 'system',
+            person_id: null,
+            processed_at: new Date().toISOString(),
+            gmail_email: leadData.from,
+            ai_confidence: leadData.ai_analysis?.confidence,
+            ai_analysis: leadData.ai_analysis,
+            processing_source: 'n8n'
+          })
 
-      const reason = !leadData.ai_analysis.is_lead 
+      const reason = !leadData.ai_analysis?.is_lead 
         ? 'AI did not identify as lead'
-        : leadData.ai_analysis.confidence < 0.7 
+        : leadData.ai_analysis?.confidence < 0.7 
         ? 'Low AI confidence'
         : !leadSourceMatch.matched 
         ? 'No lead source match'
@@ -321,7 +382,7 @@ export async function POST(request: NextRequest) {
         success: true,
         message: 'Email processed (not a lead)',
         is_lead: false,
-        confidence: leadData.ai_analysis.confidence,
+        confidence: leadData.ai_analysis?.confidence,
         reason: reason,
         lead_source_match: leadSourceMatch
       })
