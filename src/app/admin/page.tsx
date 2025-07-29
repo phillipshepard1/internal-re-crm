@@ -18,8 +18,6 @@ import { ActivityDashboard } from '@/components/admin/ActivityDashboard'
 import { LeadStaging } from '@/components/admin/LeadStaging'
 import { LeadSourceManagement } from '@/components/admin/LeadSourceManagement'
 import { FollowUpFrequencyManagement } from '@/components/admin/FollowUpFrequencyManagement'
-import { EmailProcessingDashboard } from '@/components/admin/EmailProcessingDashboard'
-import DuplicateManagement from '@/components/admin/DuplicateManagement'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 
@@ -257,10 +255,8 @@ export default function AdminPage() {
             <TabsTrigger value="roles">Role Management</TabsTrigger>
             <TabsTrigger value="leads">Lead Staging</TabsTrigger>
             <TabsTrigger value="sources">Lead Sources</TabsTrigger>
-            <TabsTrigger value="email-processing">Email Processing</TabsTrigger>
             <TabsTrigger value="plans">Follow-up Frequencies</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
-            <TabsTrigger value="duplicates">Duplicate Management</TabsTrigger>
           </TabsList>
           
           <TabsContent value="users" className="space-y-4">
@@ -452,16 +448,8 @@ export default function AdminPage() {
             <LeadSourceManagement />
           </TabsContent>
 
-          <TabsContent value="email-processing" className="space-y-4">
-            <EmailProcessingDashboard />
-          </TabsContent>
-
           <TabsContent value="plans" className="space-y-4">
             <FollowUpFrequencyManagement users={users} />
-          </TabsContent>
-
-          <TabsContent value="duplicates" className="space-y-4">
-            <DuplicateManagement />
           </TabsContent>
         </Tabs>
       </div>
