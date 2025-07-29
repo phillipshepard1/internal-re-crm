@@ -291,12 +291,27 @@ export async function POST(request: NextRequest) {
     if (shouldProcessAsLead) {
       const { processEmailAsLead } = await import('@/lib/emailProcessing')
       
-      // Use a hardcoded system user ID for N8N processing
-      // This avoids database UUID generation issues
-      const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
-      const SYSTEM_USER_EMAIL = 'n8n-system@internal-crm.com'
+      // Find an existing admin user for N8N processing
+      const { data: adminUser, error: adminError } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name')
+        .eq('role', 'admin')
+        .single()
+
+      if (adminError || !adminUser) {
+        console.error('Error finding admin user for N8N processing:', adminError)
+        return NextResponse.json({
+          success: false,
+          message: 'No admin user found for lead processing',
+          error: 'Admin user required for N8N lead processing'
+        }, { status: 500 })
+      }
       
-      console.log('Using system user ID for N8N processing:', SYSTEM_USER_ID)
+      console.log('Using admin user for N8N processing:', {
+        id: adminUser.id,
+        name: `${adminUser.first_name} ${adminUser.last_name}`,
+        email: adminUser.email
+      })
       
       // Enhance AI analysis with lead source information
       const enhancedAiAnalysis = {
@@ -321,7 +336,7 @@ export async function POST(request: NextRequest) {
           body: leadData.body,
           date: leadData.date
         },
-        userId: SYSTEM_USER_ID, // Use hardcoded system user ID
+        userId: adminUser.id, // Use existing admin user ID
         aiAnalysis: enhancedAiAnalysis
       })
 
@@ -331,7 +346,7 @@ export async function POST(request: NextRequest) {
           .from('processed_emails')
           .insert({
             email_id: leadData.email_id,
-            user_id: SYSTEM_USER_ID, // Use hardcoded system user ID
+            user_id: adminUser.id, // Use existing admin user ID
             person_id: processingResult.person.id,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
@@ -352,7 +367,7 @@ export async function POST(request: NextRequest) {
                   file_path: `attachments/${leadData.email_id}/${attachment.filename}`,
                   file_size: attachment.size,
                   mime_type: attachment.mime_type,
-                  uploaded_by: SYSTEM_USER_ID // Use hardcoded system user ID
+                  uploaded_by: adminUser.id // Use existing admin user ID
                 })
             } catch (error) {
               console.error('Error saving attachment:', error)
@@ -375,7 +390,7 @@ export async function POST(request: NextRequest) {
           .from('processed_emails')
           .insert({
             email_id: leadData.email_id,
-            user_id: SYSTEM_USER_ID, // Use hardcoded system user ID
+            user_id: adminUser.id, // Use existing admin user ID
             person_id: null,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
