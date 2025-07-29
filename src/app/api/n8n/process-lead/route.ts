@@ -291,6 +291,57 @@ export async function POST(request: NextRequest) {
     if (shouldProcessAsLead) {
       const { processEmailAsLead } = await import('@/lib/emailProcessing')
       
+      // Create or get dedicated system user for N8N processing
+      const SYSTEM_USER_EMAIL = 'n8n-system@internal-crm.com'
+      const SYSTEM_USER_NAME = 'N8N System'
+      
+      let systemUser = null
+      let systemUserError = null
+      
+      // First, try to find existing system user
+      const { data: existingSystemUser, error: findError } = await supabase
+        .from('users')
+        .select('id, email')
+        .eq('email', SYSTEM_USER_EMAIL)
+        .single()
+      
+      if (existingSystemUser) {
+        systemUser = existingSystemUser
+        console.log('Found existing system user for N8N:', systemUser.id)
+      } else {
+        // Create new system user if not exists
+        const { data: newSystemUser, error: createError } = await supabase
+          .from('users')
+          .insert({
+            email: SYSTEM_USER_EMAIL,
+            first_name: 'N8N',
+            last_name: 'System',
+            role: 'admin', // System user needs admin role for lead processing
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select('id, email')
+          .single()
+        
+        if (createError) {
+          console.error('Error creating system user:', createError)
+          systemUserError = createError
+        } else {
+          systemUser = newSystemUser
+          console.log('Created new system user for N8N:', systemUser.id)
+        }
+      }
+      
+      if (systemUserError || !systemUser) {
+        console.error('Error with system user for N8N processing:', systemUserError)
+        return NextResponse.json({
+          success: false,
+          message: 'Failed to create or find system user for N8N processing',
+          error: 'System user required for N8N lead processing'
+        }, { status: 500 })
+      }
+      
       // Enhance AI analysis with lead source information
       const enhancedAiAnalysis = {
         ...leadData.ai_analysis,
@@ -314,7 +365,7 @@ export async function POST(request: NextRequest) {
           body: leadData.body,
           date: leadData.date
         },
-        userId: leadData.user_id || 'system',
+        userId: systemUser.id, // Use dedicated system user ID
         aiAnalysis: enhancedAiAnalysis
       })
 
@@ -324,7 +375,7 @@ export async function POST(request: NextRequest) {
           .from('processed_emails')
           .insert({
             email_id: leadData.email_id,
-            user_id: leadData.user_id || 'system',
+            user_id: systemUser.id, // Use dedicated system user ID
             person_id: processingResult.person.id,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
@@ -345,7 +396,7 @@ export async function POST(request: NextRequest) {
                   file_path: `attachments/${leadData.email_id}/${attachment.filename}`,
                   file_size: attachment.size,
                   mime_type: attachment.mime_type,
-                  uploaded_by: leadData.user_id || 'system'
+                  uploaded_by: systemUser.id // Use dedicated system user ID
                 })
             } catch (error) {
               console.error('Error saving attachment:', error)
@@ -359,7 +410,8 @@ export async function POST(request: NextRequest) {
           person_id: processingResult.person.id,
           confidence: leadData.ai_analysis?.confidence,
           lead_source: leadSourceMatch.source_name,
-          lead_source_confidence: leadSourceMatch.confidence
+          lead_source_confidence: leadSourceMatch.confidence,
+          processed_by: 'n8n-system'
         })
       } else {
         // Mark as processed even if failed to avoid reprocessing
@@ -367,7 +419,7 @@ export async function POST(request: NextRequest) {
           .from('processed_emails')
           .insert({
             email_id: leadData.email_id,
-            user_id: leadData.user_id || 'system',
+            user_id: systemUser.id, // Use dedicated system user ID
             person_id: null,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,

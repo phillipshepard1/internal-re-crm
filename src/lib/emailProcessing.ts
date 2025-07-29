@@ -444,19 +444,16 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       }
     }
 
-    // Get admin user for initial assignment (leads go to staging first)
-    const { data: adminUser, error: adminError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('role', 'admin')
-      .single()
+    // Get system user for initial assignment (leads go to staging first)
+    // The system user is passed from the N8N API, so we use it directly
+    const systemUserId = request.userId
 
-    if (adminError || !adminUser) {
-      console.error('Error finding admin user:', adminError)
+    if (!systemUserId) {
+      console.error('No system user ID provided for lead assignment')
       return {
         success: false,
-        message: 'No admin user found for lead assignment',
-        details: 'Please ensure there is at least one admin user in the system'
+        message: 'No system user found for lead assignment',
+        details: 'System user ID is required for N8N lead processing'
       }
     }
 
@@ -473,7 +470,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       lead_source: leadData.lead_source,
       lead_source_id: leadData.lead_source_id,
       lead_status: 'staging', // New leads go to staging
-      assigned_to: adminUser.id, // Assign to admin initially (will be reassigned from staging)
+      assigned_to: systemUserId, // Assign to system user initially (will be reassigned from staging)
       notes: notes,
       // Set default values
       profile_picture: null,
