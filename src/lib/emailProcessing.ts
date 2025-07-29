@@ -120,6 +120,235 @@ function createStructuredNotesFromLeadData(leadData: any, emailData: any): strin
   return notes.join('\n')
 }
 
+/**
+ * Utility function to identify duplicate people records by email
+ * This can be used for database cleanup
+ */
+export async function findDuplicatePeopleByEmail(): Promise<{
+  duplicates: Array<{
+    email: string
+    people: Array<{
+      id: string
+      first_name: string
+      last_name: string
+      email: string[]
+      lead_status: string
+      created_at: string
+    }>
+  }>
+  totalDuplicates: number
+}> {
+  try {
+    // Get all people with their email arrays
+    const { data: allPeople, error } = await supabase
+      .from('people')
+      .select('id, first_name, last_name, email, lead_status, created_at')
+      .order('created_at', { ascending: false })
+
+    if (error || !allPeople) {
+      throw new Error('Failed to fetch people data')
+    }
+
+    // Create a map to group people by email
+    const emailMap = new Map<string, Array<{
+      id: string
+      first_name: string
+      last_name: string
+      email: string[]
+      lead_status: string
+      created_at: string
+    }>>()
+
+    // Process each person and their email arrays
+    for (const person of allPeople) {
+      if (person.email && Array.isArray(person.email)) {
+        for (const email of person.email) {
+          if (email && typeof email === 'string') {
+            const normalizedEmail = email.toLowerCase().trim()
+            if (!emailMap.has(normalizedEmail)) {
+              emailMap.set(normalizedEmail, [])
+            }
+            emailMap.get(normalizedEmail)!.push({
+              id: person.id,
+              first_name: person.first_name,
+              last_name: person.last_name,
+              email: person.email,
+              lead_status: person.lead_status || 'staging',
+              created_at: person.created_at
+            })
+          }
+        }
+      }
+    }
+
+    // Find duplicates (emails with more than one person)
+    const duplicates: Array<{
+      email: string
+      people: Array<{
+        id: string
+        first_name: string
+        last_name: string
+        email: string[]
+        lead_status: string
+        created_at: string
+      }>
+    }> = []
+
+    for (const [email, people] of emailMap.entries()) {
+      if (people.length > 1) {
+        duplicates.push({
+          email,
+          people: people.sort((a, b) => {
+            // Sort by lead status priority, then by creation date
+            const statusPriority = {
+              'staging': 1,
+              'assigned': 2,
+              'contacted': 3,
+              'qualified': 4,
+              'converted': 5,
+              'lost': 6
+            }
+            
+            const aPriority = statusPriority[a.lead_status as keyof typeof statusPriority] || 7
+            const bPriority = statusPriority[b.lead_status as keyof typeof statusPriority] || 7
+            
+            if (aPriority !== bPriority) {
+              return aPriority - bPriority
+            }
+            
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          })
+        })
+      }
+    }
+
+    return {
+      duplicates,
+      totalDuplicates: duplicates.length
+    }
+  } catch (error) {
+    console.error('Error finding duplicate people:', error)
+    throw error
+  }
+}
+
+/**
+ * Utility function to merge duplicate people records
+ * This should be used carefully and only after reviewing the duplicates
+ */
+export async function mergeDuplicatePeople(
+  primaryPersonId: string,
+  duplicatePersonIds: string[]
+): Promise<{ success: boolean; message: string; error?: string }> {
+  try {
+    // Get the primary person
+    const { data: primaryPerson, error: primaryError } = await supabase
+      .from('people')
+      .select('*')
+      .eq('id', primaryPersonId)
+      .single()
+
+    if (primaryError || !primaryPerson) {
+      return {
+        success: false,
+        message: 'Primary person not found',
+        error: primaryError?.message
+      }
+    }
+
+    // Get all duplicate people
+    const { data: duplicatePeople, error: duplicateError } = await supabase
+      .from('people')
+      .select('*')
+      .in('id', duplicatePersonIds)
+
+    if (duplicateError || !duplicatePeople) {
+      return {
+        success: false,
+        message: 'Failed to fetch duplicate people',
+        error: duplicateError?.message
+      }
+    }
+
+    // Merge data from duplicates into primary person
+    let mergedEmails = [...(primaryPerson.email || [])]
+    let mergedPhones = [...(primaryPerson.phone || [])]
+    let mergedNotes = primaryPerson.notes || ''
+
+    for (const duplicate of duplicatePeople) {
+      // Merge emails
+      if (duplicate.email && Array.isArray(duplicate.email)) {
+        for (const email of duplicate.email) {
+          if (email && !mergedEmails.includes(email)) {
+            mergedEmails.push(email)
+          }
+        }
+      }
+
+      // Merge phones
+      if (duplicate.phone && Array.isArray(duplicate.phone)) {
+        for (const phone of duplicate.phone) {
+          if (phone && !mergedPhones.includes(phone)) {
+            mergedPhones.push(phone)
+          }
+        }
+      }
+
+      // Merge notes
+      if (duplicate.notes) {
+        mergedNotes = mergedNotes 
+          ? `${mergedNotes}\n\n--- MERGED FROM DUPLICATE ---\n${duplicate.notes}`
+          : duplicate.notes
+      }
+    }
+
+    // Update primary person with merged data
+    const { error: updateError } = await supabase
+      .from('people')
+      .update({
+        email: mergedEmails,
+        phone: mergedPhones,
+        notes: mergedNotes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', primaryPersonId)
+
+    if (updateError) {
+      return {
+        success: false,
+        message: 'Failed to update primary person',
+        error: updateError.message
+      }
+    }
+
+    // Delete duplicate people
+    const { error: deleteError } = await supabase
+      .from('people')
+      .delete()
+      .in('id', duplicatePersonIds)
+
+    if (deleteError) {
+      return {
+        success: false,
+        message: 'Failed to delete duplicate people',
+        error: deleteError.message
+      }
+    }
+
+    return {
+      success: true,
+      message: `Successfully merged ${duplicatePeople.length} duplicate records into primary person`
+    }
+  } catch (error) {
+    console.error('Error merging duplicate people:', error)
+    return {
+      success: false,
+      message: 'Internal error during merge',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }
+  }
+}
+
 export async function processEmailAsLead(request: EmailProcessingRequest): Promise<EmailProcessingResult> {
   try {
     const { emailData, userId } = request
@@ -219,20 +448,20 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         let persons = null
         let error = null
         
-                 // Approach 1: Check for array containment (only if email is actually an array)
-         let arrayMatch = null
-         let arrayError = null
-         
-         try {
-           const { data, error } = await supabase
-             .from('people')
-             .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-             .contains('email', [email])
-           arrayMatch = data
-           arrayError = error
-         } catch (error) {
-           arrayError = error
-         }
+        // Approach 1: Check for array containment (only if email is actually an array)
+        let arrayMatch = null
+        let arrayError = null
+        
+        try {
+          const { data, error } = await supabase
+            .from('people')
+            .select('id, first_name, last_name, email, lead_status, lead_source, client_type, created_at, phone, company, position, address, notes')
+            .contains('email', [email])
+          arrayMatch = data
+          arrayError = error
+        } catch (error) {
+          arrayError = error
+        }
         
         if (!arrayError && arrayMatch && arrayMatch.length > 0) {
           persons = arrayMatch
@@ -241,7 +470,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
           // Approach 2: Check for exact string match
           const { data: stringMatch, error: stringError } = await supabase
             .from('people')
-            .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+            .select('id, first_name, last_name, email, lead_status, lead_source, client_type, created_at, phone, company, position, address, notes')
             .eq('email', email)
           
           if (!stringError && stringMatch && stringMatch.length > 0) {
@@ -251,7 +480,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
             // Approach 3: Check for array format match
             const { data: formatMatch, error: formatError } = await supabase
               .from('people')
-              .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+              .select('id, first_name, last_name, email, lead_status, lead_source, client_type, created_at, phone, company, position, address, notes')
               .eq('email', `{${email}}`)
             
             if (!formatError && formatMatch && formatMatch.length > 0) {
@@ -270,6 +499,42 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         }
 
         if (persons && persons.length > 0) {
+          // If multiple people found with the same email, select the most appropriate one
+          if (persons.length > 1) {
+            console.log(`Found ${persons.length} people with the same email. Selecting the most appropriate one.`)
+            
+            // Sort by priority: lead_status (staging > assigned > contacted > qualified > converted > lost)
+            // Then by creation date (newest first)
+            const statusPriority = {
+              'staging': 1,
+              'assigned': 2,
+              'contacted': 3,
+              'qualified': 4,
+              'converted': 5,
+              'lost': 6
+            }
+            
+            persons.sort((a, b) => {
+              const aPriority = statusPriority[a.lead_status as keyof typeof statusPriority] || 7
+              const bPriority = statusPriority[b.lead_status as keyof typeof statusPriority] || 7
+              
+              if (aPriority !== bPriority) {
+                return aPriority - bPriority
+              }
+              
+              // If same status, prefer the one created more recently
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            })
+            
+            console.log('Selected person after sorting:', {
+              id: persons[0].id,
+              first_name: persons[0].first_name,
+              last_name: persons[0].last_name,
+              lead_status: persons[0].lead_status,
+              created_at: persons[0].created_at
+            })
+          }
+          
           existingPerson = persons[0]
           console.log('Found existing person with exact email match:', existingPerson.email)
           break
@@ -286,7 +551,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       try {
         const { data: nameMatches, error: nameError } = await supabase
           .from('people')
-          .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
+          .select('id, first_name, last_name, email, lead_status, lead_source, client_type, created_at, phone, company, position, address, notes')
           .ilike('first_name', leadData.first_name)
           .ilike('last_name', leadData.last_name)
           .order('created_at', { ascending: false })
@@ -336,6 +601,10 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       const updateData: any = {
         last_interaction: new Date().toISOString(),
         next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
+        // Ensure the person is marked as a lead and in staging
+        client_type: 'lead',
+        lead_status: 'staging',
+        lead_source: leadData.lead_source || existingPerson.lead_source,
       }
 
       // Add new information if available
@@ -356,6 +625,15 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         : newNote
       
       updateData.notes = updatedNotes
+
+      console.log('Updating existing person with lead data:', {
+        id: existingPerson.id,
+        current_client_type: existingPerson.client_type,
+        current_lead_status: existingPerson.lead_status,
+        new_client_type: updateData.client_type,
+        new_lead_status: updateData.lead_status,
+        new_lead_source: updateData.lead_source
+      })
 
       // Update the person
       const { data: updatedPerson, error: updateError } = await supabase
@@ -503,35 +781,70 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       if (personError && (personError as any).code === '23505' && (personError as any).message?.includes('email')) {
         console.log('Duplicate email detected during insertion, attempting to find existing person')
         
-                 // Try to find the existing person that caused the duplicate error
-         for (const email of leadData.email) {
-           try {
-             // Try multiple approaches to find the existing person
-             let existingPerson = null
-             
-             // Try array containment first
-             try {
-               const { data } = await supabase
-                 .from('people')
-                 .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-                 .contains('email', [email])
-                 .single()
-               existingPerson = data
-             } catch (error) {
-               // If array containment fails, try exact match
-               try {
-                 const { data } = await supabase
-                   .from('people')
-                   .select('id, first_name, last_name, email, lead_status, lead_source, created_at, phone, company, position, address, notes')
-                   .eq('email', email)
-                   .single()
-                 existingPerson = data
-               } catch (error2) {
-                 console.error('Error finding existing person after duplicate error:', error2)
-               }
-             }
+        // Try to find the existing person that caused the duplicate error
+        for (const email of leadData.email) {
+          try {
+            // Try multiple approaches to find the existing person
+            let persons = null
             
-            if (existingPerson) {
+            // Try array containment first
+            try {
+              const { data } = await supabase
+                .from('people')
+                .select('id, first_name, last_name, email, lead_status, lead_source, client_type, created_at, phone, company, position, address, notes')
+                .contains('email', [email])
+              persons = data
+            } catch (error) {
+              // If array containment fails, try exact match
+              try {
+                const { data } = await supabase
+                  .from('people')
+                  .select('id, first_name, last_name, email, lead_status, lead_source, client_type, created_at, phone, company, position, address, notes')
+                  .eq('email', email)
+                persons = data
+              } catch (error2) {
+                console.error('Error finding existing person after duplicate error:', error2)
+              }
+            }
+            
+            if (persons && persons.length > 0) {
+              // If multiple people found with the same email, select the most appropriate one
+              if (persons.length > 1) {
+                console.log(`Found ${persons.length} people with the same email during duplicate error handling. Selecting the most appropriate one.`)
+                
+                // Sort by priority: lead_status (staging > assigned > contacted > qualified > converted > lost)
+                // Then by creation date (newest first)
+                const statusPriority = {
+                  'staging': 1,
+                  'assigned': 2,
+                  'contacted': 3,
+                  'qualified': 4,
+                  'converted': 5,
+                  'lost': 6
+                }
+                
+                persons.sort((a, b) => {
+                  const aPriority = statusPriority[a.lead_status as keyof typeof statusPriority] || 7
+                  const bPriority = statusPriority[b.lead_status as keyof typeof statusPriority] || 7
+                  
+                  if (aPriority !== bPriority) {
+                    return aPriority - bPriority
+                  }
+                  
+                  // If same status, prefer the one created more recently
+                  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                })
+                
+                console.log('Selected person after sorting during duplicate error handling:', {
+                  id: persons[0].id,
+                  first_name: persons[0].first_name,
+                  last_name: persons[0].last_name,
+                  lead_status: persons[0].lead_status,
+                  created_at: persons[0].created_at
+                })
+              }
+              
+              const existingPerson = persons[0]
               console.log('Found existing person after duplicate error:', existingPerson.email)
               return {
                 success: true,
