@@ -1,18 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getFollowUps, updateFollowUp, createFollowUp, createActivity, createNote, getPeople } from '@/lib/database'
+import { getFollowUps, updateFollowUp, createFollowUp, createActivity, createNote, getPeople, getNotes } from '@/lib/database'
 import { createClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Calendar, Clock, User, CheckCircle, AlertCircle } from 'lucide-react'
+import { Plus, Calendar, Clock, User, CheckCircle, AlertCircle, Phone, MessageSquare, FileText, Check, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDataLoader } from '@/hooks/useDataLoader'
-import type { FollowUp, Person } from '@/lib/supabase';
+import type { FollowUp, Person, Note } from '@/lib/supabase';
 
 type FollowUpWithPerson = FollowUp & { people?: Person };
 
@@ -97,6 +97,14 @@ export default function FollowUpsPage() {
   const [scheduleNotes, setScheduleNotes] = useState('')
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
+  
+  // New state for enhanced UI features
+  const [notesModalOpen, setNotesModalOpen] = useState(false)
+  const [selectedPersonNotes, setSelectedPersonNotes] = useState<Note[]>([])
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
+  const [interactionType, setInteractionType] = useState<'call' | 'text' | null>(null)
+  const [interactionModalOpen, setInteractionModalOpen] = useState(false)
+  const [interactionNotes, setInteractionNotes] = useState('')
 
   // Use the robust data loader
   const { data: followUps, loading, error, refetch } = useDataLoader(
@@ -211,6 +219,97 @@ export default function FollowUpsPage() {
     }
   }
 
+  // New handlers for enhanced UI features
+  const openNotesModal = async (person: Person) => {
+    try {
+      const notes = await getNotes(person.id)
+      setSelectedPersonNotes(notes)
+      setSelectedPerson(person)
+      setNotesModalOpen(true)
+    } catch (error) {
+      console.error('Error loading notes:', error)
+      setLocalError('Failed to load notes')
+    }
+  }
+
+  const closeNotesModal = () => {
+    setNotesModalOpen(false)
+    setSelectedPersonNotes([])
+    setSelectedPerson(null)
+  }
+
+  const openEnhancedInteractionModal = (followUp: FollowUpWithPerson, type: 'call' | 'text') => {
+    setActiveFollowUp(followUp)
+    setInteractionType(type)
+    setInteractionNotes('')
+    setInteractionModalOpen(true)
+  }
+
+  const closeInteractionModal = () => {
+    setInteractionModalOpen(false)
+    setActiveFollowUp(null)
+    setInteractionType(null)
+    setInteractionNotes('')
+  }
+
+  const handleSaveEnhancedInteraction = async () => {
+    if (!activeFollowUp || !interactionType) return
+    setSaving(true)
+    try {
+      // 1. Mark current follow-up as completed
+      await updateFollowUp(activeFollowUp.id, { status: 'completed' })
+      
+      // 2. Create activity and note for the interaction
+      const interactionDescription = `${interactionType === 'call' ? 'Phone Call' : 'Text Message'}: ${interactionNotes.trim() || 'No notes provided'}`
+      
+      await createActivity({
+        person_id: activeFollowUp.people?.id,
+        type: 'follow_up',
+        description: interactionDescription,
+        created_by: user?.id,
+      })
+      
+      if (interactionNotes.trim()) {
+        await createNote({
+          person_id: activeFollowUp.people?.id,
+          title: `${interactionType === 'call' ? 'Phone Call' : 'Text Message'} - Follow-up`,
+          content: interactionNotes,
+          created_by: user?.id,
+        })
+      }
+      
+      // 3. Schedule next follow-up using the person's frequency settings
+      if (activeFollowUp.people?.id) {
+        const { data, error } = await supabase.rpc('create_next_followup_for_person', {
+          person_id: activeFollowUp.people.id
+        })
+        
+        if (error) {
+          console.error('Error creating next follow-up:', error)
+        }
+      }
+      
+      // 4. Refresh list
+      refetch()
+      closeInteractionModal()
+    } catch (error) {
+      console.error('Error saving interaction:', error)
+      setLocalError('Failed to save interaction')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleMarkCompleted = async (followUp: FollowUpWithPerson) => {
+    try {
+      await updateFollowUp(followUp.id, { status: 'completed' })
+      refetch()
+    } catch (error) {
+      console.error('Error marking follow-up as completed:', error)
+      setLocalError('Failed to mark follow-up as completed')
+    }
+  }
+
   return (
     <div className="flex-1 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between mb-6">
@@ -248,6 +347,9 @@ export default function FollowUpsPage() {
           currentWeek={currentWeek}
           onWeekChange={setCurrentWeek}
           onFollowUpClick={openInteractionModal}
+          onMarkCompleted={handleMarkCompleted}
+          onOpenNotes={openNotesModal}
+          onOpenInteraction={openEnhancedInteractionModal}
           filter={filter}
           setFilter={setFilter}
           loading={loading}
@@ -263,6 +365,7 @@ export default function FollowUpsPage() {
         />
       )}
 
+      {/* Original Interaction Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -289,6 +392,83 @@ export default function FollowUpsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Enhanced Interaction Modal */}
+      <Dialog open={interactionModalOpen} onOpenChange={setInteractionModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {interactionType === 'call' ? 'Phone Call' : 'Text Message'} - {activeFollowUp?.people ? `${activeFollowUp.people.first_name} ${activeFollowUp.people.last_name}` : 'Unknown Person'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2 p-3 bg-muted/30 rounded-lg">
+              <div className="flex items-center space-x-2">
+                {interactionType === 'call' ? <Phone className="h-4 w-4 text-primary" /> : <MessageSquare className="h-4 w-4 text-primary" />}
+                <span className="font-medium">
+                  {interactionType === 'call' ? 'Phone Call' : 'Text Message'} Interaction
+                </span>
+              </div>
+            </div>
+            <Textarea
+              value={interactionNotes}
+              onChange={e => setInteractionNotes(e.target.value)}
+              placeholder={`Add notes about this ${interactionType === 'call' ? 'phone call' : 'text message'}...`}
+              rows={4}
+            />
+            <div>
+              <p className="text-sm text-muted-foreground">
+                This will mark the follow-up as completed and schedule the next one based on frequency settings.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSaveEnhancedInteraction} disabled={saving}>
+              {saving ? 'Saving...' : 'Save & Complete'}
+            </Button>
+            <Button variant="outline" onClick={closeInteractionModal} disabled={saving}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Notes Modal */}
+      <Dialog open={notesModalOpen} onOpenChange={setNotesModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Notes - {selectedPerson ? `${selectedPerson.first_name} ${selectedPerson.last_name}` : 'Unknown Person'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedPersonNotes.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No notes found for this person.</p>
+              </div>
+            ) : (
+              selectedPersonNotes.map((note) => (
+                <Card key={note.id} className="border-l-4 border-l-primary">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium">{note.title}</CardTitle>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(note.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{note.content}</p>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeNotesModal}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={scheduleModalOpen} onOpenChange={setScheduleModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -357,6 +537,9 @@ interface WeeklyListViewProps {
   currentWeek: Date
   onWeekChange: (date: Date) => void
   onFollowUpClick: (followUp: FollowUpWithPerson) => void
+  onMarkCompleted: (followUp: FollowUpWithPerson) => void
+  onOpenNotes: (person: Person) => void
+  onOpenInteraction: (followUp: FollowUpWithPerson, type: 'call' | 'text') => void
   filter: 'upcoming' | 'overdue'
   setFilter: (filter: 'upcoming' | 'overdue') => void
   loading: boolean
@@ -369,6 +552,9 @@ function WeeklyListView({
   currentWeek, 
   onWeekChange, 
   onFollowUpClick, 
+  onMarkCompleted,
+  onOpenNotes,
+  onOpenInteraction,
   filter, 
   setFilter, 
   loading, 
@@ -411,9 +597,13 @@ function WeeklyListView({
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-xl">Weekly Follow-ups</CardTitle>
-              <CardDescription>
-                {currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString()}
+              <CardTitle className="text-2xl">Weekly Follow-ups</CardTitle>
+              <CardDescription className="text-lg">
+                {currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString('en-US', { 
+                  month: 'long', 
+                  day: 'numeric', 
+                  year: 'numeric' 
+                })}
               </CardDescription>
             </div>
             <div className="flex items-center space-x-2">
@@ -520,12 +710,11 @@ function WeeklyListView({
                     {dayFollowUps.map((followUp) => (
                       <div
                         key={followUp.id}
-                        className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md hover:border-primary/50 ${
+                        className={`p-4 border rounded-lg transition-all hover:shadow-md hover:border-primary/50 ${
                           isOverdue(followUp) 
                             ? 'border-destructive/50 bg-destructive/5 hover:border-destructive' 
                             : 'border-border hover:bg-muted/30'
                         }`}
-                        onClick={() => onFollowUpClick(followUp)}
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center space-x-3">
@@ -561,7 +750,7 @@ function WeeklyListView({
                           </div>
                         </div>
                         
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                             <div className="flex items-center space-x-1">
                               <Clock className="h-3 w-3" />
@@ -583,10 +772,65 @@ function WeeklyListView({
                         </div>
                         
                         {followUp.notes && (
-                          <div className="mt-3 text-sm text-muted-foreground line-clamp-2 bg-muted/30 p-2 rounded">
+                          <div className="mb-3 text-sm text-muted-foreground line-clamp-2 bg-muted/30 p-2 rounded">
                             {followUp.notes}
                           </div>
                         )}
+                        
+                        {/* Enhanced Action Buttons */}
+                        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onOpenInteraction(followUp, 'call')}
+                              className="flex items-center gap-1"
+                            >
+                              <Phone className="h-3 w-3" />
+                              Call
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onOpenInteraction(followUp, 'text')}
+                              className="flex items-center gap-1"
+                            >
+                              <MessageSquare className="h-3 w-3" />
+                              Text
+                            </Button>
+                            {followUp.people && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onOpenNotes(followUp.people!)}
+                                className="flex items-center gap-1"
+                              >
+                                <FileText className="h-3 w-3" />
+                                Notes
+                              </Button>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onFollowUpClick(followUp)}
+                              className="flex items-center gap-1"
+                            >
+                              <FileText className="h-3 w-3" />
+                              Add Note
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => onMarkCompleted(followUp)}
+                              className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
+                            >
+                              <Check className="h-3 w-3" />
+                              Done
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
