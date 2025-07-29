@@ -291,53 +291,12 @@ export async function POST(request: NextRequest) {
     if (shouldProcessAsLead) {
       const { processEmailAsLead } = await import('@/lib/emailProcessing')
       
-      // Create or get dedicated system user for N8N processing
+      // Use a hardcoded system user ID for N8N processing
+      // This avoids database UUID generation issues
+      const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
       const SYSTEM_USER_EMAIL = 'n8n-system@internal-crm.com'
-      const SYSTEM_USER_NAME = 'N8N System'
       
-      let systemUser = null
-      let systemUserError = null
-      
-      // First, try to find existing system user
-      const { data: existingSystemUser, error: findError } = await supabase
-        .from('users')
-        .select('id, email')
-        .eq('email', SYSTEM_USER_EMAIL)
-        .single()
-      
-      if (existingSystemUser) {
-        systemUser = existingSystemUser
-        console.log('Found existing system user for N8N:', systemUser.id)
-      } else {
-        // Create new system user if not exists
-        const { data: newSystemUser, error: createError } = await supabase
-          .from('users')
-          .insert({
-            email: SYSTEM_USER_EMAIL,
-            first_name: 'N8N',
-            last_name: 'System',
-            role: 'admin' // System user needs admin role for lead processing
-          })
-          .select('id, email')
-          .single()
-        
-        if (createError) {
-          console.error('Error creating system user:', createError)
-          systemUserError = createError
-        } else {
-          systemUser = newSystemUser
-          console.log('Created new system user for N8N:', systemUser.id)
-        }
-      }
-      
-      if (systemUserError || !systemUser) {
-        console.error('Error with system user for N8N processing:', systemUserError)
-        return NextResponse.json({
-          success: false,
-          message: 'Failed to create or find system user for N8N processing',
-          error: 'System user required for N8N lead processing'
-        }, { status: 500 })
-      }
+      console.log('Using system user ID for N8N processing:', SYSTEM_USER_ID)
       
       // Enhance AI analysis with lead source information
       const enhancedAiAnalysis = {
@@ -362,7 +321,7 @@ export async function POST(request: NextRequest) {
           body: leadData.body,
           date: leadData.date
         },
-        userId: systemUser.id, // Use dedicated system user ID
+        userId: SYSTEM_USER_ID, // Use hardcoded system user ID
         aiAnalysis: enhancedAiAnalysis
       })
 
@@ -372,7 +331,7 @@ export async function POST(request: NextRequest) {
           .from('processed_emails')
           .insert({
             email_id: leadData.email_id,
-            user_id: systemUser.id, // Use dedicated system user ID
+            user_id: SYSTEM_USER_ID, // Use hardcoded system user ID
             person_id: processingResult.person.id,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
@@ -393,7 +352,7 @@ export async function POST(request: NextRequest) {
                   file_path: `attachments/${leadData.email_id}/${attachment.filename}`,
                   file_size: attachment.size,
                   mime_type: attachment.mime_type,
-                  uploaded_by: systemUser.id // Use dedicated system user ID
+                  uploaded_by: SYSTEM_USER_ID // Use hardcoded system user ID
                 })
             } catch (error) {
               console.error('Error saving attachment:', error)
@@ -416,7 +375,7 @@ export async function POST(request: NextRequest) {
           .from('processed_emails')
           .insert({
             email_id: leadData.email_id,
-            user_id: systemUser.id, // Use dedicated system user ID
+            user_id: SYSTEM_USER_ID, // Use hardcoded system user ID
             person_id: null,
             processed_at: new Date().toISOString(),
             gmail_email: leadData.from,
