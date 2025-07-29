@@ -556,7 +556,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
         .insert({
           person_id: newPerson.id,
           type: 'created',
-          description: `AI-detected lead from ${leadData.lead_source} and placed in staging (Confidence: ${((leadData.confidence_score ?? 0) * 100).toFixed(1)}%)`,
+          description: `AI-detected lead from ${leadData.lead_source} and placed in staging (Confidence: ${((request.aiAnalysis?.confidence ?? 0) * 100).toFixed(1)}%)`,
           created_by: request.userId,
         })
 
