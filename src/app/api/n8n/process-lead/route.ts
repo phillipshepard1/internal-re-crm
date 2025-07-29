@@ -316,10 +316,7 @@ export async function POST(request: NextRequest) {
             email: SYSTEM_USER_EMAIL,
             first_name: 'N8N',
             last_name: 'System',
-            role: 'admin', // System user needs admin role for lead processing
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            role: 'admin' // System user needs admin role for lead processing
           })
           .select('id, email')
           .single()
