@@ -57,8 +57,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [assignmentNotes, setAssignmentNotes] = useState('')
   const itemsPerPage = 10
 
-  // Filter users to only show agents, excluding the current user
-  const agents = users.filter(agent => agent.role === 'agent' && agent.id !== user?.id)
+  // Filter users to show all users (agents and admins) so admins can assign leads to anyone including themselves
+  const agents = users.filter(agent => agent.role === 'agent' || agent.role === 'admin')
 
   // Function to update URL with current state
   const updateUrlState = useCallback((updates: { tab?: string; page?: number; search?: string }) => {
@@ -443,7 +443,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                       </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p>Assign lead to agent</p>
+                                      <p>Assign lead to user</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -477,21 +477,21 @@ export function LeadStaging({ users }: LeadStagingProps) {
             <DialogHeader>
               <DialogTitle>Assign Lead</DialogTitle>
               <DialogDescription>
-                Assign {selectedLead?.first_name} {selectedLead?.last_name} to an agent with a follow-up plan
+                Assign {selectedLead?.first_name} {selectedLead?.last_name} to a user with a follow-up plan
               </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="agent">Select Agent</Label>
+                <Label htmlFor="agent">Select User</Label>
                 <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose an agent" />
+                    <SelectValue placeholder="Choose a user" />
                   </SelectTrigger>
                   <SelectContent>
                     {agents.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        {agent.first_name || agent.email.split('@')[0]}
+                        {agent.first_name || agent.email.split('@')[0]} ({agent.role})
                       </SelectItem>
                     ))}
                   </SelectContent>
