@@ -21,6 +21,7 @@ export interface AlertModalProps {
   onConfirm?: () => void
   onCancel?: () => void
   showCancel?: boolean
+  disabled?: boolean
 }
 
 export function AlertModal({
@@ -34,6 +35,7 @@ export function AlertModal({
   onConfirm,
   onCancel,
   showCancel = false,
+  disabled = false,
 }: AlertModalProps) {
   const handleConfirm = () => {
     onConfirm?.()
@@ -93,11 +95,11 @@ export function AlertModal({
         </DialogHeader>
         <DialogFooter className="flex gap-2">
           {showCancel && (
-            <Button variant="outline" onClick={handleCancel}>
+            <Button variant="outline" onClick={handleCancel} disabled={disabled}>
               {cancelText}
             </Button>
           )}
-          <Button variant={getButtonVariant()} onClick={handleConfirm}>
+          <Button variant={getButtonVariant()} onClick={handleConfirm} disabled={disabled}>
             {confirmText}
           </Button>
         </DialogFooter>

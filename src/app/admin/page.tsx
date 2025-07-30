@@ -30,6 +30,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [roleUpdateLoading, setRoleUpdateLoading] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [showUserModal, setShowUserModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -121,24 +122,43 @@ export default function AdminPage() {
     if (!userToDelete) return
 
     try {
-      // In a real app, you would call an API to delete the user
-      // For now, we'll just remove them from the local state
+      setDeleteLoading(true)
+      
+      // Call the API to delete the user
+      const response = await fetch('/api/admin/users', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: userToDelete.id }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete user')
+      }
+
+      const result = await response.json()
+      
+      // Remove from local state after successful deletion
       setUsers(users.filter(u => u.id !== userToDelete.id))
       
       setAlertModal({
         open: true,
         title: 'Success',
-        message: `User ${userToDelete.email} has been deleted.`,
+        message: result.message || `User ${userToDelete.email} has been deleted successfully.`,
         type: 'success'
       })
     } catch (err) {
+      console.error('Error deleting user:', err)
       setAlertModal({
         open: true,
         title: 'Error',
-        message: 'Failed to delete user.',
+        message: err instanceof Error ? err.message : 'Failed to delete user.',
         type: 'error'
       })
     } finally {
+      setDeleteLoading(false)
       setShowDeleteModal(false)
       setUserToDelete(null)
     }
@@ -522,14 +542,21 @@ export default function AdminPage() {
               <p className="text-sm text-muted-foreground">
                 This action cannot be undone. The user will lose access to the system immediately.
               </p>
+              {deleteLoading && (
+                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                  <span>Deleting user...</span>
+                </div>
+              )}
             </div>
           ) : 'No user selected for deletion'
         }
         type="warning"
         onConfirm={confirmDeleteUser}
-        confirmText="Delete User"
+        confirmText={deleteLoading ? "Deleting..." : "Delete User"}
         cancelText="Cancel"
         showCancel={true}
+        disabled={deleteLoading}
       />
 
       <AlertModal
