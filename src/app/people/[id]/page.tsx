@@ -576,10 +576,10 @@ export default function PersonDetailPage() {
       // Update the person to remove lead status while keeping all other data
       await updatePerson(person.id, {
         client_type: 'prospect', // Change from 'lead' to 'prospect'
-        lead_status: null, // Remove lead status
+        lead_status: undefined, // Remove lead status
         lead_tag_id: null, // Remove lead tag
         follow_up_plan_id: null, // Remove follow-up plan
-        assigned_to: null, // Remove assignment
+        assigned_to: '', // Set to empty string since it's required
         assigned_by: null, // Remove assigned by
         assigned_at: null, // Remove assigned at
         updated_at: new Date().toISOString()
@@ -594,8 +594,8 @@ export default function PersonDetailPage() {
         created_by: user?.id,
       })
       
-      // Refresh the page data
-      await loadData()
+      // Refresh the page data by reloading the component
+      window.location.reload()
       
       setShowRemoveLeadDialog(false)
       setAlertModal({
