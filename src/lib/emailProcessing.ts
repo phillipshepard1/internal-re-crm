@@ -30,6 +30,10 @@ interface EmailProcessingRequest {
       confidence_score?: number
       location_preferences?: string[]
       urgency?: 'high' | 'medium' | 'low'
+      address?: string
+      city?: string
+      state?: string
+      zip_code?: string
     }
     analysis: {
       intent: 'buying' | 'selling' | 'investing' | 'general_inquiry'
@@ -92,7 +96,7 @@ function stripHtmlAndCleanText(html: string): string {
 /**
  * Create structured notes from lead data and email
  */
-function createStructuredNotesFromLeadData(leadData: any, emailData: any): string {
+function createStructuredNotesFromLeadData(leadData: any, emailData: any, aiConfidence?: number): string {
   const notes = []
   
   // Add email source information
@@ -100,7 +104,7 @@ function createStructuredNotesFromLeadData(leadData: any, emailData: any): strin
   notes.push(`Subject: ${emailData.subject}`)
   notes.push(`Date: ${emailData.date || new Date().toISOString()}`)
   notes.push(`Lead Source: ${leadData.lead_source}`)
-  notes.push(`Confidence Score: ${((leadData.confidence_score ?? 0) * 100).toFixed(1)}%`)
+  notes.push(`Confidence Score: ${((aiConfidence ?? 0) * 100).toFixed(1)}%`)
   
   // Add extracted information
   if (leadData.company) notes.push(`Company: ${leadData.company}`)
@@ -458,7 +462,7 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
     }
 
     // Create comprehensive notes from extracted data
-    const notes = createStructuredNotesFromLeadData(leadData, emailData)
+    const notes = createStructuredNotesFromLeadData(leadData, emailData, request.aiAnalysis?.confidence)
 
     // Prepare person data with enhanced field mapping
     const personData = {
@@ -483,10 +487,10 @@ export async function processEmailAsLead(request: EmailProcessingRequest): Promi
       lists: [],
       company: leadData.company || null,
       position: leadData.position || null,
-      address: leadData.property_address || null,
-      city: null,
-      state: null,
-      zip_code: null,
+      address: leadData.address || leadData.property_address || null,
+      city: leadData.city || null,
+      state: leadData.state || null,
+      zip_code: leadData.zip_code || null,
       country: null,
       looking_for: [
         leadData.property_details,

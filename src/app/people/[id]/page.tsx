@@ -1261,7 +1261,7 @@ export default function PersonDetailPage() {
             </Card>
 
             {/* Properties Information */}
-            {(person.looking_for || person.selling || person.closed) && (
+            {(person.looking_for || person.selling || person.closed || person.address || person.city || person.state || person.zip_code) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center">
@@ -1288,6 +1288,19 @@ export default function PersonDetailPage() {
                     <div>
                       <h4 className="text-sm font-medium text-purple-600">Closed</h4>
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">{person.closed}</p>
+                    </div>
+                  )}
+
+                  {/* Contact Form Address Information */}
+                  {(person.address || person.city || person.state || person.zip_code) && !person.looking_for && !person.selling && !person.closed && (
+                    <div>
+                      <h4 className="text-sm font-medium text-green-600">Contact Form Submission</h4>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        {person.address && <p>Address: {person.address}</p>}
+                        {(person.city || person.state || person.zip_code) && (
+                          <p>Location: {[person.city, person.state, person.zip_code].filter(Boolean).join(', ')}</p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </CardContent>
