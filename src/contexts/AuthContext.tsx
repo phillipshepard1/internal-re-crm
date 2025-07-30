@@ -208,12 +208,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const currentUserId = currentUser?.id
       const previousUserId = userRef.current?.id
 
-      // Only update if user actually changed
-      if (currentUserId !== previousUserId) {
-        console.log('AuthContext: User changed, updating state', { 
+      // Only update if user actually changed OR if we don't have a userRole yet
+      if (currentUserId !== previousUserId || !userRoleRef.current) {
+        console.log('AuthContext: User changed or no role, updating state', { 
           previousUserId, 
           currentUserId,
-          hasUser: !!currentUser 
+          hasUser: !!currentUser,
+          hasUserRole: !!userRoleRef.current
         })
         userRef.current = currentUser
         setUser(currentUser)
@@ -282,8 +283,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const currentUserId = currentUser?.id
         const previousUserId = userRef.current?.id
 
-        // Only update if user actually changed
-        if (currentUserId !== previousUserId) {
+        // Only update if user actually changed OR if we don't have a userRole yet
+        if (currentUserId !== previousUserId || !userRoleRef.current) {
           userRef.current = currentUser
           setUser(currentUser)
 

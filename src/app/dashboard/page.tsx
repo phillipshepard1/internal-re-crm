@@ -60,13 +60,23 @@ const loadDashboardData = async (userId: string, userRole: string) => {
 export default function DashboardPage() {
   const { user, userRole } = useAuth()
 
+  // Debug auth state
+  useEffect(() => {
+    console.log('Dashboard: Auth state changed', {
+      hasUser: !!user,
+      hasUserRole: !!userRole,
+      userRole,
+      userId: user?.id
+    })
+  }, [user, userRole])
+
   // Component lifecycle management
 
   // Use the robust data loader for all dashboard data
   const { data: dashboardData, loading, error, refetch } = useDataLoader(
     loadDashboardData,
     {
-      cacheKey: `dashboard_data_${userRole}`,
+      cacheKey: userRole ? `dashboard_data_${userRole}` : 'dashboard_data_loading',
       cacheTimeout: 2 * 60 * 1000, // 2 minutes cache
       enabled: !!user && !!userRole, // Only load when both user and role are available
       dependencies: [userRole] // Refetch when user role changes
@@ -79,7 +89,22 @@ export default function DashboardPage() {
   const recentActivities = dashboardData?.activities || []
 
   // Show loading when auth is still loading, data is loading, or user/role not ready
-  if (!user || !userRole || loading) {
+  const isLoading = !user || !userRole || loading
+  
+  // Debug loading state
+  useEffect(() => {
+    if (isLoading) {
+      console.log('Dashboard: Showing loading state', {
+        hasUser: !!user,
+        hasUserRole: !!userRole,
+        dataLoading: loading,
+        userRole,
+        userId: user?.id
+      })
+    }
+  }, [isLoading, user, userRole, loading])
+  
+  if (isLoading) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="text-center py-12">
