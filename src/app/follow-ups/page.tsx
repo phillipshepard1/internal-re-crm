@@ -1,15 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getFollowUps, updateFollowUp, createFollowUp, createActivity, createNote, getPeople, getNotes } from '@/lib/database'
+import { getFollowUps, updateFollowUp, createFollowUp, deleteFollowUp, createActivity, createNote, getPeople, getNotes, updatePerson, getFrequencyDisplayName, getDayOfWeekDisplayName } from '@/lib/database'
 import { createClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Calendar, Clock, User, CheckCircle, AlertCircle, Phone, MessageSquare, FileText, Check, X } from 'lucide-react'
+import { Plus, Calendar, Clock, User, CheckCircle, AlertCircle, Phone, MessageSquare, FileText, Check, X, Settings, Edit, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { useDataLoader } from '@/hooks/useDataLoader'
 import type { FollowUp, Person, Note } from '@/lib/supabase';
@@ -22,6 +24,23 @@ const FOLLOWUP_TYPE_OPTIONS = [
   { label: 'Meeting', value: 'meeting' },
   { label: 'Task', value: 'task' },
   { label: 'Other', value: 'other' },
+]
+
+const FREQUENCY_OPTIONS = [
+  { label: 'Twice a Week', value: 'twice_week' },
+  { label: 'Every Week', value: 'weekly' },
+  { label: 'Every 2 Weeks', value: 'biweekly' },
+  { label: 'Every Month', value: 'monthly' },
+]
+
+const DAY_OF_WEEK_OPTIONS = [
+  { label: 'Sunday', value: 0 },
+  { label: 'Monday', value: 1 },
+  { label: 'Tuesday', value: 2 },
+  { label: 'Wednesday', value: 3 },
+  { label: 'Thursday', value: 4 },
+  { label: 'Friday', value: 5 },
+  { label: 'Saturday', value: 6 },
 ]
 
 function isOverdue(fu: FollowUpWithPerson) {
@@ -105,6 +124,33 @@ export default function FollowUpsPage() {
   const [interactionType, setInteractionType] = useState<'call' | 'text' | null>(null)
   const [interactionModalOpen, setInteractionModalOpen] = useState(false)
   const [interactionNotes, setInteractionNotes] = useState('')
+  
+  // New state for frequency editing
+  const [frequencyModalOpen, setFrequencyModalOpen] = useState(false)
+  const [editingPerson, setEditingPerson] = useState<Person | null>(null)
+  const [selectedFrequency, setSelectedFrequency] = useState<'twice_week' | 'weekly' | 'biweekly' | 'monthly'>('weekly')
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1)
+  const [frequencySaving, setFrequencySaving] = useState(false)
+  
+  // New state for completion confirmation
+  const [completionModalOpen, setCompletionModalOpen] = useState(false)
+  const [completingFollowUp, setCompletingFollowUp] = useState<FollowUpWithPerson | null>(null)
+  
+  // New state for delete confirmation
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deletingFollowUp, setDeletingFollowUp] = useState<FollowUpWithPerson | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
 
   // Use the robust data loader
   const { data: followUps, loading, error, refetch } = useDataLoader(
@@ -300,13 +346,111 @@ export default function FollowUpsPage() {
     }
   }
 
-  const handleMarkCompleted = async (followUp: FollowUpWithPerson) => {
+  // New handlers for frequency editing
+  const openFrequencyModal = (person: Person) => {
+    setEditingPerson(person)
+    setSelectedFrequency(person.follow_up_frequency || 'weekly')
+    setSelectedDayOfWeek(person.follow_up_day_of_week || 1)
+    setFrequencyModalOpen(true)
+  }
+
+  const closeFrequencyModal = () => {
+    setFrequencyModalOpen(false)
+    setEditingPerson(null)
+  }
+
+  const handleSaveFrequency = async () => {
+    if (!editingPerson) return
+    setFrequencySaving(true)
     try {
-      await updateFollowUp(followUp.id, { status: 'completed' })
+      await updatePerson(editingPerson.id, {
+        follow_up_frequency: selectedFrequency,
+        follow_up_day_of_week: selectedDayOfWeek,
+        updated_at: new Date().toISOString()
+      })
+      
+      // Create activity log
+      await createActivity({
+        person_id: editingPerson.id,
+        type: 'status_changed',
+        description: `Follow-up frequency updated to ${getFrequencyDisplayName(selectedFrequency)} on ${getDayOfWeekDisplayName(selectedDayOfWeek)}`,
+        created_by: user?.id,
+      })
+      
       refetch()
+      closeFrequencyModal()
     } catch (error) {
-      console.error('Error marking follow-up as completed:', error)
-      setLocalError('Failed to mark follow-up as completed')
+      console.error('Error updating frequency:', error)
+      setLocalError('Failed to update frequency')
+    } finally {
+      setFrequencySaving(false)
+    }
+  }
+
+  // New handlers for completion confirmation
+  const openCompletionModal = (followUp: FollowUpWithPerson) => {
+    setCompletingFollowUp(followUp)
+    setCompletionModalOpen(true)
+  }
+
+  const closeCompletionModal = () => {
+    setCompletionModalOpen(false)
+    setCompletingFollowUp(null)
+  }
+
+  const handleConfirmCompletion = async () => {
+    if (!completingFollowUp) return
+    try {
+      await updateFollowUp(completingFollowUp.id, { status: 'completed' })
+      
+      // Schedule next follow-up if person has frequency settings
+      if (completingFollowUp.people?.id) {
+        const { data, error } = await supabase.rpc('create_next_followup_for_person', {
+          person_id: completingFollowUp.people.id
+        })
+        
+        if (error) {
+          console.error('Error creating next follow-up:', error)
+        }
+      }
+      
+      refetch()
+      closeCompletionModal()
+    } catch (error) {
+      console.error('Error completing follow-up:', error)
+      setLocalError('Failed to complete follow-up')
+    }
+  }
+
+  // New handlers for delete functionality
+  const openDeleteModal = (followUp: FollowUpWithPerson) => {
+    setDeletingFollowUp(followUp)
+    setDeleteModalOpen(true)
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false)
+    setDeletingFollowUp(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deletingFollowUp) return
+    setDeleting(true)
+    try {
+      await deleteFollowUp(deletingFollowUp.id)
+      refetch()
+      closeDeleteModal()
+      setAlertModal({
+        open: true,
+        title: 'Follow-up Deleted',
+        message: 'The follow-up has been successfully deleted.',
+        type: 'success'
+      })
+    } catch (error) {
+      console.error('Error deleting follow-up:', error)
+      setLocalError('Failed to delete follow-up')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -347,9 +491,11 @@ export default function FollowUpsPage() {
           currentWeek={currentWeek}
           onWeekChange={setCurrentWeek}
           onFollowUpClick={openInteractionModal}
-          onMarkCompleted={handleMarkCompleted}
+          onMarkCompleted={openCompletionModal}
           onOpenNotes={openNotesModal}
           onOpenInteraction={openEnhancedInteractionModal}
+          onOpenFrequency={openFrequencyModal}
+          onDeleteFollowUp={openDeleteModal}
           filter={filter}
           setFilter={setFilter}
           loading={loading}
@@ -469,6 +615,142 @@ export default function FollowUpsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Frequency Editing Modal */}
+      <Dialog open={frequencyModalOpen} onOpenChange={setFrequencyModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Edit Follow-up Frequency - {editingPerson ? `${editingPerson.first_name} ${editingPerson.last_name}` : 'Unknown Person'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="frequency">Follow-up Frequency</Label>
+              <Select value={selectedFrequency} onValueChange={(value: 'twice_week' | 'weekly' | 'biweekly' | 'monthly') => setSelectedFrequency(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FREQUENCY_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="dayOfWeek">Preferred Day of Week</Label>
+              <Select value={String(selectedDayOfWeek)} onValueChange={(value) => setSelectedDayOfWeek(Number(value))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose day of week" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DAY_OF_WEEK_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="p-3 bg-muted/30 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>Current Setting:</strong> {getFrequencyDisplayName(selectedFrequency)} on {getDayOfWeekDisplayName(selectedDayOfWeek)}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSaveFrequency} disabled={frequencySaving}>
+              {frequencySaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+            <Button variant="outline" onClick={closeFrequencyModal} disabled={frequencySaving}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Completion Confirmation Modal */}
+      <Dialog open={completionModalOpen} onOpenChange={setCompletionModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Follow-up Completion</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>Are you sure you want to mark this follow-up as completed?</p>
+            {completingFollowUp && (
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <p className="font-medium">
+                  {completingFollowUp.people ? `${completingFollowUp.people.first_name} ${completingFollowUp.people.last_name}` : 'Unknown Person'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {completingFollowUp.type} - {new Date(completingFollowUp.scheduled_date).toLocaleDateString()}
+                </p>
+                {completingFollowUp.notes && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Notes: {completingFollowUp.notes}
+                  </p>
+                )}
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              This will mark the follow-up as completed and automatically schedule the next one based on the person's frequency settings.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleConfirmCompletion} className="bg-green-600 hover:bg-green-700">
+              <Check className="h-4 w-4 mr-2" />
+              Mark as Completed
+            </Button>
+            <Button variant="outline" onClick={closeCompletionModal}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Follow-up</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>Are you sure you want to delete this follow-up?</p>
+            {deletingFollowUp && (
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <p className="font-medium">
+                  {deletingFollowUp.people ? `${deletingFollowUp.people.first_name} ${deletingFollowUp.people.last_name}` : 'Unknown Person'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {deletingFollowUp.type} - {new Date(deletingFollowUp.scheduled_date).toLocaleDateString()}
+                </p>
+                {deletingFollowUp.notes && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Notes: {deletingFollowUp.notes}
+                  </p>
+                )}
+                <p className="text-sm text-destructive mt-2">
+                  <strong>Warning:</strong> This action cannot be undone.
+                </p>
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              This will permanently delete the follow-up. No new follow-up will be automatically scheduled.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete Follow-up'}
+            </Button>
+            <Button variant="outline" onClick={closeDeleteModal} disabled={deleting}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={scheduleModalOpen} onOpenChange={setScheduleModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -527,6 +809,25 @@ export default function FollowUpsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Alert Modal for Success/Error Messages */}
+      {alertModal.open && (
+        <Dialog open={alertModal.open} onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{alertModal.title}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p>{alertModal.message}</p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setAlertModal(prev => ({ ...prev, open: false }))}>
+                OK
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
@@ -540,6 +841,8 @@ interface WeeklyListViewProps {
   onMarkCompleted: (followUp: FollowUpWithPerson) => void
   onOpenNotes: (person: Person) => void
   onOpenInteraction: (followUp: FollowUpWithPerson, type: 'call' | 'text') => void
+  onOpenFrequency: (person: Person) => void
+  onDeleteFollowUp: (followUp: FollowUpWithPerson) => void
   filter: 'upcoming' | 'overdue'
   setFilter: (filter: 'upcoming' | 'overdue') => void
   loading: boolean
@@ -555,6 +858,8 @@ function WeeklyListView({
   onMarkCompleted,
   onOpenNotes,
   onOpenInteraction,
+  onOpenFrequency,
+  onDeleteFollowUp,
   filter, 
   setFilter, 
   loading, 
@@ -723,11 +1028,22 @@ function WeeklyListView({
                               <div className="font-medium">
                                 {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown Person'}
                               </div>
-                              {followUp.people?.company && (
-                                <div className="text-sm text-muted-foreground">
-                                  {followUp.people.company}
-                                </div>
-                              )}
+                              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                                {followUp.people?.company && (
+                                  <span>{followUp.people.company}</span>
+                                )}
+                                {followUp.people?.follow_up_frequency && (
+                                  <>
+                                    <span>•</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      {getFrequencyDisplayName(followUp.people.follow_up_frequency)}
+                                      {followUp.people.follow_up_day_of_week !== null && followUp.people.follow_up_day_of_week !== undefined && (
+                                        <span className="ml-1">({getDayOfWeekDisplayName(followUp.people.follow_up_day_of_week)})</span>
+                                      )}
+                                    </Badge>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
@@ -809,6 +1125,17 @@ function WeeklyListView({
                                 Notes
                               </Button>
                             )}
+                            {followUp.people && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onOpenFrequency(followUp.people!)}
+                                className="flex items-center gap-1"
+                              >
+                                <Settings className="h-3 w-3" />
+                                Frequency
+                              </Button>
+                            )}
                           </div>
                           <div className="flex items-center space-x-2">
                             <Button
@@ -829,6 +1156,18 @@ function WeeklyListView({
                               <Check className="h-3 w-3" />
                               Done
                             </Button>
+                            {/* Delete button - only show for overdue follow-ups */}
+                            {isOverdue(followUp) && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => onDeleteFollowUp(followUp)}
+                                className="flex items-center gap-1"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                Delete
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>

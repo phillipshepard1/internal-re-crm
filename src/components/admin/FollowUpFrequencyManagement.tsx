@@ -38,7 +38,16 @@ export function FollowUpFrequencyManagement({ users }: FollowUpFrequencyManageme
     loading: peopleLoading,
     error: peopleError,
     refetch: refetchPeople
-  } = useDataLoader(() => getPeopleForFollowUpManagement(user?.id || undefined, userRole || undefined), {})
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await getPeopleForFollowUpManagement(userId, userRole)
+    },
+    {
+      cacheKey: 'followup_frequency_people',
+      cacheTimeout: 60 * 1000, // 1 minute cache
+      enabled: !!user
+    }
+  )
 
   useEffect(() => {
     if (peopleData) {

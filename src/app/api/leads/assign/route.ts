@@ -42,19 +42,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Apply follow-up frequency if provided
-    if (followUpFrequency) {
-      try {
-        await applyFollowUpFrequencyToLead(leadId, followUpFrequency, followUpDayOfWeek || 1, userId)
-      } catch (frequencyError) {
-        console.error('Error applying follow-up frequency:', frequencyError)
-        // Don't fail the assignment if frequency application fails
-      }
+    // Always create initial follow-up and apply frequency settings
+    // Use provided frequency or default to 'weekly' if none specified
+    const frequency = followUpFrequency || 'weekly'
+    const dayOfWeek = followUpDayOfWeek || 1
+    
+    try {
+      await applyFollowUpFrequencyToLead(leadId, frequency, dayOfWeek, userId)
+    } catch (frequencyError) {
+      console.error('Error applying follow-up frequency:', frequencyError)
+      // Don't fail the assignment if frequency application fails
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Lead assigned successfully',
+      message: 'Lead assigned successfully with initial follow-up scheduled for next day',
       lead
     })
 

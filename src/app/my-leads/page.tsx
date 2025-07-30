@@ -64,52 +64,96 @@ export default function MyLeadsPage() {
     loading: allLeadsLoading,
     error: allLeadsError,
     refetch: refetchAllLeads
-  } = useDataLoader(() => loadMyLeads(user?.id || '', userRole || ''), {
-    enabled: !!user?.id && !!userRole
-  })
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await loadMyLeads(userId, userRole)
+    },
+    {
+      cacheKey: 'my_leads_all',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user?.id && !!userRole
+    }
+  )
 
   const {
     data: hotLeads,
     loading: hotLeadsLoading,
     error: hotLeadsError,
     refetch: refetchHotLeads
-  } = useDataLoader(() => loadLeadsByTag('Hot', user?.id || '', userRole || ''), {
-    enabled: !!user?.id && !!userRole
-  })
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await loadLeadsByTag('Hot', userId, userRole)
+    },
+    {
+      cacheKey: 'my_leads_hot',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user?.id && !!userRole
+    }
+  )
 
   const {
     data: warmLeads,
     loading: warmLeadsLoading,
     error: warmLeadsError,
     refetch: refetchWarmLeads
-  } = useDataLoader(() => loadLeadsByTag('Warm', user?.id || '', userRole || ''), {
-    enabled: !!user?.id && !!userRole
-  })
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await loadLeadsByTag('Warm', userId, userRole)
+    },
+    {
+      cacheKey: 'my_leads_warm',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user?.id && !!userRole
+    }
+  )
 
   const {
     data: coldLeads,
     loading: coldLeadsLoading,
     error: coldLeadsError,
     refetch: refetchColdLeads
-  } = useDataLoader(() => loadLeadsByTag('Cold', user?.id || '', userRole || ''), {
-    enabled: !!user?.id && !!userRole
-  })
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await loadLeadsByTag('Cold', userId, userRole)
+    },
+    {
+      cacheKey: 'my_leads_cold',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user?.id && !!userRole
+    }
+  )
 
   const {
     data: deadLeads,
     loading: deadLeadsLoading,
     error: deadLeadsError,
     refetch: refetchDeadLeads
-  } = useDataLoader(() => loadLeadsByTag('Dead', user?.id || '', userRole || ''), {
-    enabled: !!user?.id && !!userRole
-  })
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await loadLeadsByTag('Dead', userId, userRole)
+    },
+    {
+      cacheKey: 'my_leads_dead',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user?.id && !!userRole
+    }
+  )
 
   const {
     data: tags,
     loading: tagsLoading,
     error: tagsError,
     refetch: refetchTags
-  } = useDataLoader(loadLeadTags, {})
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await loadLeadTags()
+    },
+    {
+      cacheKey: 'lead_tags',
+      cacheTimeout: 60 * 1000, // 1 minute cache
+      enabled: !!user?.id && !!userRole
+    }
+  )
 
   // Set active tab based on user role after hooks are called
   useEffect(() => {

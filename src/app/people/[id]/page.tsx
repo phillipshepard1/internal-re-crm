@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare, Target } from 'lucide-react'
 import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles, getLeadTags, updateLeadTagForLead, applyFollowUpFrequencyToLead } from '@/lib/database'
@@ -47,6 +47,7 @@ const listOptions = [
 export default function PersonDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, userRole } = useAuth()
   const [person, setPerson] = useState<Person | null>(null)
   const [notes, setNotes] = useState<Note[]>([])
@@ -91,6 +92,8 @@ export default function PersonDetailPage() {
   const [selectedTagId, setSelectedTagId] = useState('')
   const [updatingFrequency, setUpdatingFrequency] = useState(false)
   const [updatingTag, setUpdatingTag] = useState(false)
+  const [showRemoveLeadDialog, setShowRemoveLeadDialog] = useState(false)
+  const [removingLead, setRemovingLead] = useState(false)
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -116,6 +119,28 @@ export default function PersonDetailPage() {
     selling: '',
     closed: '',
   })
+
+  // Function to handle back navigation
+  const handleBackNavigation = useCallback(() => {
+    // Check if we came from admin panel with lead staging state
+    const fromAdmin = searchParams.get('fromAdmin')
+    const leadTab = searchParams.get('leadTab')
+    const leadPage = searchParams.get('leadPage')
+    const leadSearch = searchParams.get('leadSearch')
+    
+    if (fromAdmin === 'true' && userRole === 'admin') {
+      // Return to admin panel with lead staging state
+      const params = new URLSearchParams()
+      params.set('tab', 'leads')
+      if (leadTab) params.set('leadTab', leadTab)
+      if (leadPage) params.set('leadPage', leadPage)
+      if (leadSearch) params.set('leadSearch', leadSearch)
+      router.push(`/admin?${params.toString()}`)
+    } else {
+      // Default back navigation
+      router.back()
+    }
+  }, [searchParams, userRole, router])
 
   // Apply loading timeout protection
   useEffect(() => {
@@ -543,6 +568,55 @@ export default function PersonDetailPage() {
     setShowTagDialog(true)
   }
 
+  const handleRemoveAsLead = async () => {
+    if (!person) return
+    
+    setRemovingLead(true)
+    try {
+      // Update the person to remove lead status while keeping all other data
+      await updatePerson(person.id, {
+        client_type: 'prospect', // Change from 'lead' to 'prospect'
+        lead_status: null, // Remove lead status
+        lead_tag_id: null, // Remove lead tag
+        follow_up_plan_id: null, // Remove follow-up plan
+        assigned_to: null, // Remove assignment
+        assigned_by: null, // Remove assigned by
+        assigned_at: null, // Remove assigned at
+        updated_at: new Date().toISOString()
+      })
+      
+      // Create activity log
+      const { createActivity } = await import('@/lib/database')
+      await createActivity({
+        person_id: person.id,
+        type: 'status_changed',
+        description: `Lead demoted to prospect. All notes and data preserved.`,
+        created_by: user?.id,
+      })
+      
+      // Refresh the page data
+      await loadData()
+      
+      setShowRemoveLeadDialog(false)
+      setAlertModal({
+        open: true,
+        title: 'Lead Removed',
+        message: 'This person has been removed as a lead and is now a prospect. All notes and data have been preserved.',
+        type: 'success'
+      })
+    } catch (error) {
+      console.error('Error removing lead:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to remove lead. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setRemovingLead(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -561,8 +635,8 @@ export default function PersonDetailPage() {
           <AlertDescription className="text-destructive">
             {error || 'Person not found'}
           </AlertDescription>
-          <Button onClick={() => router.push('/people')} className="mt-4">
-            Back to People
+          <Button onClick={handleBackNavigation} className="mt-4">
+            Back
           </Button>
         </Alert>
       </div>
@@ -576,13 +650,13 @@ export default function PersonDetailPage() {
               <div className="flex items-center space-x-4">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={() => router.back()}>
+                <Button variant="ghost" size="sm" onClick={handleBackNavigation}>
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Go back to people list</p>
+                <p>Go back to previous page</p>
               </TooltipContent>
             </Tooltip>
                 <div className="flex items-center space-x-4">
@@ -649,6 +723,25 @@ export default function PersonDetailPage() {
                   </TooltipContent>
                 </Tooltip>
               </DialogTrigger>
+            
+            {/* Remove as Lead Button - Only show for leads */}
+            {person.client_type === 'lead' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowRemoveLeadDialog(true)}
+                    className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  >
+                    <Target className="mr-2 h-4 w-4" />
+                    Remove as Lead
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Demote lead to prospect (keeps all notes and data)</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
               <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Edit Contact</DialogTitle>
@@ -1824,6 +1917,48 @@ export default function PersonDetailPage() {
                 disabled={updatingTag}
               >
                 {updatingTag ? 'Updating...' : 'Update Tag'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove as Lead Confirmation Dialog */}
+      <Dialog open={showRemoveLeadDialog} onOpenChange={setShowRemoveLeadDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove as Lead</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove {person?.first_name} {person?.last_name} as a lead?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-muted/30 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>What happens:</strong>
+              </p>
+              <ul className="text-sm text-muted-foreground mt-2 space-y-1">
+                <li>• Person becomes a "prospect" instead of a "lead"</li>
+                <li>• All notes, tasks, and activities are preserved</li>
+                <li>• Lead status, tags, and follow-up plans are removed</li>
+                <li>• Person is unassigned from any agent</li>
+                <li>• Can be found in the People section</li>
+              </ul>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRemoveLeadDialog(false)}
+                disabled={removingLead}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={handleRemoveAsLead}
+                disabled={removingLead}
+              >
+                {removingLead ? 'Removing...' : 'Remove as Lead'}
               </Button>
             </div>
           </div>

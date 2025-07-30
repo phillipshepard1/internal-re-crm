@@ -43,6 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeoutMs = process.env.NODE_ENV === 'production' ? 8000 : 10000
     authTimeoutRef.current = setTimeout(() => {
       if (loadingRef.current) {
+        console.warn('AuthContext: Loading timeout reached, forcing loading to false', {
+          environment: process.env.NODE_ENV,
+          timeoutMs,
+          hasUser: !!userRef.current,
+          hasUserRole: !!userRoleRef.current
+        })
         loadingRef.current = false
         setLoading(false)
         
@@ -123,18 +129,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Wait before retrying (shorter delay in production)
           const delayMs = process.env.NODE_ENV === 'production' ? 500 * attempt : 1000 * attempt
           await new Promise(resolve => setTimeout(resolve, delayMs))
-          continue
+        } else {
+          const role = data?.role || null
+          
+          // Cache the successful result
+          if (typeof window !== 'undefined' && role) {
+            localStorage.setItem(`user_role_${userId}`, role)
+            localStorage.setItem(`user_role_timestamp_${userId}`, Date.now().toString())
+          }
+          
+          return role
         }
-
-        const role = data?.role || null
-        
-        // Cache the successful result
-        if (typeof window !== 'undefined' && role) {
-          localStorage.setItem(`user_role_${userId}`, role)
-          localStorage.setItem(`user_role_timestamp_${userId}`, Date.now().toString())
-        }
-        
-        return role
 
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error')
@@ -159,6 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null
   }, [])
 
+  // Store getUserRole in a ref to avoid circular dependencies
+  const getUserRoleRef = useRef(getUserRole)
+  getUserRoleRef.current = getUserRole
+
   // Validate session and update state
   const validateSession = useCallback(async () => {
     const now = Date.now()
@@ -176,12 +185,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // If there's an error or no session, clear the user state
       if (error || !session) {
+        console.log('AuthContext: No session found, clearing user state')
         userRef.current = null
         setUser(null)
         userRoleRef.current = null
         setUserRole(null)
         
         if (loadingRef.current) {
+          console.log('AuthContext: Setting loading to false (no session)')
           loadingRef.current = false
           setLoading(false)
           // Clear the auth timeout since we're done loading
@@ -199,18 +210,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Only update if user actually changed
       if (currentUserId !== previousUserId) {
+        console.log('AuthContext: User changed, updating state', { 
+          previousUserId, 
+          currentUserId,
+          hasUser: !!currentUser 
+        })
         userRef.current = currentUser
         setUser(currentUser)
 
         if (currentUser) {
-          // Get user role
+          // Get user role using the ref to avoid circular dependencies
           try {
-            const role = await getUserRole(currentUser.id)
+            const role = await getUserRoleRef.current(currentUser.id)
             userRoleRef.current = role
             setUserRole(role)
+            console.log('AuthContext: User role set', { role })
           } catch (error) {
             userRoleRef.current = 'agent'
             setUserRole('agent')
+            console.log('AuthContext: Using default agent role due to error', { error })
           }
         } else {
           userRoleRef.current = null
@@ -220,6 +238,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Update loading state
       if (loadingRef.current) {
+        console.log('AuthContext: Setting loading to false (session validated)')
         loadingRef.current = false
         setLoading(false)
         // Clear the auth timeout since we're done loading
@@ -230,6 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
     } catch (error) {
+      console.error('AuthContext: Error validating session', error)
       
       // Clear user state on error
       userRef.current = null
@@ -238,6 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserRole(null)
       
       if (loadingRef.current) {
+        console.log('AuthContext: Setting loading to false (error)')
         loadingRef.current = false
         setLoading(false)
         // Clear the auth timeout since we're done loading
@@ -247,7 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-  }, [getUserRole])
+  }, []) // Remove getUserRole from dependencies
 
   // Set up auth state listener
   useEffect(() => {
@@ -267,9 +288,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(currentUser)
 
           if (currentUser) {
-            // Get user role
+            // Get user role using the ref to avoid circular dependencies
             try {
-              const role = await getUserRole(currentUser.id)
+              const role = await getUserRoleRef.current(currentUser.id)
               userRoleRef.current = role
               setUserRole(role)
             } catch (error) {
@@ -298,7 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [validateSession, getUserRole])
+  }, [validateSession]) // Remove getUserRole from dependencies
 
   // Set up periodic session validation (every 5 minutes)
   useEffect(() => {
@@ -528,6 +549,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Error handling for role refresh
     }
   }, [getUserRole])
+
+  // Global functions for debugging
+  if (typeof window !== 'undefined') {
+    (window as any).clearAuthCache = () => {
+      console.log('Clearing auth cache')
+      if (typeof window !== 'undefined') {
+        const keys = Object.keys(localStorage)
+        keys.forEach(key => {
+          if (key.startsWith('user_role_')) {
+            localStorage.removeItem(key)
+          }
+        })
+      }
+    }
+    
+    (window as any).getAuthState = () => {
+      return {
+        user: userRef.current,
+        userRole: userRoleRef.current,
+        loading: loadingRef.current,
+        hasUser: !!userRef.current,
+        hasUserRole: !!userRoleRef.current
+      }
+    }
+    
+    (window as any).forceAuthRefresh = () => {
+      console.log('Forcing auth refresh')
+      loadingRef.current = true
+      setLoading(true)
+      validateSession()
+    }
+  }
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({

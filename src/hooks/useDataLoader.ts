@@ -22,6 +22,28 @@ setInterval(() => {
   }
 }, CACHE_CLEANUP_INTERVAL)
 
+// Global function to clear all cache (for debugging)
+if (typeof window !== 'undefined') {
+  (window as any).clearDataCache = () => {
+    console.log('Clearing all data cache')
+    globalDataCache.clear()
+  }
+  
+  (window as any).getDataCacheInfo = () => {
+    return {
+      size: globalDataCache.size,
+      keys: Array.from(globalDataCache.keys()),
+      entries: Array.from(globalDataCache.entries()).map(([key, entry]) => ({
+        key,
+        timestamp: entry.timestamp,
+        age: Date.now() - entry.timestamp,
+        hasData: !!entry.data,
+        hasError: !!entry.error
+      }))
+    }
+  }
+}
+
 interface UseDataLoaderOptions {
   enabled?: boolean
   cacheKey?: string
@@ -95,6 +117,13 @@ export function useDataLoader(
     loadFunctionRef.current = loadFunction
   }, [loadFunction])
 
+  // Clear cache when user role changes
+  useEffect(() => {
+    if (effectiveCacheKey) {
+      globalDataCache.delete(effectiveCacheKey)
+    }
+  }, [userRole, effectiveCacheKey])
+
   // Main data loading effect
   useEffect(() => {
     const userId = user?.id
@@ -104,11 +133,19 @@ export function useDataLoader(
 
     // Don't load if auth is still loading or user is not available
     if (authLoading || !userId || !enabled || !mountRef.current) {
+      console.log('useDataLoader: Skipping load', { 
+        authLoading, 
+        userId: !!userId, 
+        enabled, 
+        mounted: mountRef.current,
+        cacheKey: effectiveCacheKey 
+      })
       return
     }
 
     // Check if we're already loading
     if (loadingRef.current) {
+      console.log('useDataLoader: Already loading, skipping', { cacheKey: effectiveCacheKey })
       return
     }
 
@@ -118,6 +155,7 @@ export function useDataLoader(
       const isExpired = Date.now() - cached.timestamp > cacheTimeout
       
       if (!isExpired) {
+        console.log('useDataLoader: Using cached data', { cacheKey: effectiveCacheKey })
         setData(cached.data)
         setLoading(false)
         setError(null)
@@ -125,11 +163,17 @@ export function useDataLoader(
         return
       } else {
         // Remove expired cache entry
+        console.log('useDataLoader: Cache expired, removing', { cacheKey: effectiveCacheKey })
         globalDataCache.delete(effectiveCacheKey)
       }
     }
 
     // Starting data load process
+    console.log('useDataLoader: Starting data load', { 
+      cacheKey: effectiveCacheKey, 
+      userId, 
+      userRole 
+    })
 
     const loadData = async () => {
       if (!mountRef.current || loadingRef.current) return
@@ -141,24 +185,42 @@ export function useDataLoader(
       // Create new abort controller
       abortControllerRef.current = new AbortController()
 
+      // Add timeout to prevent hanging
+      const timeoutMs = 30000 // 30 seconds timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Data loading timeout')), timeoutMs)
+      })
+
       try {
-        const result = await loadFunctionRef.current(userId, userRole || 'agent')
+        const result = await Promise.race([
+          loadFunctionRef.current(userId, userRole || 'agent'),
+          timeoutPromise
+        ])
 
         // Check if component is still mounted
         if (!mountRef.current) {
+          console.log('useDataLoader: Component unmounted during load', { cacheKey: effectiveCacheKey })
           return
         }
 
         // Check if request was aborted
         if (abortControllerRef.current?.signal.aborted) {
+          console.log('useDataLoader: Request aborted', { cacheKey: effectiveCacheKey })
           return
         }
+
+        console.log('useDataLoader: Data loaded successfully', { 
+          cacheKey: effectiveCacheKey,
+          resultKeys: Object.keys(result || {}),
+          activitiesCount: result?.activities?.length || 0
+        })
 
         setData(result)
         setError(null)
 
         // Cache the result
         if (effectiveCacheKey) {
+          console.log('useDataLoader: Caching data', { cacheKey: effectiveCacheKey })
           globalDataCache.set(effectiveCacheKey, {
             data: result,
             timestamp: Date.now(),
@@ -171,15 +233,20 @@ export function useDataLoader(
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        console.error('useDataLoader: Data load error', { 
+          cacheKey: effectiveCacheKey, 
+          error: errorMessage 
+        })
         setError(errorMessage)
         setData(null)
       } finally {
         setLoading(false)
+        loadingRef.current = false
       }
     }
 
     loadData()
-  }, [authLoading, user?.id, userRole, enabled, effectiveCacheKey, cacheTimeout, onSuccess, onError])
+  }, [authLoading, user?.id, userRole, enabled, effectiveCacheKey, cacheTimeout, dependencies, onSuccess, onError])
 
   // Refetch function
   const refetch = useCallback(async () => {
@@ -252,7 +319,7 @@ export function useDataLoader(
     }
 
     loadData()
-  }, [user?.id, userRole, enabled, effectiveCacheKey, onSuccess, onError])
+  }, [user?.id, userRole, enabled, effectiveCacheKey, dependencies, onSuccess, onError])
 
   // Clear cache function
   const clearCache = useCallback(() => {

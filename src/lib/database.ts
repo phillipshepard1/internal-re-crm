@@ -596,6 +596,30 @@ export async function getRecentActivities(limit: number = 20) {
   return data || []
 }
 
+export async function getUserRecentActivities(userId: string, limit: number = 20) {
+  const { data, error } = await supabase
+    .from('activities')
+    .select(`
+      *,
+      people (
+        id,
+        first_name,
+        last_name,
+        assigned_to
+      ),
+      users:created_by (
+        id,
+        email
+      )
+    `)
+    .eq('created_by', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  
+  if (error) throw error
+  return data || []
+}
+
 // Users
 export async function getUsers() {
   const { data, error } = await supabase
@@ -1046,6 +1070,26 @@ export async function assignLeadToUser(leadId: string, userId: string, assignedB
     description: `Lead assigned to user`,
     created_by: userId,
   })
+  
+  // Create initial follow-up for next day (if not already created)
+  try {
+    const { data: followUpData, error: followUpError } = await supabase.rpc('create_initial_followup_for_person', {
+      person_id: leadId
+    })
+    
+    if (followUpError) {
+      console.error('Error creating initial follow-up:', followUpError)
+      // Don't fail the assignment if follow-up creation fails
+    } else {
+      // Mark that this person has had their initial follow-up
+      await updatePerson(leadId, {
+        has_initial_followup: true
+      })
+    }
+  } catch (followUpError) {
+    console.error('Error creating initial follow-up:', followUpError)
+    // Don't fail the assignment if follow-up creation fails
+  }
   
   return data
 }

@@ -20,9 +20,12 @@ import { LeadSourceManagement } from '@/components/admin/LeadSourceManagement'
 import { FollowUpFrequencyManagement } from '@/components/admin/FollowUpFrequencyManagement'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function AdminPage() {
   const { userRole } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -42,6 +45,16 @@ export default function AdminPage() {
     message: '',
     type: 'info'
   })
+
+  // Get the active tab from URL params, default to 'leads' instead of 'users'
+  const activeTab = searchParams.get('tab') || 'leads'
+
+  // Function to update URL with current tab
+  const updateTabInUrl = useCallback((tab: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', tab)
+    router.push(`/admin?${params.toString()}`, { scroll: false })
+  }, [searchParams, router])
 
   const loadData = useCallback(async () => {
     try {
@@ -249,15 +262,19 @@ export default function AdminPage() {
 
         </div>
 
-        <Tabs defaultValue="users" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={updateTabInUrl} className="space-y-4">
           <TabsList>
+            <TabsTrigger value="leads">Lead Staging</TabsTrigger>
             <TabsTrigger value="users">User Management</TabsTrigger>
             <TabsTrigger value="roles">Role Management</TabsTrigger>
-            <TabsTrigger value="leads">Lead Staging</TabsTrigger>
             <TabsTrigger value="sources">Lead Sources</TabsTrigger>
             <TabsTrigger value="plans">Follow-up Frequencies</TabsTrigger>
             <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
           </TabsList>
+          
+          <TabsContent value="leads" className="space-y-4">
+            <LeadStaging users={users} />
+          </TabsContent>
           
           <TabsContent value="users" className="space-y-4">
             <Card>
@@ -438,10 +455,6 @@ export default function AdminPage() {
           
           <TabsContent value="activity" className="space-y-4">
             <ActivityDashboard users={users} />
-          </TabsContent>
-
-          <TabsContent value="leads" className="space-y-4">
-            <LeadStaging users={users} />
           </TabsContent>
 
           <TabsContent value="sources" className="space-y-4">

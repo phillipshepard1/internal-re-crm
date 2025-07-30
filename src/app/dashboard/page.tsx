@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { User, Clock, CheckCircle, Activity } from 'lucide-react'
-import { getPeople, getFollowUps, getTasks, getRecentActivities } from '@/lib/database'
+import { getPeople, getFollowUps, getTasks, getRecentActivities, getUserRecentActivities } from '@/lib/database'
 import type { Person, FollowUpWithPerson, Task, Activity as ActivityType } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,11 +36,17 @@ interface ActivityWithDetails {
 
 // Move loadFunction outside component to prevent recreation on every render
 const loadDashboardData = async (userId: string, userRole: string) => {
+  // Use appropriate activities function based on user role
+  const activitiesFunction = userRole === 'admin' ? getRecentActivities : getUserRecentActivities
+  const activitiesLimit = userRole === 'admin' ? 20 : 20
+  
   const [people, followUps, tasks, activities] = await Promise.all([
     getPeople(userId, userRole),
     getFollowUps(userId, userRole),
     getTasks(undefined, userId, userRole),
-    getRecentActivities(20)
+    userRole === 'admin' 
+      ? getRecentActivities(activitiesLimit)
+      : getUserRecentActivities(userId, activitiesLimit)
   ])
   
   return {
@@ -60,9 +66,10 @@ export default function DashboardPage() {
   const { data: dashboardData, loading, error, refetch } = useDataLoader(
     loadDashboardData,
     {
-      cacheKey: 'dashboard_data',
+      cacheKey: `dashboard_data_${userRole}`,
       cacheTimeout: 2 * 60 * 1000, // 2 minutes cache
-      enabled: !!user && !!userRole // Only load when both user and role are available
+      enabled: !!user && !!userRole, // Only load when both user and role are available
+      dependencies: [userRole] // Refetch when user role changes
     }
   )
 

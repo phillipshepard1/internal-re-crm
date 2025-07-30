@@ -40,7 +40,16 @@ export function FollowUpPlanManagement({ users }: FollowUpPlanManagementProps) {
     loading: plansLoading,
     error: plansError,
     refetch: refetchPlans
-  } = useDataLoader(getFollowUpPlanTemplates, {})
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await getFollowUpPlanTemplates()
+    },
+    {
+      cacheKey: 'followup_plans',
+      cacheTimeout: 60 * 1000, // 1 minute cache
+      enabled: !!user
+    }
+  )
 
   useEffect(() => {
     if (plansData) {

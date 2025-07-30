@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,7 @@ import { useDataLoader } from '@/hooks/useDataLoader'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { useAuth } from '@/contexts/AuthContext'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 interface User {
@@ -36,9 +37,17 @@ interface LeadStagingProps {
 
 export function LeadStaging({ users }: LeadStagingProps) {
   const { user } = useAuth()
-  const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState('staging')
-  const [currentPage, setCurrentPage] = useState(1)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Get state from URL parameters
+  const urlTab = searchParams.get('leadTab')
+  const urlPage = searchParams.get('leadPage')
+  const urlSearch = searchParams.get('leadSearch')
+  
+  const [searchTerm, setSearchTerm] = useState(urlSearch || '')
+  const [activeTab, setActiveTab] = useState(urlTab || 'staging')
+  const [currentPage, setCurrentPage] = useState(urlPage ? parseInt(urlPage) : 1)
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Person | null>(null)
   const [selectedUserId, setSelectedUserId] = useState('')
@@ -48,8 +57,29 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [assignmentNotes, setAssignmentNotes] = useState('')
   const itemsPerPage = 10
 
-  // Filter users to only show agents
-  const agents = users.filter(user => user.role === 'agent')
+  // Filter users to only show agents, excluding the current user
+  const agents = users.filter(agent => agent.role === 'agent' && agent.id !== user?.id)
+
+  // Function to update URL with current state
+  const updateUrlState = useCallback((updates: { tab?: string; page?: number; search?: string }) => {
+    const params = new URLSearchParams(searchParams.toString())
+    
+    if (updates.tab !== undefined) {
+      params.set('leadTab', updates.tab)
+    }
+    if (updates.page !== undefined) {
+      params.set('leadPage', updates.page.toString())
+    }
+    if (updates.search !== undefined) {
+      if (updates.search) {
+        params.set('leadSearch', updates.search)
+      } else {
+        params.delete('leadSearch')
+      }
+    }
+    
+    router.push(`/admin?${params.toString()}`, { scroll: false })
+  }, [searchParams, router])
 
   // Data loaders
   const {
@@ -57,16 +87,32 @@ export function LeadStaging({ users }: LeadStagingProps) {
     loading: stagingLoading,
     error: stagingError,
     refetch: refetchStaging
-  } = useDataLoader(getStagingLeads, {})
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await getStagingLeads()
+    },
+    {
+      cacheKey: 'staging_leads',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user
+    }
+  )
 
   const {
     data: assignedLeads,
     loading: assignedLoading,
     error: assignedError,
     refetch: refetchAssigned
-  } = useDataLoader(getAssignedLeads, {})
-
-
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await getAssignedLeads(userId, userRole)
+    },
+    {
+      cacheKey: 'assigned_leads',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user
+    }
+  )
 
   // Filter data based on search term
   const filterLeads = (leads: Person[]) => {
@@ -91,10 +137,27 @@ export function LeadStaging({ users }: LeadStagingProps) {
     currentPage * itemsPerPage
   )
 
-  // Reset to page 1 when switching tabs or changing search
+  // Update URL when state changes
   useEffect(() => {
-    setCurrentPage(1)
-  }, [activeTab, searchTerm])
+    updateUrlState({ tab: activeTab, page: currentPage, search: searchTerm })
+  }, [activeTab, currentPage, searchTerm, updateUrlState])
+
+  // Handle tab change
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    setCurrentPage(1) // Reset to first page when changing tabs
+  }
+
+  // Handle search change
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    setCurrentPage(1) // Reset to first page when searching
+  }
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
 
   const handleAssignLead = async () => {
     if (!selectedLead || !selectedUserId) return
@@ -127,7 +190,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
       refetchStaging()
       refetchAssigned()
       
-      // Reset form
+      // Close dialog and reset form
       setAssignDialogOpen(false)
       setSelectedLead(null)
       setSelectedUserId('')
@@ -217,7 +280,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                 <Input
                   placeholder="Search leads..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-8"
                 />
               </div>
@@ -226,7 +289,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
         </Card>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList>
             <TabsTrigger value="staging">
               Staging Leads ({stagingLeads?.length || 0})
@@ -286,7 +349,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                           <TableRow key={lead.id}>
                             <TableCell className="font-medium">
                               <Link 
-                                href={`/people/${lead.id}`}
+                                href={`/people/${lead.id}?fromAdmin=true&leadTab=${activeTab}&leadPage=${currentPage}&leadSearch=${encodeURIComponent(searchTerm)}`}
                                 className="hover:underline text-primary"
                               >
                                 {lead.first_name} {lead.last_name}
@@ -357,12 +420,13 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                       size="sm"
                                       asChild
                                     >
-                                      <Link href={`/people/${lead.id}`}>
+                                      <Link href={`/people/${lead.id}?fromAdmin=true&leadTab=${activeTab}&leadPage=${currentPage}&leadSearch=${encodeURIComponent(searchTerm)}`}>
                                         <Eye className="h-4 w-4" />
                                       </Link>
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
+                                    
                                     <p>View lead details</p>
                                   </TooltipContent>
                                 </Tooltip>
@@ -393,7 +457,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                     <DataTablePagination
                       currentPage={currentPage}
                       totalPages={Math.ceil(getCurrentTotal() / itemsPerPage)}
-                      onPageChange={setCurrentPage}
+                      onPageChange={handlePageChange}
                       totalItems={getCurrentTotal()}
                       startIndex={(currentPage - 1) * itemsPerPage + 1}
                       endIndex={Math.min(currentPage * itemsPerPage, getCurrentTotal())}
