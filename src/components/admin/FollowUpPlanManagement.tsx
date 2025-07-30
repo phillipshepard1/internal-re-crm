@@ -16,12 +16,14 @@ import { Label } from '@/components/ui/label'
 import { getFollowUpPlanTemplates, createFollowUpPlanTemplate, updateFollowUpPlanTemplate, deleteFollowUpPlanTemplate, createFollowUpPlanStep, updateFollowUpPlanStep, deleteFollowUpPlanStep } from '@/lib/database'
 import type { FollowUpPlanTemplate, FollowUpPlanStep } from '@/lib/supabase'
 import { useDataLoader } from '@/hooks/useDataLoader'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface FollowUpPlanManagementProps {
   users: any[]
 }
 
 export function FollowUpPlanManagement({ users }: FollowUpPlanManagementProps) {
+  const { user } = useAuth()
   const [plans, setPlans] = useState<(FollowUpPlanTemplate & { steps?: FollowUpPlanStep[] })[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
