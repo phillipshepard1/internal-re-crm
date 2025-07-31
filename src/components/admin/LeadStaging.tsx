@@ -52,7 +52,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Person | null>(null)
   const [selectedUserId, setSelectedUserId] = useState('')
-  const [selectedFrequency, setSelectedFrequency] = useState<'twice_week' | 'weekly' | 'biweekly' | 'monthly'>('weekly')
+  const [selectedFrequency, setSelectedFrequency] = useState<'twice_week' | 'weekly' | 'biweekly' | 'monthly'>('twice_week')
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1) // Monday
   const [assigning, setAssigning] = useState(false)
   const [assignmentNotes, setAssignmentNotes] = useState('')
@@ -195,7 +195,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
       setAssignDialogOpen(false)
       setSelectedLead(null)
       setSelectedUserId('')
-      setSelectedFrequency('weekly')
+      setSelectedFrequency('twice_week')
       setSelectedDayOfWeek(1)
       setAssignmentNotes('')
       
@@ -209,7 +209,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const openAssignDialog = (lead: Person) => {
     setSelectedLead(lead)
     setSelectedUserId('')
-    setSelectedFrequency('weekly')
+    setSelectedFrequency('twice_week')
     setSelectedDayOfWeek(1)
     setAssignmentNotes('')
     setAssignDialogOpen(true)
