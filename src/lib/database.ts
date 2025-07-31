@@ -1062,6 +1062,19 @@ export async function getAssignedLeads(userId?: string, userRole?: string) {
 }
 
 export async function assignLeadToUser(leadId: string, userId: string, assignedBy?: string) {
+  // Get the "Warm" tag ID for auto-tagging
+  const { data: warmTag, error: tagError } = await supabase
+    .from('lead_tags')
+    .select('id')
+    .eq('name', 'Warm')
+    .eq('is_active', true)
+    .single()
+
+  if (tagError) {
+    console.error('Error getting Warm tag:', tagError)
+    // Continue without auto-tagging if we can't get the tag
+  }
+
   const { data, error } = await supabase
     .from('people')
     .update({
@@ -1069,7 +1082,8 @@ export async function assignLeadToUser(leadId: string, userId: string, assignedB
       lead_status: 'assigned',
       assigned_by: assignedBy || userId, // Use assignedBy if provided, otherwise fallback to userId
       assigned_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      lead_tag_id: warmTag?.id || null // Auto-tag as "Warm"
     })
     .eq('id', leadId)
     .select()

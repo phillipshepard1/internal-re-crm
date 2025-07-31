@@ -71,11 +71,31 @@ export async function assignLeadToRoundRobin(leadData: LeadData): Promise<boolea
       return false
     }
 
-    // Create the person record with the assigned user
+    // Get the "Warm" tag ID for auto-tagging
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    const { data: warmTag, error: tagError } = await supabase
+      .from('lead_tags')
+      .select('id')
+      .eq('name', 'Warm')
+      .eq('is_active', true)
+      .single()
+
+    if (tagError) {
+      console.error('Error getting Warm tag:', tagError)
+      // Continue without auto-tagging if we can't get the tag
+    }
+
+    // Create the person record with the assigned user and auto-tagging
     const { createPerson } = await import('./database')
     const personData = {
       ...leadData,
       assigned_to: assignedUserId,
+      lead_tag_id: warmTag?.id || null, // Auto-tag as "Warm"
       last_interaction: new Date().toISOString(),
       next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
     }
@@ -112,11 +132,31 @@ export class RoundRobinService {
         return false
       }
       
-      // Create the person record and assign to the user
+      // Get the "Warm" tag ID for auto-tagging
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+      
+      const { data: warmTag, error: tagError } = await supabase
+        .from('lead_tags')
+        .select('id')
+        .eq('name', 'Warm')
+        .eq('is_active', true)
+        .single()
+
+      if (tagError) {
+        console.error('Error getting Warm tag:', tagError)
+        // Continue without auto-tagging if we can't get the tag
+      }
+      
+      // Create the person record and assign to the user with auto-tagging
       const { createPerson } = await import('./database')
       const personData = {
         ...leadData,
         assigned_to: nextUserId,
+        lead_tag_id: warmTag?.id || null, // Auto-tag as "Warm"
         last_interaction: new Date().toISOString(),
         next_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
       }
