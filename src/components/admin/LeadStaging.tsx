@@ -56,7 +56,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1) // Monday
   const [assigning, setAssigning] = useState(false)
   const [assignmentNotes, setAssignmentNotes] = useState('')
-  const itemsPerPage = 10
+  const itemsPerPage = 20
 
   // Filter users to show all users (agents and admins) so admins can assign leads to anyone including themselves
   const agents = users.filter(agent => agent.role === 'agent' || agent.role === 'admin')

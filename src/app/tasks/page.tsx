@@ -123,7 +123,7 @@ function TasksPage() {
     endIndex
   } = usePagination<Task>({
     data: tasks || [],
-    itemsPerPage: 10
+    itemsPerPage: 20
   })
 
   const handleCreateTask = () => {
