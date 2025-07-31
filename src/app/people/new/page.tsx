@@ -18,13 +18,7 @@ import { AlertModal } from '@/components/ui/alert-modal'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-const clientTypeOptions = [
-  { value: 'lead', label: 'Lead' },
-  { value: 'prospect', label: 'Prospect' },
-  { value: 'client', label: 'Client' },
-  { value: 'partner', label: 'Partner' },
-  { value: 'vendor', label: 'Vendor' },
-]
+
 
 const bestToReachOptions = [
   { value: 'phone', label: 'Phone' },
@@ -70,7 +64,7 @@ export default function AddPersonPage() {
     state: '',
     zip_code: '',
     country: '',
-    client_type: 'lead',
+
     profile_picture: '',
     birthday: '',
     mailing_address: '',
@@ -107,7 +101,7 @@ export default function AddPersonPage() {
         state: formData.state,
         zip_code: formData.zip_code,
         country: formData.country,
-        client_type: formData.client_type as 'lead' | 'prospect' | 'client' | 'partner' | 'vendor',
+
         profile_picture: formData.profile_picture,
         birthday: formData.birthday || null,
         mailing_address: formData.mailing_address,
@@ -348,24 +342,7 @@ export default function AddPersonPage() {
                 </div>
               </div>
 
-                  <div className="grid gap-2">
-                    <label htmlFor="clientType" className="text-sm font-medium">Client Type</label>
-                    <Select
-                      value={formData.client_type}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, client_type: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select client type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clientTypeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+
 
                 <div className="grid gap-2">
                     <label htmlFor="birthday" className="text-sm font-medium">Birthday</label>

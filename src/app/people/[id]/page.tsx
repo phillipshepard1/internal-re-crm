@@ -869,21 +869,7 @@ export default function PersonDetailPage() {
                     />
                   </div>
 
-                  <div className="grid gap-2">
-                    <label htmlFor="clientType" className="text-sm font-medium">Client Type</label>
-                    <Select value={formData.client_type} onValueChange={(value) => setFormData(prev => ({ ...prev, client_type: value }))}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clientTypeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+
 
                   <div className="grid gap-2">
                     <label htmlFor="notes" className="text-sm font-medium">Notes</label>
