@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getFollowUps, updateFollowUp, createFollowUp, deleteFollowUp, createActivity, createNote, getPeople, getNotes, updatePerson, getFrequencyDisplayName, getDayOfWeekDisplayName } from '@/lib/database'
+import { getFollowUps, updateFollowUp, createFollowUp, deleteFollowUp, createActivity, createNote, getPeople, getNotes, updatePerson, getFrequencyDisplayName, getDayOfWeekDisplayName, getLeadTags, updateLeadTagForLead } from '@/lib/database'
 import { createClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -140,6 +140,13 @@ export default function FollowUpsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deletingFollowUp, setDeletingFollowUp] = useState<FollowUpWithPerson | null>(null)
   const [deleting, setDeleting] = useState(false)
+  
+  // New state for lead tag editing
+  const [leadTags, setLeadTags] = useState<any[]>([])
+  const [tagModalOpen, setTagModalOpen] = useState(false)
+  const [editingPersonForTag, setEditingPersonForTag] = useState<Person | null>(null)
+  const [selectedTagId, setSelectedTagId] = useState<string>('')
+  const [tagSaving, setTagSaving] = useState(false)
   const [alertModal, setAlertModal] = useState<{
     open: boolean
     title: string
@@ -163,6 +170,18 @@ export default function FollowUpsPage() {
 
   const followUpsArray = followUps || []
 
+  // Debug logging for follow-ups data
+  useEffect(() => {
+    if (followUpsArray.length > 0) {
+      console.log('Follow-ups data:', followUpsArray)
+      console.log('User role:', userRole)
+      console.log('User ID:', user?.id)
+      // Check if any follow-ups have lead tags
+      const followUpsWithTags = followUpsArray.filter(fu => fu.people?.lead_tag)
+      console.log('Follow-ups with lead tags:', followUpsWithTags)
+    }
+  }, [followUpsArray, userRole, user?.id])
+
   const filteredFollowUps = followUpsArray.filter((fu: FollowUpWithPerson) =>
     filter === 'upcoming'
       ? fu.status !== 'completed' && new Date(fu.scheduled_date) >= new Date()
@@ -179,6 +198,20 @@ export default function FollowUpsPage() {
     }
     if (scheduleModalOpen) loadPeople()
   }, [scheduleModalOpen, user?.id, userRole])
+
+  // Load lead tags
+  useEffect(() => {
+    async function loadLeadTags() {
+      try {
+        const tags = await getLeadTags()
+        setLeadTags(tags)
+        console.log('Loaded lead tags:', tags)
+      } catch (error) {
+        console.error('Error loading lead tags:', error)
+      }
+    }
+    loadLeadTags()
+  }, [])
 
   const openInteractionModal = (fu: FollowUpWithPerson) => {
     setActiveFollowUp(fu)
@@ -454,6 +487,42 @@ export default function FollowUpsPage() {
     }
   }
 
+  // New handlers for lead tag editing
+  const openTagModal = (person: Person) => {
+    setEditingPersonForTag(person)
+    setSelectedTagId(person.lead_tag_id || 'none')
+    setTagModalOpen(true)
+  }
+
+  const closeTagModal = () => {
+    setTagModalOpen(false)
+    setEditingPersonForTag(null)
+    setSelectedTagId('none')
+  }
+
+  const handleSaveTag = async () => {
+    if (!editingPersonForTag || !user?.id) return
+    setTagSaving(true)
+    try {
+      // Convert "none" to null for removing the tag
+      const tagId = selectedTagId === "none" ? null : selectedTagId
+      await updateLeadTagForLead(editingPersonForTag.id, tagId, user.id)
+      refetch()
+      closeTagModal()
+      setAlertModal({
+        open: true,
+        title: 'Lead Tag Updated',
+        message: 'The lead tag has been successfully updated.',
+        type: 'success'
+      })
+    } catch (error) {
+      console.error('Error updating lead tag:', error)
+      setLocalError('Failed to update lead tag')
+    } finally {
+      setTagSaving(false)
+    }
+  }
+
   return (
     <div className="flex-1 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between mb-6">
@@ -495,6 +564,7 @@ export default function FollowUpsPage() {
           onOpenNotes={openNotesModal}
           onOpenInteraction={openEnhancedInteractionModal}
           onOpenFrequency={openFrequencyModal}
+          onOpenTag={openTagModal}
           onDeleteFollowUp={openDeleteModal}
           filter={filter}
           setFilter={setFilter}
@@ -751,6 +821,58 @@ export default function FollowUpsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Lead Tag Editing Modal */}
+      <Dialog open={tagModalOpen} onOpenChange={setTagModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Edit Lead Tag - {editingPersonForTag ? `${editingPersonForTag.first_name} ${editingPersonForTag.last_name}` : 'Unknown Person'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="leadTag">Lead Tag</Label>
+              <Select value={selectedTagId} onValueChange={setSelectedTagId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Tag</SelectItem>
+                  {leadTags.map(tag => (
+                    <SelectItem key={tag.id} value={tag.id}>
+                      <div className="flex items-center space-x-2">
+                        <div 
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: tag.color }}
+                        />
+                        <span>{tag.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="p-3 bg-muted/30 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                <strong>Current Tag:</strong> {editingPersonForTag?.lead_tag?.name || 'No tag assigned'}
+              </p>
+              {editingPersonForTag?.lead_tag?.description && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {editingPersonForTag.lead_tag.description}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSaveTag} disabled={tagSaving}>
+              {tagSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+            <Button variant="outline" onClick={closeTagModal} disabled={tagSaving}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={scheduleModalOpen} onOpenChange={setScheduleModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -842,6 +964,7 @@ interface WeeklyListViewProps {
   onOpenNotes: (person: Person) => void
   onOpenInteraction: (followUp: FollowUpWithPerson, type: 'call' | 'text') => void
   onOpenFrequency: (person: Person) => void
+  onOpenTag: (person: Person) => void
   onDeleteFollowUp: (followUp: FollowUpWithPerson) => void
   filter: 'upcoming' | 'overdue'
   setFilter: (filter: 'upcoming' | 'overdue') => void
@@ -859,6 +982,7 @@ function WeeklyListView({
   onOpenNotes,
   onOpenInteraction,
   onOpenFrequency,
+  onOpenTag,
   onDeleteFollowUp,
   filter, 
   setFilter, 
@@ -1134,6 +1258,27 @@ function WeeklyListView({
                               >
                                 <Settings className="h-3 w-3" />
                                 Frequency
+                              </Button>
+                            )}
+                            {followUp.people && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => onOpenTag(followUp.people!)}
+                                className="flex items-center gap-1"
+                                title={`Lead tag: ${followUp.people.lead_tag?.name || 'No tag'}`}
+                              >
+                                <Badge 
+                                  variant="outline" 
+                                  className="text-xs"
+                                  style={{
+                                    borderColor: followUp.people.lead_tag?.color || '#6b7280',
+                                    color: followUp.people.lead_tag?.color || '#6b7280',
+                                    backgroundColor: followUp.people.lead_tag?.color ? `${followUp.people.lead_tag.color}10` : 'transparent'
+                                  }}
+                                >
+                                  {followUp.people.lead_tag?.name || 'Tag'}
+                                </Badge>
                               </Button>
                             )}
                           </div>

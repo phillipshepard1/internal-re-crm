@@ -420,7 +420,14 @@ export async function getFollowUps(userId?: string, userRole?: string): Promise<
         id,
         first_name,
         last_name,
-        assigned_to
+        assigned_to,
+        lead_tag_id,
+        lead_tag:lead_tag_id (
+          id,
+          name,
+          color,
+          description
+        )
       )
     `)
     .order('scheduled_date', { ascending: true })
