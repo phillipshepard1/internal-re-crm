@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, memo } from 'react'
-import { Plus, Eye, Edit, Trash2, Calendar, Clock, CheckCircle, AlertCircle, Phone, Mail, User } from 'lucide-react'
+import { useState, memo, useEffect } from 'react'
+import { Plus, Eye, Edit, Trash2, Calendar, Clock, CheckCircle, AlertCircle, Phone, Mail, User, AtSign } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuth } from '@/contexts/AuthContext'
-import { getTasks, createTask, updateTask } from '@/lib/database'
+import { getTasks, createTask, updateTask, searchLeadsByName } from '@/lib/database'
 import type { Task } from '@/lib/supabase'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -26,8 +26,8 @@ const statusOptions = [
 ]
 
 // Move loadFunction outside component to prevent recreation on every render
-const loadTasksData = async (userId: string, userRole: string) => {
-  return await getTasks(undefined, userId, userRole)
+const loadTasksData = async (userId: string, userRole: string | null) => {
+  return await getTasks(undefined, userId, userRole || undefined)
 }
 
 function TasksPage() {
@@ -39,6 +39,13 @@ function TasksPage() {
   const [taskDueDate, setTaskDueDate] = useState('')
   const [taskStatus, setTaskStatus] = useState('pending')
   const [saving, setSaving] = useState(false)
+  
+  // @mention functionality
+  const [leadSearchTerm, setLeadSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [selectedLead, setSelectedLead] = useState<any>(null)
+  const [showLeadSearch, setShowLeadSearch] = useState(false)
+  
   const [alertModal, setAlertModal] = useState<{
     open: boolean
     title: string
@@ -59,6 +66,50 @@ function TasksPage() {
       cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
     }
   )
+
+  // Lead search functionality
+  useEffect(() => {
+    const searchLeads = async () => {
+      console.log('Search triggered:', { leadSearchTerm, user: user?.id, userRole })
+      
+      if (leadSearchTerm.trim().length >= 2 && user && user.id) {
+        try {
+          console.log('Searching for:', leadSearchTerm)
+          const results = await searchLeadsByName(leadSearchTerm, user.id, userRole || undefined)
+          console.log('Search results:', results)
+          setSearchResults(results)
+          setShowLeadSearch(true)
+        } catch (error) {
+          console.error('Error searching leads:', error)
+          setSearchResults([])
+        }
+      } else {
+        console.log('Search conditions not met:', { 
+          termLength: leadSearchTerm.trim().length, 
+          hasUser: !!user, 
+          hasUserId: !!user?.id 
+        })
+        setSearchResults([])
+        setShowLeadSearch(false)
+      }
+    }
+
+    const debounceTimer = setTimeout(searchLeads, 300)
+    return () => clearTimeout(debounceTimer)
+  }, [leadSearchTerm, user?.id, userRole])
+
+  const handleLeadSelect = (lead: any) => {
+    setSelectedLead(lead)
+    setLeadSearchTerm(lead.name)
+    setShowLeadSearch(false)
+  }
+
+  const handleClearLead = () => {
+    setSelectedLead(null)
+    setLeadSearchTerm('')
+    setSearchResults([])
+    setShowLeadSearch(false)
+  }
 
   const {
     currentData: paginatedTasks,
@@ -81,6 +132,10 @@ function TasksPage() {
     setTaskDescription('')
     setTaskDueDate('')
     setTaskStatus('pending')
+    setSelectedLead(null)
+    setLeadSearchTerm('')
+    setSearchResults([])
+    setShowLeadSearch(false)
     setShowCreateModal(true)
   }
 
@@ -90,6 +145,26 @@ function TasksPage() {
     setTaskDescription(task.description || '')
     setTaskDueDate(task.due_date || '')
     setTaskStatus(task.status)
+    
+    // If task has a person_id and people data, populate the lead search
+    if (task.person_id && task.people) {
+      setSelectedLead({
+        id: task.person_id,
+        name: `${task.people.first_name} ${task.people.last_name}`,
+        email: task.people.email[0]
+      })
+      setLeadSearchTerm(`${task.people.first_name} ${task.people.last_name}`)
+    } else if (task.person_id) {
+      // If we have person_id but no people data, just set the ID
+      setSelectedLead({ id: task.person_id })
+      setLeadSearchTerm('')
+    } else {
+      setSelectedLead(null)
+      setLeadSearchTerm('')
+    }
+    
+    setSearchResults([])
+    setShowLeadSearch(false)
     setShowCreateModal(true)
   }
 
@@ -103,6 +178,7 @@ function TasksPage() {
         const updatedTask = await updateTask(editingTask.id, {
           title: taskTitle,
           description: taskDescription,
+          person_id: selectedLead?.id || null,
           due_date: taskDueDate,
           status: taskStatus as 'pending' | 'in_progress' | 'completed',
         })
@@ -111,7 +187,7 @@ function TasksPage() {
         const newTask = await createTask({
           title: taskTitle,
           description: taskDescription,
-          person_id: null,
+          person_id: selectedLead?.id || null,
           assigned_to: user?.id || '',
           due_date: taskDueDate,
           status: taskStatus as 'pending' | 'in_progress' | 'completed',
@@ -125,6 +201,10 @@ function TasksPage() {
       setTaskDescription('')
       setTaskDueDate('')
       setTaskStatus('pending')
+      setSelectedLead(null)
+      setLeadSearchTerm('')
+      setSearchResults([])
+      setShowLeadSearch(false)
     } catch (err) {
       setAlertModal({
         open: true,
@@ -243,6 +323,68 @@ function TasksPage() {
                     placeholder="Enter task description"
                   />
                 </div>
+                
+                {/* @mention Lead Search */}
+                <div className="grid gap-2">
+                  <label htmlFor="leadSearch" className="text-sm font-medium flex items-center">
+                    <AtSign className="mr-1 h-4 w-4" />
+                    Link to Lead (Optional)
+                  </label>
+                  <div className="relative">
+                    <Input
+                      id="leadSearch"
+                      value={leadSearchTerm}
+                      onChange={(e) => setLeadSearchTerm(e.target.value)}
+                      placeholder="Type @ to search leads..."
+                      className="pr-8"
+                    />
+                    {selectedLead && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearLead}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Search Results Dropdown */}
+                  {showLeadSearch && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {searchResults.length > 0 ? (
+                        searchResults.map((lead) => (
+                          <button
+                            key={lead.id}
+                            type="button"
+                            onClick={() => handleLeadSelect(lead)}
+                            className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                          >
+                            <div className="font-medium">{lead.name}</div>
+                            <div className="text-sm text-gray-500">{lead.email}</div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-gray-500">
+                          No leads found for "{leadSearchTerm}"
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Selected Lead Display */}
+                  {selectedLead && (
+                    <div className="flex items-center space-x-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                      <User className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-800">
+                        {selectedLead.name || `Lead ID: ${selectedLead.id}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
                 <div className="grid gap-2">
                   <label htmlFor="dueDate" className="text-sm font-medium">Due Date</label>
                   <Input
@@ -295,6 +437,7 @@ function TasksPage() {
                   <TableRow>
                     <TableHead>Title</TableHead>
                     <TableHead>Description</TableHead>
+                    <TableHead>Linked Lead</TableHead>
                     <TableHead>Due Date</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
@@ -306,6 +449,23 @@ function TasksPage() {
                       <TableCell className="font-medium">{task.title}</TableCell>
                       <TableCell className="max-w-[200px] truncate">
                         {task.description || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {task.people ? (
+                          <div className="flex items-center space-x-2">
+                            <User className="h-4 w-4 text-blue-600" />
+                            <div>
+                              <div className="font-medium text-sm">
+                                {task.people.first_name} {task.people.last_name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {task.people.email[0]}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {task.due_date ? (

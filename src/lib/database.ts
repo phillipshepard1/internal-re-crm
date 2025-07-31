@@ -352,7 +352,21 @@ export async function deleteNote(id: string) {
 
 // Tasks
 export async function getTasks(personId?: string, userId?: string, userRole?: string) {
-  let query = supabase.from('tasks').select('*').order('due_date', { ascending: true })
+  let query = supabase
+    .from('tasks')
+    .select(`
+      *,
+      people!person_id (
+        id,
+        first_name,
+        last_name,
+        email
+      )
+    `)
+    .order('due_date', { ascending: true })
+  
+  // Exclude follow-up tasks (tasks created from follow-ups)
+  query = query.not('title', 'ilike', 'Follow-up:%')
   
   if (personId) {
     query = query.eq('person_id', personId)
@@ -1703,6 +1717,68 @@ export async function getLeadSources(): Promise<any[]> {
   }
 }
 
+// Search leads for @mention functionality
+export async function searchLeadsByName(searchTerm: string, userId?: string, userRole?: string): Promise<any[]> {
+  try {
+    // Strip @ symbol from search term for actual content search
+    const cleanSearchTerm = searchTerm.replace(/^@/, '')
+    
+    // Split search term into words for better matching
+    const searchWords = cleanSearchTerm.split(' ').filter(word => word.length > 0)
+    
+    let query = supabase
+      .from('people')
+      .select('id, first_name, last_name, email, lead_status')
+      .limit(10)
+    
+    // Build OR conditions for each search word
+    if (searchWords.length > 0) {
+      const orConditions = searchWords.map(word => 
+        `first_name.ilike.%${word}%,last_name.ilike.%${word}%`
+      ).join(',')
+      query = query.or(orConditions)
+    }
+    
+    // If user is an agent, only show their assigned leads
+    if (userRole === 'agent' && userId) {
+      query = query.eq('assigned_to', userId)
+    }
+    
+    const { data, error } = await query
+    if (error) throw error
+    
+    // Filter results to include email matches and full name matches
+    const filteredData = (data || []).filter(person => {
+      const fullName = `${person.first_name} ${person.last_name}`.toLowerCase()
+      const searchTermLower = cleanSearchTerm.toLowerCase()
+      
+      // Check if full name contains the search term
+      const fullNameMatch = fullName.includes(searchTermLower)
+      
+      // Check if any search word matches the full name
+      const wordMatch = searchWords.some(word => 
+        fullName.includes(word.toLowerCase())
+      )
+      
+      // Check email matches
+      const emailMatch = person.email && Array.isArray(person.email) && 
+        person.email.some(email => email.toLowerCase().includes(searchTermLower))
+      
+      return fullNameMatch || wordMatch || emailMatch
+    })
+    
+    return filteredData.map(person => ({
+      id: person.id,
+      name: `${person.first_name} ${person.last_name}`,
+      email: Array.isArray(person.email) ? person.email[0] : person.email,
+      lead_status: person.lead_status
+    }))
+  } catch (error) {
+    console.error('Error searching leads:', error)
+    return []
+  }
+}
+
 // Agent Reports Functions
 export async function getAgentReports(userId: string, startDate: string, endDate: string): Promise<any> {
   try {
@@ -1802,37 +1878,49 @@ export async function getAgentReports(userId: string, startDate: string, endDate
     if (notesError) throw notesError
 
     // Process and format the data
-    const processedActivities = (activities || []).map(activity => ({
-      id: activity.id,
-      type: activity.type,
-      description: activity.description,
-      created_at: activity.created_at,
-      person_name: activity.people ? `${activity.people.first_name} ${activity.people.last_name}` : undefined
-    }))
+    const processedActivities = (activities || []).map(activity => {
+      const people = Array.isArray(activity.people) ? activity.people[0] : activity.people
+      return {
+        id: activity.id,
+        type: activity.type,
+        description: activity.description,
+        created_at: activity.created_at,
+        person_name: people ? `${people.first_name} ${people.last_name}` : undefined
+      }
+    })
 
-    const processedFollowUps = (followUps || []).map(followUp => ({
-      id: followUp.id,
-      type: followUp.type,
-      status: followUp.status,
-      scheduled_date: followUp.scheduled_date,
-      completed_date: followUp.status === 'completed' ? followUp.updated_at : undefined,
-      person_name: followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : undefined
-    }))
+    const processedFollowUps = (followUps || []).map(followUp => {
+      const people = Array.isArray(followUp.people) ? followUp.people[0] : followUp.people
+      return {
+        id: followUp.id,
+        type: followUp.type,
+        status: followUp.status,
+        scheduled_date: followUp.scheduled_date,
+        completed_date: followUp.status === 'completed' ? followUp.updated_at : undefined,
+        person_name: people ? `${people.first_name} ${people.last_name}` : undefined
+      }
+    })
 
-    const processedMissedFollowUps = (missedFollowUps || []).map(followUp => ({
-      id: followUp.id,
-      type: followUp.type,
-      scheduled_date: followUp.scheduled_date,
-      person_name: followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : undefined
-    }))
+    const processedMissedFollowUps = (missedFollowUps || []).map(followUp => {
+      const people = Array.isArray(followUp.people) ? followUp.people[0] : followUp.people
+      return {
+        id: followUp.id,
+        type: followUp.type,
+        scheduled_date: followUp.scheduled_date,
+        person_name: people ? `${people.first_name} ${people.last_name}` : undefined
+      }
+    })
 
-    const processedNotes = (notes || []).map(note => ({
-      id: note.id,
-      title: note.title,
-      content: note.content,
-      created_at: note.created_at,
-      person_name: note.people ? `${note.people.first_name} ${note.people.last_name}` : undefined
-    }))
+    const processedNotes = (notes || []).map(note => {
+      const people = Array.isArray(note.people) ? note.people[0] : note.people
+      return {
+        id: note.id,
+        title: note.title,
+        content: note.content,
+        created_at: note.created_at,
+        person_name: people ? `${people.first_name} ${people.last_name}` : undefined
+      }
+    })
 
     // Calculate statistics
     const stats = {

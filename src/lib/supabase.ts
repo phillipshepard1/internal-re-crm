@@ -134,6 +134,12 @@ export interface Task {
   status: 'pending' | 'in_progress' | 'completed'
   created_at: string
   updated_at: string
+  people?: {
+    id: string
+    first_name: string
+    last_name: string
+    email: string[]
+  }
 }
 
 export interface FollowUp {
