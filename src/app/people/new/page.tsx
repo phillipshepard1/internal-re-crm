@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { ArrowLeft, Plus, User, MapPin, Phone, MessageSquare } from 'lucide-react'
 import { createPerson } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
+import { formatPhoneNumber, unformatPhoneNumber } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,7 +99,7 @@ export default function AddPersonPage() {
         first_name: formData.first_name,
         last_name: formData.last_name,
         email: formData.email.filter(e => e.trim()),
-        phone: formData.phone.filter(p => p.trim()),
+        phone: formData.phone.filter(p => p.trim()).map(p => unformatPhoneNumber(p)),
         company: formData.company,
         position: formData.position,
         address: formData.address,
@@ -153,7 +154,7 @@ export default function AddPersonPage() {
   const updatePhone = (index: number, value: string) => {
     setFormData(prev => ({
       ...prev,
-      phone: prev.phone.map((phone, i) => i === index ? value : phone)
+      phone: prev.phone.map((phone, i) => i === index ? formatPhoneNumber(value) : phone)
     }))
   }
 
@@ -432,7 +433,7 @@ export default function AddPersonPage() {
                     <Input
                       value={phone}
                       onChange={(e) => updatePhone(index, e.target.value)}
-                      placeholder="Enter phone number"
+                      placeholder="555-123-4567"
                           type="tel"
                         />
                   </div>

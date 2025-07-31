@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useAuth } from '@/contexts/AuthContext'
 import { getLeadsWithTags, getLeadsByTag, getLeadStatsWithTags, getLeadTags, updateLeadTagForLead, updateLeadStatus } from '@/lib/database'
 import type { Person, LeadTag } from '@/lib/supabase'
+import { formatPhoneNumberForDisplay } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { useDataLoader } from '@/hooks/useDataLoader'
@@ -542,7 +543,7 @@ export default function MyLeadsPage() {
                                 {lead.phone && lead.phone[0] && (
                                   <div className="flex items-center text-sm">
                                     <Phone className="mr-2 h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                    <span className="truncate">{lead.phone[0]}</span>
+                                    <span className="truncate">{formatPhoneNumberForDisplay(lead.phone[0])}</span>
                                   </div>
                                 )}
                               </div>

@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { getStagingLeads, getAssignedLeads, getFollowUpPlanTemplates } from '@/lib/database'
 import type { Person, FollowUpPlanTemplate } from '@/lib/supabase'
+import { formatPhoneNumberForDisplay } from '@/lib/utils'
 import { useDataLoader } from '@/hooks/useDataLoader'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -369,7 +370,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                 {lead.phone && lead.phone[0] && (
                                   <div className="flex items-center text-sm">
                                     <Phone className="mr-2 h-3 w-3 text-muted-foreground" />
-                                    {lead.phone[0]}
+                                    {formatPhoneNumberForDisplay(lead.phone[0])}
                                   </div>
                                 )}
                               </div>

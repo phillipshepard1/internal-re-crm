@@ -8,6 +8,7 @@ import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTas
 import { supabase } from '@/lib/supabase'
 import type { Person, Note, Task, Activity as ActivityType, File, FollowUpPlanTemplate, LeadTag } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { formatPhoneNumber, unformatPhoneNumber, formatPhoneNumberForDisplay } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -214,7 +215,7 @@ export default function PersonDetailPage() {
         first_name: formData.first_name,
         last_name: formData.last_name,
         email: formData.email.filter(e => e.trim()),
-        phone: formData.phone.filter(p => p.trim()),
+        phone: formData.phone.filter(p => p.trim()).map(p => unformatPhoneNumber(p)),
         company: formData.company,
         position: formData.position,
         address: formData.address,
@@ -475,7 +476,7 @@ export default function PersonDetailPage() {
   const updatePhone = (index: number, value: string) => {
     setFormData(prev => ({
       ...prev,
-      phone: prev.phone.map((phone, i) => i === index ? value : phone)
+      phone: prev.phone.map((phone, i) => i === index ? formatPhoneNumber(value) : phone)
     }))
   }
 
@@ -793,7 +794,8 @@ export default function PersonDetailPage() {
                         <Input
                           value={phone}
                           onChange={(e) => updatePhone(index, e.target.value)}
-                          placeholder="Enter phone number"
+                          placeholder="555-123-4567"
+                          type="tel"
                         />
                       </div>
                     ))}
@@ -1144,7 +1146,7 @@ export default function PersonDetailPage() {
                   {person.phone && person.phone.length > 0 && person.phone[0] && (
                     <div className="flex items-center space-x-2">
                       <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{person.phone[0]}</span>
+                                              <span>{formatPhoneNumberForDisplay(person.phone[0])}</span>
                     </div>
                   )}
                   

@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuth } from '@/contexts/AuthContext'
 import { getPeople } from '@/lib/database'
 import type { Person } from '@/lib/supabase'
+import { formatPhoneNumberForDisplay } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { useDataLoader } from '@/hooks/useDataLoader'
@@ -204,7 +205,7 @@ export default function PeoplePage() {
                         {person.phone && person.phone[0] ? (
                           <div className="flex items-center">
                             <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
-                            {person.phone[0]}
+                            {formatPhoneNumberForDisplay(person.phone[0])}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>

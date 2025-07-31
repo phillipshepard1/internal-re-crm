@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Users, RefreshCw, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react'
 import { createTestLead, getRoundRobinConfig } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
+import { formatPhoneNumber, unformatPhoneNumber } from '@/lib/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -74,7 +75,7 @@ export default function TestLeadsPage() {
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
-        phone: formData.phone,
+        phone: unformatPhoneNumber(formData.phone),
         source: formData.source,
         notes: formData.notes
       })
@@ -338,8 +339,9 @@ export default function TestLeadsPage() {
                 <Input
                   id="phone"
                   value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: formatPhoneNumber(e.target.value) }))}
                   placeholder="555-123-4567"
+                  type="tel"
                 />
               </div>
             </div>
