@@ -1347,7 +1347,10 @@ export default function PersonDetailPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     <MapPin className="mr-2 h-5 w-5" />
-                    Properties
+                    {(person.address || person.city || person.state || person.zip_code) && !person.looking_for && !person.selling && !person.closed 
+                      ? "Contact Information" 
+                      : "Properties"
+                    }
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
