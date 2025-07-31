@@ -177,8 +177,8 @@ export default function FollowUpsPage() {
       console.log('User role:', userRole)
       console.log('User ID:', user?.id)
       // Check if any follow-ups have lead tags
-      const followUpsWithTags = followUpsArray.filter(fu => fu.people?.lead_tag)
-      console.log('Follow-ups with lead tags:', followUpsWithTags)
+      // const followUpsWithTags = followUpsArray.filter((fu: FollowUpWithPerson) => fu.people?.lead_tag)
+      // console.log('Follow-ups with lead tags:', followUpsWithTags)
     }
   }, [followUpsArray, userRole, user?.id])
 

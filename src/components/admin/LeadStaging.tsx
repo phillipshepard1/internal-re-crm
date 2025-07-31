@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft } from 'lucide-react'
+import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { AlertModal } from '@/components/ui/alert-modal'
 import { getStagingLeads, getAssignedLeads, getFollowUpPlanTemplates } from '@/lib/database'
 import type { Person, FollowUpPlanTemplate } from '@/lib/supabase'
 import { formatPhoneNumberForDisplay } from '@/lib/utils'
@@ -50,12 +52,30 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [activeTab, setActiveTab] = useState(urlTab || 'staging')
   const [currentPage, setCurrentPage] = useState(urlPage ? parseInt(urlPage) : 1)
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Person | null>(null)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [selectedFrequency, setSelectedFrequency] = useState<'twice_week' | 'weekly' | 'biweekly' | 'monthly'>('twice_week')
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1) // Monday
   const [assigning, setAssigning] = useState(false)
+  const [reassigning, setReassigning] = useState(false)
   const [assignmentNotes, setAssignmentNotes] = useState('')
+  const [reassignmentNotes, setReassignmentNotes] = useState('')
+  const [selectedFollowUpPlanId, setSelectedFollowUpPlanId] = useState('')
+  const [copyFollowUps, setCopyFollowUps] = useState(true)
+  const [copyNotes, setCopyNotes] = useState(true)
+  const [followUpPlans, setFollowUpPlans] = useState<FollowUpPlanTemplate[]>([])
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
   const itemsPerPage = 20
 
   // Filter users to show all users (agents and admins) so admins can assign leads to anyone including themselves
@@ -114,6 +134,29 @@ export function LeadStaging({ users }: LeadStagingProps) {
       enabled: !!user
     }
   )
+
+  // Load follow-up plans
+  const {
+    data: plansData,
+    loading: plansLoading,
+    error: plansError,
+    refetch: refetchPlans
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await getFollowUpPlanTemplates()
+    },
+    {
+      cacheKey: 'followup_plans',
+      cacheTimeout: 60 * 1000, // 1 minute cache
+      enabled: !!user
+    }
+  )
+
+  useEffect(() => {
+    if (plansData) {
+      setFollowUpPlans(plansData)
+    }
+  }, [plansData])
 
   // Filter data based on search term
   const filterLeads = (leads: Person[]) => {
@@ -206,6 +249,73 @@ export function LeadStaging({ users }: LeadStagingProps) {
     }
   }
 
+  const handleReassignLead = async () => {
+    if (!selectedLead || !selectedUserId) return
+
+    try {
+      setReassigning(true)
+      
+      const requestBody = {
+        leadId: selectedLead.id,
+        newUserId: selectedUserId,
+        reassignedBy: user?.id,
+        followUpPlanId: selectedFollowUpPlanId === 'none' ? null : selectedFollowUpPlanId,
+        copyFollowUps,
+        copyNotes,
+        reassignmentNotes
+      }
+      
+      const response = await fetch('/api/leads/reassign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to reassign lead')
+      }
+
+      const result = await response.json()
+
+      // Refetch data
+      refetchStaging()
+      refetchAssigned()
+      
+      // Close dialog and reset form
+      setReassignDialogOpen(false)
+      setSelectedLead(null)
+      setSelectedUserId('')
+      setSelectedFollowUpPlanId('')
+      setCopyFollowUps(true)
+      setCopyNotes(true)
+      setReassignmentNotes('')
+      
+      // Show success message
+      const selectedAgent = agents.find(agent => agent.id === selectedUserId)
+      const agentName = selectedAgent ? (selectedAgent.first_name || selectedAgent.email.split('@')[0]) : 'Unknown User'
+      
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: `Lead reassigned to ${agentName} successfully! Copied ${result.copiedFollowUps} follow-ups and ${result.copiedNotes} notes.`,
+        type: 'success'
+      })
+      
+    } catch (error) {
+      console.error('Error reassigning lead:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to reassign lead. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setReassigning(false)
+    }
+  }
+
   const openAssignDialog = (lead: Person) => {
     setSelectedLead(lead)
     setSelectedUserId('')
@@ -213,6 +323,16 @@ export function LeadStaging({ users }: LeadStagingProps) {
     setSelectedDayOfWeek(1)
     setAssignmentNotes('')
     setAssignDialogOpen(true)
+  }
+
+  const openReassignDialog = (lead: Person) => {
+    setSelectedLead(lead)
+    setSelectedUserId('')
+    setSelectedFollowUpPlanId('')
+    setCopyFollowUps(true)
+    setCopyNotes(true)
+    setReassignmentNotes('')
+    setReassignDialogOpen(true)
   }
 
   const getStatusBadge = (status: string) => {
@@ -427,7 +547,6 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    
                                     <p>View lead details</p>
                                   </TooltipContent>
                                 </Tooltip>
@@ -445,6 +564,23 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       <p>Assign lead to user</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+
+                                {activeTab === 'assigned' && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => openReassignDialog(lead)}
+                                      >
+                                        <RefreshCw className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Reassign lead to different user</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 )}
@@ -567,6 +703,117 @@ export function LeadStaging({ users }: LeadStagingProps) {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Reassign Lead Dialog */}
+        <Dialog open={reassignDialogOpen} onOpenChange={setReassignDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Reassign Lead</DialogTitle>
+              <DialogDescription>
+                Reassign {selectedLead?.first_name} {selectedLead?.last_name} to a different user with optional follow-up plan and data copying
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="newAgent">Select New User</Label>
+                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a new user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.first_name || agent.email.split('@')[0]} ({agent.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="followUpPlan">Follow-up Plan (Optional)</Label>
+                <Select value={selectedFollowUpPlanId} onValueChange={setSelectedFollowUpPlanId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a follow-up plan (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No follow-up plan</SelectItem>
+                    {followUpPlans.map((plan) => (
+                      <SelectItem key={plan.id} value={plan.id}>
+                        {plan.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Select a follow-up plan to automatically create follow-up tasks for the new user
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <Label>Copy Options</Label>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="copyFollowUps"
+                      checked={copyFollowUps}
+                      onCheckedChange={setCopyFollowUps}
+                    />
+                    <Label htmlFor="copyFollowUps">Copy existing follow-up actions</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="copyNotes"
+                      checked={copyNotes}
+                      onCheckedChange={setCopyNotes}
+                    />
+                    <Label htmlFor="copyNotes">Copy recent notes (last 10)</Label>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  These options will copy the selected data to the new user's view
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reassignmentNotes">Reassignment Notes (Optional)</Label>
+                <Textarea
+                  id="reassignmentNotes"
+                  placeholder="Add any notes about this reassignment..."
+                  value={reassignmentNotes}
+                  onChange={(e) => setReassignmentNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setReassignDialogOpen(false)}
+                  disabled={reassigning}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleReassignLead}
+                  disabled={!selectedUserId || reassigning}
+                >
+                  {reassigning ? 'Reassigning...' : 'Reassign Lead'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Alert Modal */}
+        <AlertModal
+          open={alertModal.open}
+          onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+          title={alertModal.title}
+          message={alertModal.message}
+          type={alertModal.type}
+        />
       </div>
     </TooltipProvider>
   )
