@@ -1701,4 +1701,161 @@ export async function getLeadSources(): Promise<any[]> {
     console.error('Error fetching lead sources:', error)
     return []
   }
+}
+
+// Agent Reports Functions
+export async function getAgentReports(userId: string, startDate: string, endDate: string): Promise<any> {
+  try {
+    // Convert dates to ISO strings for database queries
+    const startDateTime = new Date(startDate + 'T00:00:00.000Z').toISOString()
+    const endDateTime = new Date(endDate + 'T23:59:59.999Z').toISOString()
+
+    // Get user info
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name')
+      .eq('id', userId)
+      .single()
+
+    if (userError) throw userError
+
+    // Get activities for the agent
+    const { data: activities, error: activitiesError } = await supabase
+      .from('activities')
+      .select(`
+        id,
+        type,
+        description,
+        created_at,
+        people!person_id (
+          first_name,
+          last_name
+        )
+      `)
+      .eq('created_by', userId)
+      .gte('created_at', startDateTime)
+      .lte('created_at', endDateTime)
+      .order('created_at', { ascending: false })
+
+    if (activitiesError) throw activitiesError
+
+    // Get follow-ups for the agent (through people they're assigned to)
+    const { data: followUps, error: followUpsError } = await supabase
+      .from('follow_ups')
+      .select(`
+        id,
+        type,
+        status,
+        scheduled_date,
+        updated_at,
+        people!person_id (
+          first_name,
+          last_name
+        )
+      `)
+      .eq('people.assigned_to', userId)
+      .gte('scheduled_date', startDateTime)
+      .lte('scheduled_date', endDateTime)
+      .order('scheduled_date', { ascending: false })
+
+    if (followUpsError) throw followUpsError
+
+    // Get missed follow-ups (scheduled but not completed)
+    const { data: missedFollowUps, error: missedFollowUpsError } = await supabase
+      .from('follow_ups')
+      .select(`
+        id,
+        type,
+        scheduled_date,
+        people!person_id (
+          first_name,
+          last_name
+        )
+      `)
+      .eq('people.assigned_to', userId)
+      .eq('status', 'pending')
+      .lt('scheduled_date', new Date().toISOString())
+      .gte('scheduled_date', startDateTime)
+      .lte('scheduled_date', endDateTime)
+      .order('scheduled_date', { ascending: false })
+
+    if (missedFollowUpsError) throw missedFollowUpsError
+
+    // Get notes created by the agent
+    const { data: notes, error: notesError } = await supabase
+      .from('notes')
+      .select(`
+        id,
+        title,
+        content,
+        created_at,
+        people!person_id (
+          first_name,
+          last_name
+        )
+      `)
+      .eq('created_by', userId)
+      .gte('created_at', startDateTime)
+      .lte('created_at', endDateTime)
+      .order('created_at', { ascending: false })
+
+    if (notesError) throw notesError
+
+    // Process and format the data
+    const processedActivities = (activities || []).map(activity => ({
+      id: activity.id,
+      type: activity.type,
+      description: activity.description,
+      created_at: activity.created_at,
+      person_name: activity.people ? `${activity.people.first_name} ${activity.people.last_name}` : undefined
+    }))
+
+    const processedFollowUps = (followUps || []).map(followUp => ({
+      id: followUp.id,
+      type: followUp.type,
+      status: followUp.status,
+      scheduled_date: followUp.scheduled_date,
+      completed_date: followUp.status === 'completed' ? followUp.updated_at : undefined,
+      person_name: followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : undefined
+    }))
+
+    const processedMissedFollowUps = (missedFollowUps || []).map(followUp => ({
+      id: followUp.id,
+      type: followUp.type,
+      scheduled_date: followUp.scheduled_date,
+      person_name: followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : undefined
+    }))
+
+    const processedNotes = (notes || []).map(note => ({
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      created_at: note.created_at,
+      person_name: note.people ? `${note.people.first_name} ${note.people.last_name}` : undefined
+    }))
+
+    // Calculate statistics
+    const stats = {
+      totalActivities: processedActivities.length,
+      totalFollowUps: processedFollowUps.length,
+      completedFollowUps: processedFollowUps.filter(f => f.status === 'completed').length,
+      missedFollowUps: processedMissedFollowUps.length,
+      totalNotes: processedNotes.length
+    }
+
+    return {
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.email,
+      activities: processedActivities,
+      followUps: processedFollowUps,
+      missedFollowUps: processedMissedFollowUps,
+      notes: processedNotes,
+      stats
+    }
+
+  } catch (error) {
+    console.error('Error generating agent report:', error)
+    throw error
+  }
 } 
