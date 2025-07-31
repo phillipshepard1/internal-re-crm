@@ -29,6 +29,7 @@ interface N8NLeadData {
       price_range?: string
       timeline?: string
       message?: string
+      additional_criteria?: string
       lead_source?: string
       urgency?: 'high' | 'medium' | 'low'
     }
@@ -319,7 +320,9 @@ export async function POST(request: NextRequest) {
         lead_data: {
           ...leadData.ai_analysis?.lead_data,
           lead_source: leadSourceMatch.source_name || 'email',
-          lead_source_confidence: leadSourceMatch.confidence
+          lead_source_confidence: leadSourceMatch.confidence,
+          // Map additional_criteria to message for backward compatibility
+          message: leadData.ai_analysis?.lead_data?.additional_criteria || leadData.ai_analysis?.lead_data?.message
         },
         lead_source_match: {
           matched: leadSourceMatch.matched,

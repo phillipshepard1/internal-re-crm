@@ -99,10 +99,37 @@ function stripHtmlAndCleanText(html: string): string {
 function createStructuredNotesFromLeadData(leadData: any, emailData: any, aiConfidence?: number): string {
   const notes = []
   
-  // Add email source information
-  notes.push(`Email Source: ${emailData.from}`)
+  // Add email source information (clean format)
+  if (emailData.from) {
+    // Extract clean email address from JSON object if needed
+    let fromEmail = emailData.from
+    if (typeof emailData.from === 'string' && emailData.from.includes('"')) {
+      try {
+        const fromObj = JSON.parse(emailData.from)
+        fromEmail = fromObj.text || fromObj.value?.[0]?.address || emailData.from
+      } catch (e) {
+        // If parsing fails, use as is
+        fromEmail = emailData.from
+      }
+    }
+    notes.push(`Email Source: ${fromEmail}`)
+  }
+  
   notes.push(`Subject: ${emailData.subject}`)
-  notes.push(`Date: ${emailData.date || new Date().toISOString()}`)
+  
+  // Format date properly
+  let formattedDate = emailData.date || new Date().toISOString()
+  if (formattedDate && formattedDate !== '1970-01-01T00:00:02.025Z') {
+    try {
+      formattedDate = new Date(formattedDate).toLocaleDateString()
+    } catch (e) {
+      formattedDate = emailData.date || new Date().toLocaleDateString()
+    }
+  } else {
+    formattedDate = new Date().toLocaleDateString()
+  }
+  notes.push(`Date: ${formattedDate}`)
+  
   notes.push(`Lead Source: ${leadData.lead_source}`)
   notes.push(`Confidence Score: ${((aiConfidence ?? 0) * 100).toFixed(1)}%`)
   
@@ -112,13 +139,13 @@ function createStructuredNotesFromLeadData(leadData: any, emailData: any, aiConf
   if (leadData.property_address) notes.push(`Property Address: ${leadData.property_address}`)
   if (leadData.property_details) notes.push(`Property Details: ${leadData.property_details}`)
   
-  // Add cleaned message content (truncated)
+  // Add additional criteria (renamed from message)
   if (leadData.message) {
     const cleanedMessage = stripHtmlAndCleanText(leadData.message)
     const truncatedMessage = cleanedMessage.length > 500 
       ? cleanedMessage.substring(0, 500) + '...'
       : cleanedMessage
-    notes.push(`Message: ${truncatedMessage}`)
+    notes.push(`Additional Criteria: ${truncatedMessage}`)
   }
   
   return notes.join('\n')

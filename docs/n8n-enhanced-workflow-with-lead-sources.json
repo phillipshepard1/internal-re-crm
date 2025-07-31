@@ -8,7 +8,7 @@
         "operation": "getAll",
         "returnAll": true,
         "maxResults": 10,
-        "simple": true
+        "simple": false
       },
       "id": "gmail-trigger",
       "name": "Gmail Trigger",
@@ -30,7 +30,7 @@
             },
             {
               "role": "user",
-              "content": "Analyze this real estate email and extract lead information. Return ONLY valid JSON:\n\nFrom: {{ $json.From }}\nSubject: {{ $json.Subject }}\nBody: {{ $json.snippet }}\n\n{\n  \"is_lead\": true/false,\n  \"confidence\": 0.0-1.0,\n  \"lead_data\": {\n    \"first_name\": \"string\",\n    \"last_name\": \"string\",\n    \"email\": [\"string\"],\n    \"phone\": [\"string\"],\n    \"property_details\": \"string\",\n    \"price_range\": \"string\",\n    \"timeline\": \"string\",\n    \"message\": \"string\",\n    \"lead_source\": \"email\",\n    \"urgency\": \"high/medium/low\"\n  },\n  \"analysis\": {\n    \"intent\": \"buying/selling/investing/general_inquiry\",\n    \"property_type\": \"residential/commercial/land\",\n    \"budget_range\": \"string\",\n    \"location_preferences\": [\"string\"]\n  }\n}\n\nIMPORTANT: Only mark as lead (is_lead: true) if the email contains clear real estate interest, property inquiries, buying/selling intent, or investment opportunities. Be conservative - it's better to miss a lead than create false positives."
+              "content": "Analyze this real estate email and extract lead information. Return ONLY valid JSON:\n\nFrom: {{ $json.from.text }}\nSubject: {{ $json.subject }}\nBody: {{ $json.text }}\n\n**CRITICAL: You MUST extract ALL fields that are present in the email body.**\n\n**EXTRACTION RULES:**\n1. Look for \"Name: \" in the text - extract the value after it\n2. Look for \"Best Email: \" in the text - extract the value after it  \n3. Look for \"Area(s) of Interest: \" in the text - extract the value after it\n4. Look for \"How many bedrooms?: \" in the text - extract the value after it\n5. Look for \"How many bathrooms?: \" in the text - extract the value after it\n6. Look for \"How much square feet? : \" in the text - extract the value after it\n7. Look for \"Acreage? : \" in the text - extract the value after it\n8. Look for \"Price?: \" in the text - extract the value after it\n9. Look for \"Any other criteria? : \" in the text - extract the value after it\n10. Look for \"Phone : \" in the text - extract the value after it\n\n**DO NOT LEAVE FIELDS EMPTY IF THEY EXIST IN THE TEXT.**\n\n**EXAMPLE:**\nText: \"Name: Arun Rana Best Email: arun@gmail.com Area(s) of Interest: chandigarh How many bedrooms?: 3 How many bathrooms?: 2 How much square feet? : 4000 Acreage? : 1000 Price?: 1000000 Any other criteria? : Garden, Pool Phone : (780) 781-7439\"\n\nMUST extract:\n- first_name: \"Arun\"\n- last_name: \"Rana\"\n- email: [\"arun@gmail.com\"]\n- phone: [\"(780) 781-7439\"]\n- property_details: \"3 bedrooms, 2 bathrooms, 4000 sq ft, 1000 acreage\"\n- price_range: \"1000000\"\n- city: \"chandigarh\"\n- additional_criteria: \"Garden, Pool\"\n\n**Lead Detection Rules:**\n- Name + Email = Valid Lead (confidence: 0.8-1.0)\n\nReturn JSON:\n{\n  \"is_lead\": true,\n  \"confidence\": 0.9,\n  \"lead_data\": {\n    \"first_name\": \"extract from Name: field\",\n    \"last_name\": \"extract from Name: field\", \n    \"email\": [\"extract from Best Email: field\"],\n    \"phone\": [\"extract from Phone : field\"],\n    \"property_details\": \"combine bedrooms, bathrooms, square feet, acreage\",\n    \"price_range\": \"extract from Price?: field\",\n    \"timeline\": \"\",\n    \"additional_criteria\": \"extract from Any other criteria?: field\",\n    \"lead_source\": \"email\",\n    \"urgency\": \"medium\",\n    \"address\": \"\",\n    \"city\": \"extract from Area(s) of Interest: field\",\n    \"state\": \"\",\n    \"zip_code\": \"\"\n  },\n  \"analysis\": {\n    \"intent\": \"general_inquiry\",\n    \"property_type\": \"unknown\",\n    \"budget_range\": \"extract from Price?: field\",\n    \"location_preferences\": [\"extract from Area(s) of Interest: field\"]\n  }\n}\n\nIMPORTANT: Only mark as lead (is_lead: true) if the email contains clear real estate interest, property inquiries, buying/selling intent, or investment opportunities. Be conservative - it's better to miss a lead than create false positives."
             }
           ]
         }
@@ -68,19 +68,19 @@
             },
             {
               "name": "from",
-              "value": "{{ $json.From }}"
+              "value": "{{ $json.from }}"
             },
             {
               "name": "subject",
-              "value": "{{ $json.Subject }}"
+              "value": "{{ $json.subject }}"
             },
             {
               "name": "body",
-              "value": "{{ $json.snippet }}"
+              "value": "{{ $json.text }}"
             },
             {
               "name": "date",
-              "value": "{{ $json.internalDate }}"
+              "value": "{{ $json.date }}"
             },
             {
               "name": "user_id",
