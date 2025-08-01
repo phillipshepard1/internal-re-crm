@@ -1170,7 +1170,7 @@ function WeeklyListView({
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2 flex-shrink-0">
+                          {/* <div className="flex items-center space-x-2 flex-shrink-0">
                             <Badge 
                               variant={
                                 followUp.type === 'call' ? 'default' :
@@ -1180,14 +1180,14 @@ function WeeklyListView({
                               }
                               className="capitalize"
                             >
-                              {followUp.type}
+                              {followUp.type === 'call' ? 'Phone' : followUp.type}
                             </Badge>
                             {isOverdue(followUp) && (
                               <Badge variant="destructive" className="text-xs">
                                 Overdue
                               </Badge>
                             )}
-                          </div>
+                          </div> */}
                         </div>
                         
                         <div className="flex items-center justify-between mb-3">
