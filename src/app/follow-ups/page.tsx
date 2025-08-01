@@ -1135,7 +1135,7 @@ function WeeklyListView({
                 </CardHeader>
                 
                 <CardContent className="pt-0">
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {dayFollowUps.map((followUp) => (
                       <div
                         key={followUp.id}
@@ -1146,20 +1146,20 @@ function WeeklyListView({
                         }`}
                       >
                         <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center space-x-3">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div className="font-medium">
+                          <div className="flex items-center space-x-3 min-w-0 flex-1">
+                            <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium truncate">
                                 {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown Person'}
                               </div>
                               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                                 {followUp.people?.company && (
-                                  <span>{followUp.people.company}</span>
+                                  <span className="truncate">{followUp.people.company}</span>
                                 )}
                                 {followUp.people?.follow_up_frequency && (
                                   <>
                                     <span>•</span>
-                                    <Badge variant="outline" className="text-xs">
+                                    <Badge variant="outline" className="text-xs flex-shrink-0">
                                       {getFrequencyDisplayName(followUp.people.follow_up_frequency)}
                                       {followUp.people.follow_up_day_of_week !== null && followUp.people.follow_up_day_of_week !== undefined && (
                                         <span className="ml-1">({getDayOfWeekDisplayName(followUp.people.follow_up_day_of_week)})</span>
@@ -1170,7 +1170,7 @@ function WeeklyListView({
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2 flex-shrink-0">
                             <Badge 
                               variant={
                                 followUp.type === 'call' ? 'default' :
@@ -1191,8 +1191,8 @@ function WeeklyListView({
                         </div>
                         
                         <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                            <div className="flex items-center space-x-1">
+                          <div className="flex items-center space-x-2 text-sm text-muted-foreground min-w-0 flex-1">
+                            <div className="flex items-center space-x-1 flex-shrink-0">
                               <Clock className="h-3 w-3" />
                               <span>
                                 {new Date(followUp.scheduled_date).toLocaleTimeString('en-US', { 
@@ -1203,114 +1203,123 @@ function WeeklyListView({
                               </span>
                             </div>
                             {followUp.people?.lead_source && (
-                              <div className="flex items-center space-x-1">
+                              <div className="flex items-center space-x-1 min-w-0">
                                 <span>•</span>
-                                <span>{followUp.people.lead_source}</span>
+                                <span className="truncate">{followUp.people.lead_source}</span>
                               </div>
                             )}
                           </div>
                         </div>
                         
                         {followUp.notes && (
-                          <div className="mb-3 text-sm text-muted-foreground line-clamp-2 bg-muted/30 p-2 rounded">
+                          <div className="mb-3 text-sm text-muted-foreground line-clamp-2 bg-muted/30 p-2 rounded max-h-16 overflow-hidden">
                             {followUp.notes}
                           </div>
                         )}
                         
                         {/* Enhanced Action Buttons */}
-                        <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                          <div className="flex items-center space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onOpenInteraction(followUp, 'call')}
-                              className="flex items-center gap-1"
-                            >
-                              <Phone className="h-3 w-3" />
-                              Call
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onOpenInteraction(followUp, 'text')}
-                              className="flex items-center gap-1"
-                            >
-                              <MessageSquare className="h-3 w-3" />
-                              Text
-                            </Button>
-                            {followUp.people && (
+                        <div className="flex flex-col space-y-2 pt-2 border-t border-border/50">
+                          {/* Primary Actions Row */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-1">
                               <Button
                                 size="sm"
-                                variant="ghost"
-                                onClick={() => onOpenNotes(followUp.people!)}
-                                className="flex items-center gap-1"
+                                variant="outline"
+                                onClick={() => onOpenInteraction(followUp, 'call')}
+                                className="flex items-center gap-1 h-8 px-2"
+                              >
+                                <Phone className="h-3 w-3" />
+                                <span className="hidden sm:inline">Call</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onOpenInteraction(followUp, 'text')}
+                                className="flex items-center gap-1 h-8 px-2"
+                              >
+                                <MessageSquare className="h-3 w-3" />
+                                <span className="hidden sm:inline">Text</span>
+                              </Button>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onFollowUpClick(followUp)}
+                                className="flex items-center gap-1 h-8 px-2"
                               >
                                 <FileText className="h-3 w-3" />
-                                Notes
+                                <span className="hidden sm:inline">Note</span>
                               </Button>
-                            )}
-                            {followUp.people && (
                               <Button
                                 size="sm"
-                                variant="ghost"
-                                onClick={() => onOpenFrequency(followUp.people!)}
-                                className="flex items-center gap-1"
+                                variant="default"
+                                onClick={() => onMarkCompleted(followUp)}
+                                className="flex items-center gap-1 h-8 px-2 bg-green-600 hover:bg-green-700"
                               >
-                                <Settings className="h-3 w-3" />
-                                Frequency
+                                <Check className="h-3 w-3" />
+                                <span className="hidden sm:inline">Done</span>
                               </Button>
-                            )}
-                            {followUp.people && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => onOpenTag(followUp.people!)}
-                                className="flex items-center gap-1"
-                                title={`Lead tag: ${followUp.people.lead_tag?.name || 'No tag'}`}
-                              >
-                                <Badge 
-                                  variant="outline" 
-                                  className="text-xs"
-                                  style={{
-                                    borderColor: followUp.people.lead_tag?.color || '#6b7280',
-                                    color: followUp.people.lead_tag?.color || '#6b7280',
-                                    backgroundColor: followUp.people.lead_tag?.color ? `${followUp.people.lead_tag.color}10` : 'transparent'
-                                  }}
-                                >
-                                  {followUp.people.lead_tag?.name || 'Tag'}
-                                </Badge>
-                              </Button>
-                            )}
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onFollowUpClick(followUp)}
-                              className="flex items-center gap-1"
-                            >
-                              <FileText className="h-3 w-3" />
-                              Add Note
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => onMarkCompleted(followUp)}
-                              className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
-                            >
-                              <Check className="h-3 w-3" />
-                              Done
-                            </Button>
+                          
+                          {/* Secondary Actions Row */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-1">
+                              {followUp.people && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => onOpenNotes(followUp.people!)}
+                                  className="flex items-center gap-1 h-7 px-2 text-xs"
+                                >
+                                  <FileText className="h-3 w-3" />
+                                  <span className="hidden sm:inline">Notes</span>
+                                </Button>
+                              )}
+                              {followUp.people && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => onOpenFrequency(followUp.people!)}
+                                  className="flex items-center gap-1 h-7 px-2 text-xs"
+                                >
+                                  <Settings className="h-3 w-3" />
+                                  <span className="hidden sm:inline">Freq</span>
+                                </Button>
+                              )}
+                              {followUp.people && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => onOpenTag(followUp.people!)}
+                                  className="flex items-center gap-1 h-7 px-2 text-xs"
+                                  title={`Lead tag: ${followUp.people.lead_tag?.name || 'No tag'}`}
+                                >
+                                  <Badge 
+                                    variant="outline" 
+                                    className="text-xs"
+                                    style={{
+                                      borderColor: followUp.people.lead_tag?.color || '#6b7280',
+                                      color: followUp.people.lead_tag?.color || '#6b7280',
+                                      backgroundColor: followUp.people.lead_tag?.color ? `${followUp.people.lead_tag.color}10` : 'transparent'
+                                    }}
+                                  >
+                                    {followUp.people.lead_tag?.name || 'Tag'}
+                                  </Badge>
+                                </Button>
+                              )}
+                            </div>
                             {/* Delete button - only show for overdue follow-ups */}
                             {isOverdue(followUp) && (
                               <Button
                                 size="sm"
                                 variant="destructive"
                                 onClick={() => onDeleteFollowUp(followUp)}
-                                className="flex items-center gap-1"
+                                className="flex items-center gap-1 h-7 px-2 text-xs"
                               >
                                 <Trash2 className="h-3 w-3" />
-                                Delete
+                                <span className="hidden sm:inline">Delete</span>
                               </Button>
                             )}
                           </div>
