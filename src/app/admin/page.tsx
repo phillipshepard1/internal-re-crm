@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus, Crown } from 'lucide-react'
+import { Users, Shield, Settings, Activity, Eye, Edit, Trash2, UserPlus, UserMinus, Crown, Archive, RotateCcw } from 'lucide-react'
 import { updateUserRole } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,6 +47,7 @@ export default function AdminPage() {
     message: '',
     type: 'info'
   })
+  const [showArchivedUsers, setShowArchivedUsers] = useState(false)
 
 
 
@@ -60,13 +61,22 @@ export default function AdminPage() {
     router.push(`/admin?${params.toString()}`, { scroll: false })
   }, [searchParams, router])
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (includeArchived = false) => {
     try {
       setLoading(true)
       setError('')
       
       // Load data from API
-      const response = await fetch('/api/admin/users')
+      const url = includeArchived 
+        ? '/api/admin/users?includeArchived=true'
+        : '/api/admin/users'
+      
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
       if (!response.ok) {
         throw new Error('Failed to fetch admin data')
       }
@@ -86,14 +96,14 @@ export default function AdminPage() {
       setLoading(false)
       return
     }
-    loadData()
-  }, [userRole, loadData])
+    loadData(showArchivedUsers)
+  }, [userRole, showArchivedUsers])
 
   const handleRoleChange = async (userId: string, newRole: 'admin' | 'agent') => {
     try {
       setRoleUpdateLoading(userId)
       await updateUserRole(userId, newRole)
-      await loadData() // Reload data
+      await loadData(showArchivedUsers) // Reload data
     } catch (err) {
       setAlertModal({
         open: true,
@@ -116,54 +126,110 @@ export default function AdminPage() {
     setShowUserModal(true)
   }
 
-  const handleDeleteUser = (user: User) => {
+  const handleArchiveUser = (user: User) => {
     setUserToDelete(user)
     setShowDeleteModal(true)
   }
 
-  const confirmDeleteUser = async () => {
+  const confirmArchiveUser = async () => {
     if (!userToDelete) return
 
     try {
       setDeleteLoading(true)
       
-      // Call the API to delete the user
+      // Call the API to archive the user
       const response = await fetch('/api/admin/users', {
-        method: 'DELETE',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId: userToDelete.id }),
+        body: JSON.stringify({ 
+          userId: userToDelete.id,
+          action: 'archive',
+          archivedBy: userToDelete.id // This should be the current admin's ID
+        }),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete user')
+        throw new Error(errorData.error || 'Failed to archive user')
       }
 
       const result = await response.json()
       
-      // Remove from local state after successful deletion
-      setUsers(users.filter(u => u.id !== userToDelete.id))
+      // Update local state to mark user as archived
+      setUsers(users.map(u => 
+        u.id === userToDelete.id 
+          ? { ...u, status: 'archived', archived_at: new Date().toISOString() }
+          : u
+      ))
       
       setAlertModal({
         open: true,
         title: 'Success',
-        message: result.message || `User ${userToDelete.email} has been deleted successfully.`,
+        message: result.message || `User ${userToDelete.email} has been archived successfully.`,
         type: 'success'
       })
     } catch (err) {
-      console.error('Error deleting user:', err)
+      console.error('Error archiving user:', err)
       setAlertModal({
         open: true,
         title: 'Error',
-        message: err instanceof Error ? err.message : 'Failed to delete user.',
+        message: err instanceof Error ? err.message : 'Failed to archive user.',
         type: 'error'
       })
     } finally {
       setDeleteLoading(false)
       setShowDeleteModal(false)
       setUserToDelete(null)
+    }
+  }
+
+  const handleRestoreUser = async (user: User) => {
+    try {
+      setRoleUpdateLoading(user.id)
+      
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          userId: user.id,
+          action: 'restore'
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to restore user')
+      }
+
+      const result = await response.json()
+      
+      // Update local state to mark user as active
+      setUsers(users.map(u => 
+        u.id === user.id 
+          ? { ...u, status: 'active', archived_at: null, archived_by: null }
+          : u
+      ))
+      
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: result.message || `User ${user.email} has been restored successfully.`,
+        type: 'success'
+      })
+    } catch (err) {
+      console.error('Error restoring user:', err)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: err instanceof Error ? err.message : 'Failed to restore user.',
+        type: 'error'
+      })
+    } finally {
+      setRoleUpdateLoading(null)
     }
   }
 
@@ -202,7 +268,7 @@ export default function AdminPage() {
         <Alert>
           <AlertDescription className="text-destructive">{error}</AlertDescription>
           {userRole === 'admin' && (
-            <Button onClick={loadData} className="mt-4">
+            <Button onClick={() => loadData(showArchivedUsers)} className="mt-4">
               Try Again
             </Button>
           )}
@@ -260,9 +326,9 @@ export default function AdminPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{users.length}</div>
+              <div className="text-2xl font-bold">{users.filter(u => u.status === 'active').length}</div>
               <p className="text-xs text-muted-foreground">
-                All system users
+                Active system users
               </p>
             </CardContent>
           </Card>
@@ -274,16 +340,28 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {users.filter(u => u.role === 'admin').length}
+                {users.filter(u => u.role === 'admin' && u.status === 'active').length}
               </div>
               <p className="text-xs text-muted-foreground">
-                Users with admin access
+                Active users with admin access
               </p>
             </CardContent>
           </Card>
 
-
-
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Archived Users</CardTitle>
+              <Archive className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {users.filter(u => u.status === 'archived').length}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Archived user accounts
+              </p>
+            </CardContent>
+          </Card>
 
         </div>
 
@@ -311,6 +389,19 @@ export default function AdminPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="show-archived"
+                      checked={showArchivedUsers}
+                      onCheckedChange={setShowArchivedUsers}
+                    />
+                    <label htmlFor="show-archived" className="text-sm font-medium">
+                      Show archived users
+                    </label>
+                  </div>
+                </div>
+
                 {users.length > 0 ? (
                   <Table>
                     <TableHeader>
@@ -341,8 +432,8 @@ export default function AdminPage() {
                             {new Date(user.created_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">
-                              Active
+                            <Badge variant={user.status === 'active' ? 'default' : 'secondary'}>
+                              {user.status === 'active' ? 'Active' : 'Archived'}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -375,21 +466,39 @@ export default function AdminPage() {
                                   <p>Edit user permissions</p>
                                 </TooltipContent>
                               </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => handleDeleteUser(user)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete user account</p>
-                                </TooltipContent>
-                              </Tooltip>
+                              {user.status === 'active' ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => handleArchiveUser(user)}
+                                    >
+                                      <Archive className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Archive user account</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="text-green-600 hover:text-green-700"
+                                      onClick={() => handleRestoreUser(user)}
+                                    >
+                                      <RotateCcw className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Restore user account</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -418,7 +527,7 @@ export default function AdminPage() {
                   {/* Role Management Table */}
                   <div>
                     <h3 className="font-semibold mb-3">User Role Management</h3>
-                    {users.length > 0 ? (
+                    {users.filter(user => user.status === 'active').length > 0 ? (
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -429,7 +538,7 @@ export default function AdminPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {users.map((user) => (
+                          {users.filter(user => user.status === 'active').map((user) => (
                             <TableRow key={user.id}>
                               <TableCell className="font-medium">
                                 {user.email.split('@')[0]}
@@ -524,7 +633,7 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <span className="font-medium">Status:</span>
-                  <p className="text-muted-foreground">Active</p>
+                  <p className="text-muted-foreground capitalize">{selectedUser.status}</p>
                 </div>
               </div>
               <div className="pt-3">
@@ -538,34 +647,34 @@ export default function AdminPage() {
         type="info"
       />
 
-      {/* Delete Confirmation Modal */}
+      {/* Archive Confirmation Modal */}
       <AlertModal
         open={showDeleteModal}
         onOpenChange={setShowDeleteModal}
-        title="Confirm User Deletion"
+        title="Confirm User Archive"
         message={
           userToDelete ? (
             <div className="space-y-3">
-              <p>Are you sure you want to delete the user account for:</p>
+              <p>Are you sure you want to archive the user account for:</p>
               <div className="p-3 bg-muted rounded-lg">
                 <p className="font-medium">{userToDelete.email}</p>
                 <p className="text-sm text-muted-foreground">Role: {userToDelete.role}</p>
               </div>
               <p className="text-sm text-muted-foreground">
-                This action cannot be undone. The user will lose access to the system immediately.
+                The user will lose access to the system immediately, but their data will be preserved. You can restore them later if needed.
               </p>
               {deleteLoading && (
                 <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                  <span>Deleting user...</span>
+                  <span>Archiving user...</span>
                 </div>
               )}
             </div>
-          ) : 'No user selected for deletion'
+          ) : 'No user selected for archiving'
         }
         type="warning"
-        onConfirm={confirmDeleteUser}
-        confirmText={deleteLoading ? "Deleting..." : "Delete User"}
+        onConfirm={confirmArchiveUser}
+        confirmText={deleteLoading ? "Archiving..." : "Archive User"}
         cancelText="Cancel"
         showCancel={true}
         disabled={deleteLoading}

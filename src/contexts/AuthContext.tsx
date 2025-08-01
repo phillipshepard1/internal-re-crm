@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sessionValidationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastValidationRef = useRef(0)
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isSigningInRef = useRef(false)
   
   // Debug component lifecycle
   useEffect(() => {
@@ -106,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const rolePromise = supabase
           .from('users')
-          .select('role')
+          .select('role, status')
           .eq('id', userId)
           .single()
 
@@ -130,6 +131,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const delayMs = process.env.NODE_ENV === 'production' ? 500 * attempt : 1000 * attempt
           await new Promise(resolve => setTimeout(resolve, delayMs))
         } else {
+          // Check if user is archived
+          if (data?.status === 'archived') {
+            return null // Return null for archived users
+          }
+          
           const role = data?.role || null
           
           // Cache the successful result
@@ -170,6 +176,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Validate session and update state
   const validateSession = useCallback(async () => {
+    // Don't validate if we're in the middle of signing in
+    if (isSigningInRef.current) {
+      return
+    }
+
     const now = Date.now()
     const timeSinceLastValidation = now - lastValidationRef.current
     
@@ -220,9 +231,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser)
 
         if (currentUser) {
+          // Check if user is archived
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('status, role')
+            .eq('id', currentUser.id)
+            .single()
+
+          if (userError) {
+            console.error('Error checking user status:', userError)
+            // Sign out user if we can't verify their status
+            await supabase.auth.signOut()
+            userRef.current = null
+            setUser(null)
+            userRoleRef.current = null
+            setUserRole(null)
+            return
+          }
+
+          if (userData?.status === 'archived') {
+            // Sign out archived user
+            console.log('AuthContext: User is archived, signing out', { userId: currentUser.id })
+            await supabase.auth.signOut()
+            userRef.current = null
+            setUser(null)
+            userRoleRef.current = null
+            setUserRole(null)
+            return
+          }
+
           // Get user role using the ref to avoid circular dependencies
           try {
-            const role = await getUserRoleRef.current(currentUser.id)
+            const role = userData?.role || await getUserRoleRef.current(currentUser.id)
             userRoleRef.current = role
             setUserRole(role)
             console.log('AuthContext: User role set', { role })
@@ -279,6 +319,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // Don't update user state if we're in the middle of signing in
+        if (isSigningInRef.current) {
+          return
+        }
+
         const currentUser = session?.user || null
         const currentUserId = currentUser?.id
         const previousUserId = userRef.current?.id
@@ -343,17 +388,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      isSigningInRef.current = true
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
+        isSigningInRef.current = false
         return { error: error.message }
       }
 
+      // Check if user is archived BEFORE returning success
+      if (data.user) {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('status')
+          .eq('id', data.user.id)
+          .single()
+
+        if (userError) {
+          console.error('Error checking user status:', userError)
+          // Sign out the user if we can't verify their status
+          await supabase.auth.signOut()
+          isSigningInRef.current = false
+          return { error: 'Failed to verify user account status' }
+        }
+
+        if (userData?.status === 'archived') {
+          // Sign out the user immediately
+          await supabase.auth.signOut()
+          isSigningInRef.current = false
+          return { error: 'Your account has been archived. Please contact an administrator for assistance.' }
+        }
+      }
+
+      isSigningInRef.current = false
       return { error: null }
     } catch (error) {
+      isSigningInRef.current = false
       return { error: 'An unexpected error occurred' }
     }
   }, [])

@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
+import { toast } from 'sonner'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -18,7 +19,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
-  const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const { signIn, signInWithGoogle, signOut, user } = useAuth()
   const router = useRouter()
@@ -52,7 +52,7 @@ export default function LoginPage() {
         'no_tokens': 'No authentication tokens received',
         'missing_authentication_parameters': 'OAuth configuration issue - missing authentication parameters'
       }
-      setError(errorMessages[error] || 'An error occurred during Google sign in')
+      toast.error(errorMessages[error] || 'An error occurred during Google sign in')
       
       // Clear URL parameters after showing error
       window.history.replaceState({}, document.title, window.location.pathname)
@@ -60,12 +60,18 @@ export default function LoginPage() {
       setEmail(email) // Pre-fill the email field
       if (password) {
         setPassword(password) // Pre-fill the password field
-        setSuccessMessage(`Welcome! Your Google account has been ${role === 'agent' ? 'created' : 'authenticated'} successfully. Click "Sign In" to complete the process.`)
+        const message = `Welcome! Your Google account has been ${role === 'agent' ? 'created' : 'authenticated'} successfully. Click "Sign In" to complete the process.`
+        setSuccessMessage(message)
+        toast.success(message)
       } else {
         if (role === 'agent') {
-          setSuccessMessage(`Welcome! Your Google account has been created successfully with 'agent' role. Please enter your password to complete sign in.`)
+          const message = `Welcome! Your Google account has been created successfully with 'agent' role. Please enter your password to complete sign in.`
+          setSuccessMessage(message)
+          toast.success(message)
         } else {
-          setSuccessMessage(`Welcome back! Your Google account has been authenticated successfully. Please enter your password to complete sign in.`)
+          const message = `Welcome back! Your Google account has been authenticated successfully. Please enter your password to complete sign in.`
+          setSuccessMessage(message)
+          toast.success(message)
         }
       }
     }
@@ -79,23 +85,23 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password.trim()) {
-      setError('Please fill in all fields')
+      toast.error('Please fill in all fields')
       return
     }
 
     try {
       setIsLoading(true)
-      setError('')
       
       const result = await signIn(email, password)
       
       if (result.error) {
-        setError(result.error)
+        toast.error(result.error)
       } else {
+        toast.success('Login successful!')
         router.push('/dashboard')
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      toast.error(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setIsLoading(false)
     }
@@ -123,14 +129,6 @@ export default function LoginPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {error && (
-                <Alert className="mb-4">
-                  <AlertDescription className="text-destructive">
-                    {error}
-                  </AlertDescription>
-                </Alert>
-              )}
-
               {successMessage && (
                 <Alert className="mb-4">
                   <AlertDescription className="text-green-600">
@@ -147,12 +145,11 @@ export default function LoginPage() {
                 disabled={isGoogleLoading}
                 onClick={async () => {
                   setIsGoogleLoading(true)
-                  setError('')
                   
                   const result = await signInWithGoogle()
                   
                   if (result.error) {
-                    setError(result.error)
+                    toast.error(result.error)
                     setIsGoogleLoading(false)
                   } else {
                     // If successful, the user will be redirected to Google OAuth

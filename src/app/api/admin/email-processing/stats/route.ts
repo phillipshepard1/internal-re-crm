@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     // Group by lead source
     const leadSourceCounts: Record<string, number> = {}
     leadSourceStats?.forEach(person => {
-      const source = person.lead_source || 'Unknown'
+      const source = person.lead_source || ''
       leadSourceCounts[source] = (leadSourceCounts[source] || 0) + 1
     })
 
@@ -98,11 +98,11 @@ export async function GET(request: NextRequest) {
 
     const recentActivityFormatted = recentActivity?.map(activity => ({
       id: activity.id,
-      email_from: activity.gmail_email || 'Unknown',
+      email_from: activity.gmail_email || '',
       lead_name: activity.people && activity.people.length > 0 ? 
         `${activity.people[0].first_name} ${activity.people[0].last_name}` : '',
       lead_source: activity.people && activity.people.length > 0 ? 
-        activity.people[0].lead_source || 'Unknown' : 'Unknown',
+        activity.people[0].lead_source || '' : '',
       confidence: 0.7 + Math.random() * 0.3, // Mock confidence score
       processed_at: activity.processed_at,
       status: activity.person_id ? 'success' : 'failed' as const

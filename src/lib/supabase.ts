@@ -12,6 +12,9 @@ export interface User {
   role: 'admin' | 'agent'
   first_name?: string | null
   last_name?: string | null
+  status: 'active' | 'archived'
+  archived_at?: string | null
+  archived_by?: string | null
   created_at: string
   updated_at: string
 }

@@ -404,7 +404,7 @@ export class HomeStackIntegration {
 
       const personData: Partial<Person> = {
         first_name: userData.first_name || userData.email.split('@')[0],
-        last_name: userData.last_name || 'Unknown',
+        last_name: userData.last_name || '',
         email: [userData.email],
         phone: userData.phone ? [userData.phone] : [],
         client_type: 'lead',
