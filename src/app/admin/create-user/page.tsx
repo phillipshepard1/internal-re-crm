@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import Link from 'next/link'
 
@@ -25,7 +24,6 @@ export default function CreateUserPage() {
     email: '',
     password: '',
     role: 'agent',
-    inRoundRobin: true,
     firstName: '',
     lastName: ''
   })
@@ -64,7 +62,6 @@ export default function CreateUserPage() {
           email: formData.email,
           password: formData.password,
           role: formData.role,
-          inRoundRobin: formData.inRoundRobin,
           firstName: formData.firstName,
           lastName: formData.lastName
         })
@@ -83,7 +80,6 @@ export default function CreateUserPage() {
         email: '',
         password: '',
         role: 'agent',
-        inRoundRobin: true,
         firstName: '',
         lastName: ''
       })
@@ -215,20 +211,6 @@ export default function CreateUserPage() {
                 Agents can access core features. Admins have full system access.
               </p>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="round-robin"
-                checked={formData.inRoundRobin}
-                onCheckedChange={(checked) => 
-                  setFormData(prev => ({ ...prev, inRoundRobin: checked }))
-                }
-              />
-              <Label htmlFor="round-robin">Include in Round Robin Lead Assignment</Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Users in Round Robin will automatically receive new leads.
-            </p>
 
             <div className="flex justify-end space-x-2 pt-4">
               <Button

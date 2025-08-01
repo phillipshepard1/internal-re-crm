@@ -10,7 +10,7 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { email, password, role, inRoundRobin, firstName, lastName } = body
+    const { email, password, role, firstName, lastName } = body
 
     // Validate required fields
     if (!email || !password) {
@@ -121,39 +121,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('User successfully inserted into users table:', insertedUser)
-
-    // Add to Round Robin if requested
-    if (inRoundRobin && role === 'agent') {
-      try {
-        // Get current max priority
-        const { data: maxPriorityResult } = await supabase
-          .from('round_robin_config')
-          .select('priority')
-          .order('priority', { ascending: false })
-          .limit(1)
-
-        const nextPriority = maxPriorityResult && maxPriorityResult.length > 0 
-          ? maxPriorityResult[0].priority + 1 
-          : 1
-
-        const { error: roundRobinError } = await supabase
-          .from('round_robin_config')
-          .insert({
-            user_id: authData.user.id,
-            is_active: true,
-            priority: nextPriority,
-            created_at: new Date().toISOString()
-          })
-
-        if (roundRobinError) {
-          console.error('Round Robin insert error:', roundRobinError)
-          // Don't fail the whole operation if Round Robin fails
-        }
-      } catch (err: unknown) {
-        console.error('Round Robin setup error:', err)
-        // Don't fail the whole operation if Round Robin fails
-      }
-    }
 
     return NextResponse.json({
       success: true,
