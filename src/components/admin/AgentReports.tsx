@@ -346,12 +346,12 @@ export function AgentReports({ users }: AgentReportsProps) {
                             <Badge variant={getActivityBadgeVariant(activity.type)}>
                               {activity.type.replace('_', ' ')}
                             </Badge>
-                            {activity.person_name && (
-                              <span className="text-sm font-medium text-muted-foreground">
-                                {activity.person_name}
-                              </span>
-                            )}
                           </div>
+                          {activity.person_name && (
+                            <p className="text-sm font-medium text-foreground mb-1">
+                              {activity.person_name}
+                            </p>
+                          )}
                           <p className="text-sm">{activity.description}</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             {formatDate(activity.created_at)}
@@ -393,12 +393,12 @@ export function AgentReports({ users }: AgentReportsProps) {
                               {followUp.status}
                             </Badge>
                             <Badge variant="outline">{followUp.type}</Badge>
-                            {followUp.person_name && (
-                              <span className="text-sm font-medium text-muted-foreground">
-                                {followUp.person_name}
-                              </span>
-                            )}
                           </div>
+                          {followUp.person_name && (
+                            <p className="text-sm font-medium text-foreground mb-1">
+                              {followUp.person_name}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             Scheduled: {formatDate(followUp.scheduled_date)}
                             {followUp.completed_date && (
@@ -440,12 +440,12 @@ export function AgentReports({ users }: AgentReportsProps) {
                           <div className="flex items-center space-x-2 mb-1">
                             <Badge variant="destructive">Missed</Badge>
                             <Badge variant="outline">{followUp.type}</Badge>
-                            {followUp.person_name && (
-                              <span className="text-sm font-medium text-muted-foreground">
-                                {followUp.person_name}
-                              </span>
-                            )}
                           </div>
+                          {followUp.person_name && (
+                            <p className="text-sm font-medium text-foreground mb-1">
+                              {followUp.person_name}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             Was due: {formatDate(followUp.scheduled_date)}
                           </p>
@@ -483,12 +483,12 @@ export function AgentReports({ users }: AgentReportsProps) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2 mb-1">
                             <Badge variant="outline">Note</Badge>
-                            {note.person_name && (
-                              <span className="text-sm font-medium text-muted-foreground">
-                                {note.person_name}
-                              </span>
-                            )}
                           </div>
+                          {note.person_name && (
+                            <p className="text-sm font-medium text-foreground mb-1">
+                              {note.person_name}
+                            </p>
+                          )}
                           <p className="text-sm font-medium">{note.title}</p>
                           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                             {note.content}
