@@ -1749,7 +1749,7 @@ export async function searchLeadsByName(searchTerm: string, userId?: string, use
     
     let query = supabase
       .from('people')
-      .select('id, first_name, last_name, email, lead_status')
+      .select('id, first_name, last_name, email, lead_status, client_type, assigned_to')
       .limit(10)
     
     // Build OR conditions for each search word
@@ -1760,10 +1760,15 @@ export async function searchLeadsByName(searchTerm: string, userId?: string, use
       query = query.or(orConditions)
     }
     
+    // Filter out staging leads for BOTH agents and admins - only show assigned leads and regular people
+    query = query.neq('lead_status', 'staging')
+    
     // If user is an agent, only show their assigned leads
     if (userRole === 'agent' && userId) {
       query = query.eq('assigned_to', userId)
     }
+    // For admins, show all assigned leads (not staging) and all clients
+    // The .neq('lead_status', 'staging') above already handles this
     
     const { data, error } = await query
     if (error) throw error
@@ -1792,7 +1797,8 @@ export async function searchLeadsByName(searchTerm: string, userId?: string, use
       id: person.id,
       name: `${person.first_name} ${person.last_name}`,
       email: Array.isArray(person.email) ? person.email[0] : person.email,
-      lead_status: person.lead_status
+      lead_status: person.lead_status,
+      client_type: person.client_type
     }))
   } catch (error) {
     console.error('Error searching leads:', error)

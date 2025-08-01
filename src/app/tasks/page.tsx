@@ -67,7 +67,7 @@ function TasksPage() {
     }
   )
 
-  // Lead search functionality
+  // Lead search functionality - only shows assigned leads and clients (no staging leads)
   useEffect(() => {
     const searchLeads = async () => {
       console.log('Search triggered:', { leadSearchTerm, user: user?.id, userRole })
@@ -363,7 +363,12 @@ function TasksPage() {
                             className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
                           >
                             <div className="font-medium">{lead.name}</div>
-                            <div className="text-sm text-gray-500">{lead.email}</div>
+                            <div className="text-sm text-gray-500 flex items-center justify-between">
+                              <span>{lead.email}</span>
+                              <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                {lead.client_type === 'lead' ? `Lead (${lead.lead_status})` : 'Client'}
+                              </span>
+                            </div>
                           </button>
                         ))
                       ) : (
@@ -378,9 +383,14 @@ function TasksPage() {
                   {selectedLead && (
                     <div className="flex items-center space-x-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
                       <User className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm font-medium text-blue-800">
-                        {selectedLead.name || `Lead ID: ${selectedLead.id}`}
-                      </span>
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-blue-800">
+                          {selectedLead.name || `Lead ID: ${selectedLead.id}`}
+                        </span>
+                        <div className="text-xs text-blue-600">
+                          {selectedLead.client_type === 'lead' ? `Lead (${selectedLead.lead_status})` : 'Client'}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
