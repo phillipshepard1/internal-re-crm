@@ -16,8 +16,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { AlertModal } from '@/components/ui/alert-modal'
-import { getStagingLeads, getAssignedLeads, getFollowUpPlanTemplates } from '@/lib/database'
-import type { Person, FollowUpPlanTemplate } from '@/lib/supabase'
+import { getStagingLeads, getAssignedLeads } from '@/lib/database'
+import type { Person } from '@/lib/supabase'
 import { formatPhoneNumberForDisplay } from '@/lib/utils'
 import { useDataLoader } from '@/hooks/useDataLoader'
 import { usePagination } from '@/hooks/usePagination'
@@ -61,10 +61,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [reassigning, setReassigning] = useState(false)
   const [assignmentNotes, setAssignmentNotes] = useState('')
   const [reassignmentNotes, setReassignmentNotes] = useState('')
-  const [selectedFollowUpPlanId, setSelectedFollowUpPlanId] = useState('')
   const [copyFollowUps, setCopyFollowUps] = useState(true)
   const [copyNotes, setCopyNotes] = useState(true)
-  const [followUpPlans, setFollowUpPlans] = useState<FollowUpPlanTemplate[]>([])
   const [alertModal, setAlertModal] = useState<{
     open: boolean
     title: string
@@ -135,28 +133,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
     }
   )
 
-  // Load follow-up plans
-  const {
-    data: plansData,
-    loading: plansLoading,
-    error: plansError,
-    refetch: refetchPlans
-  } = useDataLoader(
-    async (userId: string, userRole: string) => {
-      return await getFollowUpPlanTemplates()
-    },
-    {
-      cacheKey: 'followup_plans',
-      cacheTimeout: 60 * 1000, // 1 minute cache
-      enabled: !!user
-    }
-  )
 
-  useEffect(() => {
-    if (plansData) {
-      setFollowUpPlans(plansData)
-    }
-  }, [plansData])
 
   // Filter data based on search term
   const filterLeads = (leads: Person[]) => {
@@ -259,7 +236,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
         leadId: selectedLead.id,
         newUserId: selectedUserId,
         reassignedBy: user?.id,
-        followUpPlanId: selectedFollowUpPlanId === 'none' ? null : selectedFollowUpPlanId,
+        followUpFrequency: selectedFrequency,
+        followUpDayOfWeek: selectedDayOfWeek,
         copyFollowUps,
         copyNotes,
         reassignmentNotes
@@ -287,7 +265,6 @@ export function LeadStaging({ users }: LeadStagingProps) {
       setReassignDialogOpen(false)
       setSelectedLead(null)
       setSelectedUserId('')
-      setSelectedFollowUpPlanId('')
       setCopyFollowUps(true)
       setCopyNotes(true)
       setReassignmentNotes('')
@@ -328,7 +305,8 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const openReassignDialog = (lead: Person) => {
     setSelectedLead(lead)
     setSelectedUserId('')
-    setSelectedFollowUpPlanId('')
+    setSelectedFrequency('twice_week')
+    setSelectedDayOfWeek(1)
     setCopyFollowUps(true)
     setCopyNotes(true)
     setReassignmentNotes('')
@@ -706,15 +684,15 @@ export function LeadStaging({ users }: LeadStagingProps) {
 
         {/* Reassign Lead Dialog */}
         <Dialog open={reassignDialogOpen} onOpenChange={setReassignDialogOpen}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Reassign Lead</DialogTitle>
               <DialogDescription>
-                Reassign {selectedLead?.first_name} {selectedLead?.last_name} to a different user with optional follow-up plan and data copying
+                Reassign {selectedLead?.first_name} {selectedLead?.last_name} to a different user with follow-up frequency and data copying options
               </DialogDescription>
             </DialogHeader>
             
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="space-y-2">
                 <Label htmlFor="newAgent">Select New User</Label>
                 <Select value={selectedUserId} onValueChange={setSelectedUserId}>
@@ -731,36 +709,54 @@ export function LeadStaging({ users }: LeadStagingProps) {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="followUpPlan">Follow-up Plan (Optional)</Label>
-                <Select value={selectedFollowUpPlanId} onValueChange={setSelectedFollowUpPlanId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a follow-up plan (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No follow-up plan</SelectItem>
-                    {followUpPlans.map((plan) => (
-                      <SelectItem key={plan.id} value={plan.id}>
-                        {plan.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground">
-                  Select a follow-up plan to automatically create follow-up tasks for the new user
-                </p>
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="frequency">Follow-up Frequency</Label>
+                  <Select value={selectedFrequency} onValueChange={(value: 'twice_week' | 'weekly' | 'biweekly' | 'monthly') => setSelectedFrequency(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="twice_week">Twice a Week (Mon & Thu)</SelectItem>
+                      <SelectItem value="weekly">Every Week</SelectItem>
+                      <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                      <SelectItem value="monthly">Every Month</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dayOfWeek">Preferred Day</Label>
+                  <Select value={String(selectedDayOfWeek)} onValueChange={(value) => setSelectedDayOfWeek(Number(value))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose day" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Sunday</SelectItem>
+                      <SelectItem value="1">Monday</SelectItem>
+                      <SelectItem value="2">Tuesday</SelectItem>
+                      <SelectItem value="3">Wednesday</SelectItem>
+                      <SelectItem value="4">Thursday</SelectItem>
+                      <SelectItem value="5">Friday</SelectItem>
+                      <SelectItem value="6">Saturday</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Auto follow-ups will be created based on the selected frequency and day
+              </p>
+
+              <div className="space-y-3">
                 <Label>Copy Options</Label>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="flex items-center space-x-2">
                     <Switch
                       id="copyFollowUps"
                       checked={copyFollowUps}
                       onCheckedChange={setCopyFollowUps}
                     />
-                    <Label htmlFor="copyFollowUps">Copy existing follow-up actions</Label>
+                    <Label htmlFor="copyFollowUps" className="text-sm">Copy existing follow-ups</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Switch
@@ -768,11 +764,11 @@ export function LeadStaging({ users }: LeadStagingProps) {
                       checked={copyNotes}
                       onCheckedChange={setCopyNotes}
                     />
-                    <Label htmlFor="copyNotes">Copy recent notes (last 10)</Label>
+                    <Label htmlFor="copyNotes" className="text-sm">Copy recent notes (last 10)</Label>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  These options will copy the selected data to the new user's view
+                  Copy selected data to the new user's view
                 </p>
               </div>
 
@@ -783,19 +779,22 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   placeholder="Add any notes about this reassignment..."
                   value={reassignmentNotes}
                   onChange={(e) => setReassignmentNotes(e.target.value)}
-                  rows={3}
+                  rows={2}
+                  className="resize-none"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-4">
+              <div className="flex justify-end space-x-2 pt-3">
                 <Button 
                   variant="outline" 
+                  size="sm"
                   onClick={() => setReassignDialogOpen(false)}
                   disabled={reassigning}
                 >
                   Cancel
                 </Button>
                 <Button 
+                  size="sm"
                   onClick={handleReassignLead}
                   disabled={!selectedUserId || reassigning}
                 >

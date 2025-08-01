@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
       leadId, 
       newUserId, 
       reassignedBy, 
-      followUpPlanId, 
+      followUpFrequency, 
+      followUpDayOfWeek,
       copyFollowUps = true, 
       copyNotes = true,
       reassignmentNotes 
@@ -73,7 +74,8 @@ export async function POST(request: NextRequest) {
         assigned_by: reassignedBy || newUserId,
         assigned_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        follow_up_plan_id: followUpPlanId || null
+        follow_up_frequency: followUpFrequency,
+        follow_up_day_of_week: followUpDayOfWeek
       })
       .eq('id', leadId)
       .select()
@@ -164,40 +166,14 @@ export async function POST(request: NextRequest) {
         created_by: reassignedBy || newUserId
       }])
 
-    // If a follow-up plan was selected, apply it
-    if (followUpPlanId) {
+    // Apply follow-up frequency settings
+    if (followUpFrequency) {
       try {
-        // Get the follow-up plan template
-        const { data: planTemplate, error: planError } = await supabase
-          .from('follow_up_plan_templates')
-          .select(`
-            *,
-            steps:follow_up_plan_steps(*)
-          `)
-          .eq('id', followUpPlanId)
-          .single()
-
-        if (!planError && planTemplate && planTemplate.steps) {
-          // Create follow-ups based on the plan
-          const planFollowUps = planTemplate.steps.map((step: any) => ({
-            person_id: leadId,
-            assigned_to: newUserId,
-            type: step.type,
-            title: step.title,
-            description: step.description,
-            scheduled_date: new Date(Date.now() + (step.days_after_assignment * 24 * 60 * 60 * 1000)).toISOString(),
-            status: 'pending',
-            created_by: reassignedBy || newUserId,
-            notes: step.notes
-          }))
-
-          await supabase
-            .from('follow_ups')
-            .insert(planFollowUps)
-        }
-      } catch (planError) {
-        console.error('Error applying follow-up plan:', planError)
-        // Don't fail the reassignment if plan application fails
+        const { applyFollowUpFrequencyToLead } = await import('@/lib/database')
+        await applyFollowUpFrequencyToLead(leadId, followUpFrequency, followUpDayOfWeek || 1, newUserId)
+      } catch (frequencyError) {
+        console.error('Error applying follow-up frequency:', frequencyError)
+        // Don't fail the reassignment if frequency application fails
       }
     }
 
