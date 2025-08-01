@@ -48,6 +48,8 @@ export default function AdminPage() {
     type: 'info'
   })
 
+
+
   // Get the active tab from URL params, default to 'leads' instead of 'users'
   const activeTab = searchParams.get('tab') || 'leads'
 
@@ -164,6 +166,8 @@ export default function AdminPage() {
       setUserToDelete(null)
     }
   }
+
+
 
   if (loading) {
     return (
@@ -490,6 +494,8 @@ export default function AdminPage() {
           <TabsContent value="reports" className="space-y-4">
             <AgentReports users={users} />
           </TabsContent>
+
+
         </Tabs>
       </div>
       

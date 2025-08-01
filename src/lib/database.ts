@@ -281,9 +281,31 @@ export async function deletePerson(id: string) {
 }
 
 export async function createPerson(personData: Partial<Person>) {
+  // Validate required fields
+  if (!personData.first_name || !personData.first_name.trim()) {
+    throw new Error('First name is required')
+  }
+  
+  if (!personData.last_name || !personData.last_name.trim()) {
+    throw new Error('Last name is required')
+  }
+  
+  if (!personData.assigned_to) {
+    throw new Error('Assigned user is required')
+  }
+  
+  // Clean up the data
+  const cleanData = {
+    ...personData,
+    first_name: personData.first_name.trim(),
+    last_name: personData.last_name.trim(),
+    email: Array.isArray(personData.email) ? personData.email.filter(e => e && e.trim()) : [],
+    phone: Array.isArray(personData.phone) ? personData.phone.filter(p => p && p.trim()) : []
+  }
+  
   const { data, error } = await supabase
     .from('people')
-    .insert([personData])
+    .insert([cleanData])
     .select()
     .single()
   
@@ -440,11 +462,31 @@ export async function getFollowUps(userId?: string, userRole?: string): Promise<
   const { data, error } = await query
   if (error) throw error
   
-  // Transform the data to match FollowUpWithPerson type
-  const transformedData = (data || []).map((item: any) => ({
-    ...item,
-    people: Array.isArray(item.people) ? item.people[0] : item.people
-  }))
+  // Debug: Log orphaned follow-ups
+  const orphanedFollowUps = (data || []).filter((item: any) => {
+    const people = Array.isArray(item.people) ? item.people[0] : item.people
+    return !people || !people.id || !people.first_name || !people.last_name
+  })
+  
+  if (orphanedFollowUps.length > 0) {
+    console.warn('Found orphaned follow-ups:', orphanedFollowUps.map(fu => ({
+      id: fu.id,
+      person_id: fu.person_id,
+      scheduled_date: fu.scheduled_date,
+      people: fu.people
+    })))
+  }
+  
+  // Transform the data to match FollowUpWithPerson type and filter out orphaned follow-ups
+  const transformedData = (data || [])
+    .map((item: any) => ({
+      ...item,
+      people: Array.isArray(item.people) ? item.people[0] : item.people
+    }))
+    .filter((item: FollowUpWithPerson) => {
+      // Filter out follow-ups that don't have valid people data
+      return item.people && item.people.id && item.people.first_name && item.people.last_name
+    })
   
   return transformedData
 }
@@ -523,6 +565,82 @@ export async function deleteFollowUp(id: string) {
     .eq('id', id)
   
   if (error) throw error
+}
+
+// Function to clean up orphaned follow-ups (follow-ups without valid people records)
+export async function cleanupOrphanedFollowUps(): Promise<number> {
+  try {
+    // Use a simpler approach: get all follow-ups and filter in JavaScript
+    const { data: allFollowUps, error: followupError } = await supabase
+      .from('follow_ups')
+      .select('id, person_id')
+    
+    if (followupError) throw followupError
+    
+    if (!allFollowUps || allFollowUps.length === 0) {
+      return 0
+    }
+    
+    // Get all people IDs
+    const { data: peopleIds, error: peopleError } = await supabase
+      .from('people')
+      .select('id')
+    
+    if (peopleError) throw peopleError
+    
+    const validPersonIds = new Set(peopleIds?.map(p => p.id) || [])
+    
+    // Find orphaned follow-ups
+    const orphanedFollowUps = allFollowUps.filter(fu => !validPersonIds.has(fu.person_id))
+    
+    if (orphanedFollowUps.length > 0) {
+      console.warn(`Found ${orphanedFollowUps.length} orphaned follow-ups to clean up`)
+      
+      // Delete the orphaned follow-ups
+      const { error: deleteError } = await supabase
+        .from('follow_ups')
+        .delete()
+        .in('id', orphanedFollowUps.map(fu => fu.id))
+      
+      if (deleteError) throw deleteError
+      
+      console.log(`Successfully cleaned up ${orphanedFollowUps.length} orphaned follow-ups`)
+      return orphanedFollowUps.length
+    }
+    
+    return 0
+  } catch (error) {
+    console.error('Error cleaning up orphaned follow-ups:', error)
+    throw error
+  }
+}
+
+// Function to validate people data and identify issues
+export async function validatePeopleData(): Promise<Array<{person_id: string, issue: string}>> {
+  try {
+    const { data, error } = await supabase.rpc('validate_people_data')
+    
+    if (error) throw error
+    
+    return data || []
+  } catch (error) {
+    console.error('Error validating people data:', error)
+    throw error
+  }
+}
+
+// Function to clean up invalid people records
+export async function cleanupInvalidPeople(): Promise<number> {
+  try {
+    const { data, error } = await supabase.rpc('cleanup_invalid_people')
+    
+    if (error) throw error
+    
+    return data || 0
+  } catch (error) {
+    console.error('Error cleaning up invalid people:', error)
+    throw error
+  }
 }
 
 // Activities
