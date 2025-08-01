@@ -52,7 +52,10 @@ export default function CreateUserPage() {
       setError('')
       setSuccess('')
 
-      // Use the server-side API route
+      // Use the server-side API route with timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
         headers: {
@@ -64,8 +67,11 @@ export default function CreateUserPage() {
           role: formData.role,
           firstName: formData.firstName,
           lastName: formData.lastName
-        })
+        }),
+        signal: controller.signal
       })
+      
+      clearTimeout(timeoutId)
 
       const result = await response.json()
 
@@ -75,21 +81,25 @@ export default function CreateUserPage() {
 
       setSuccess(`User created successfully! Email: ${formData.email}`)
       
-      // Reset form
-      setFormData({
-        email: '',
-        password: '',
-        role: 'agent',
-        firstName: '',
-        lastName: ''
-      })
-
-      // Auto-hide success message after 5 seconds
-      setTimeout(() => setSuccess(''), 5000)
+      // Reset form after a short delay to show success message
+      setTimeout(() => {
+        setFormData({
+          email: '',
+          password: '',
+          role: 'agent',
+          firstName: '',
+          lastName: ''
+        })
+        setSuccess('')
+      }, 3000)
 
     } catch (err: unknown) {
       console.error('Error creating user:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create user')
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Request timed out. Please try again.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to create user')
+      }
     } finally {
       setLoading(false)
     }
@@ -116,8 +126,10 @@ export default function CreateUserPage() {
       )}
 
       {success && (
-        <Alert>
-          <AlertDescription>{success}</AlertDescription>
+        <Alert className="border-green-200 bg-green-50">
+          <AlertDescription className="text-green-800 font-medium">
+            ✅ {success}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -141,6 +153,7 @@ export default function CreateUserPage() {
                   value={formData.firstName}
                   onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
                   placeholder="John"
+                  disabled={loading}
                 />
               </div>
               <div className="space-y-2">
@@ -150,6 +163,7 @@ export default function CreateUserPage() {
                   value={formData.lastName}
                   onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
                   placeholder="Doe"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -163,6 +177,7 @@ export default function CreateUserPage() {
                 value={formData.email}
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="user@example.com"
+                disabled={loading}
               />
             </div>
 
@@ -177,6 +192,7 @@ export default function CreateUserPage() {
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   placeholder="Enter a secure password"
                   minLength={6}
+                  disabled={loading}
                 />
                 <Button
                   type="button"
@@ -198,6 +214,7 @@ export default function CreateUserPage() {
               <Select
                 value={formData.role}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}
+                disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
@@ -222,7 +239,14 @@ export default function CreateUserPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={loading || !formData.email || !formData.password}>
-                {loading ? 'Creating...' : 'Create User'}
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                    Creating User...
+                  </>
+                ) : (
+                  'Create User'
+                )}
               </Button>
             </div>
           </form>
