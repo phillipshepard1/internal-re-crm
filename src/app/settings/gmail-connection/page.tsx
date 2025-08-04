@@ -244,14 +244,14 @@ export default function GmailConnectionPage() {
       <div className="flex gap-4">
         {gmailStatus?.userConnected ? (
           <>
-            <Button
+            {/* <Button
               variant="outline"
               onClick={() => window.location.href = '/inbox'}
               className="flex-1"
             >
               <Mail className="h-4 w-4 mr-2" />
               Go to Inbox
-            </Button>
+            </Button> */}
             <Button
               variant="outline"
               onClick={disconnectGmail}

@@ -20,13 +20,15 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=${error}`
+        // `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=${error}`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings/gmail-connection?error=${error}`
       )
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=missing_params`
+        // `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=missing_params`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings/gmail-connection?error=missing_params`
       )
     }
 
@@ -37,7 +39,8 @@ export async function GET(request: NextRequest) {
       userId = stateData.userId
     } catch (error) {
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=invalid_state`
+        // `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=invalid_state`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings/gmail-connection?error=invalid_state`
       )
     }
 
@@ -59,7 +62,8 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       console.error('Token exchange failed:', await tokenResponse.text())
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=token_exchange_failed`
+        // `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=token_exchange_failed`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings/gmail-connection?error=token_exchange_failed`
       )
     }
 
@@ -103,19 +107,22 @@ export async function GET(request: NextRequest) {
     if (insertError) {
       console.error('Error storing Gmail tokens:', insertError)
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=storage_failed`
+        // `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=storage_failed`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings/gmail-connection?error=storage_failed`
       )
     }
 
-    // Redirect back to inbox with success
+    // Redirect back to settings/gmail-connection with success (was inbox)
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?success=true&email=${encodeURIComponent(gmailEmail)}`
+      // `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?success=true&email=${encodeURIComponent(gmailEmail)}`
+      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings/gmail-connection?success=true&email=${encodeURIComponent(gmailEmail)}`
     )
 
   } catch (error) {
     console.error('Gmail OAuth callback error:', error)
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=callback_failed`
+      // `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/inbox?error=callback_failed`
+      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings/gmail-connection?error=callback_failed`
     )
   }
 } 
