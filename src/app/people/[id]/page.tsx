@@ -577,11 +577,11 @@ export default function PersonDetailPage() {
       // Update the person to remove lead status while keeping all other data
       await updatePerson(person.id, {
         client_type: 'prospect', // Change from 'lead' to 'prospect'
-        lead_status: null, // Remove lead status
-        lead_tag_id: null, // Remove lead tag
-        follow_up_plan_id: null, // Remove follow-up plan
-        follow_up_frequency: null, // Remove follow-up frequency
-        follow_up_day_of_week: null, // Remove follow-up day
+        lead_status: undefined, // Remove lead status
+        lead_tag_id: undefined, // Remove lead tag
+        follow_up_plan_id: undefined, // Remove follow-up plan
+        follow_up_frequency: undefined, // Remove follow-up frequency
+        follow_up_day_of_week: undefined, // Remove follow-up day
         // Keep assigned_to as is - don't try to clear it
         // assigned_to field is required in DB, so we keep the current assignment
         updated_at: new Date().toISOString()
