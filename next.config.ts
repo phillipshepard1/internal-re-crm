@@ -12,8 +12,17 @@ const nextConfig: NextConfig = {
     // Enable server actions
     serverActions: {
       bodySizeLimit: '2mb'
-    }
+    },
+    
+    // Reduce memory usage during build
+    workerThreads: false,
+    cpus: 1
   },
+  
+  // Reduce build memory consumption
+  swcMinify: true,
+  compress: true,
+  productionBrowserSourceMaps: false,
   
   // Webpack configuration for better React 19 support
   webpack: (config, { dev, isServer }) => {
