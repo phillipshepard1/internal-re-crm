@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft, RefreshCw, Trash2, Archive, Plus } from 'lucide-react'
+import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft, RefreshCw, Trash2, Archive, Plus, Sparkles } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -95,6 +95,12 @@ export function LeadStaging({ users }: LeadStagingProps) {
     source: 'manual',
     notes: ''
   })
+  
+  // Duplicate removal state
+  const [removeDuplicatesDialogOpen, setRemoveDuplicatesDialogOpen] = useState(false)
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  const [removingDuplicates, setRemovingDuplicates] = useState(false)
+  const [duplicateInfo, setDuplicateInfo] = useState<any>(null)
   
   const itemsPerPage = 20
 
@@ -688,6 +694,100 @@ export function LeadStaging({ users }: LeadStagingProps) {
     }
   }
 
+  // Check for duplicates
+  const handleCheckDuplicates = async () => {
+    try {
+      setCheckingDuplicates(true)
+      
+      const response = await fetch('/api/admin/remove-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setDuplicateInfo(result)
+        if (result.duplicates.length === 0) {
+          setAlertModal({
+            open: true,
+            title: 'No Duplicates Found',
+            message: 'There are no duplicate leads in the staging area.',
+            type: 'info'
+          })
+          setRemoveDuplicatesDialogOpen(false)
+        }
+      } else {
+        setAlertModal({
+          open: true,
+          title: 'Error',
+          message: result.error || 'Failed to check for duplicates',
+          type: 'error'
+        })
+      }
+    } catch (error) {
+      console.error('Error checking duplicates:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to check for duplicates. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setCheckingDuplicates(false)
+    }
+  }
+
+  // Remove duplicates
+  const handleRemoveDuplicates = async () => {
+    try {
+      setRemovingDuplicates(true)
+      
+      const response = await fetch('/api/admin/remove-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: false })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // Refetch staging leads
+        refetchStaging()
+        
+        // Close dialog
+        setRemoveDuplicatesDialogOpen(false)
+        setDuplicateInfo(null)
+        
+        // Show success message
+        setAlertModal({
+          open: true,
+          title: 'Success',
+          message: result.message,
+          type: 'success'
+        })
+      } else {
+        setAlertModal({
+          open: true,
+          title: 'Error',
+          message: result.error || 'Failed to remove duplicates',
+          type: 'error'
+        })
+      }
+    } catch (error) {
+      console.error('Error removing duplicates:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to remove duplicates. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setRemovingDuplicates(false)
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="space-y-4">
@@ -704,13 +804,28 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   className="pl-8"
                 />
               </div>
-              <Button
-                onClick={() => setCreateLeadDialogOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Create Lead
-              </Button>
+              <div className="flex items-center gap-2">
+                {activeTab === 'staging' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setRemoveDuplicatesDialogOpen(true)
+                      setDuplicateInfo(null)
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Remove Duplicates
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setCreateLeadDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Lead
+                </Button>
+              </div>
             </div>
           </CardHeader>
         </Card>
@@ -1506,6 +1621,126 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   {creatingLead ? 'Creating...' : 'Create Lead'}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Remove Duplicates Dialog */}
+        <Dialog open={removeDuplicatesDialogOpen} onOpenChange={setRemoveDuplicatesDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Remove Duplicate Leads</DialogTitle>
+              <DialogDescription>
+                {!duplicateInfo 
+                  ? "Check for duplicate leads in the staging area based on exact matching information"
+                  : `Found ${duplicateInfo.duplicates.length} groups of duplicates (${duplicateInfo.removed || 0} leads to remove)`
+                }
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {!duplicateInfo ? (
+                // Initial state - show check button
+                <div className="space-y-4">
+                  <div className="p-4 bg-muted/30 border rounded-lg">
+                    <p className="text-sm">
+                      This will find leads with exactly matching:
+                    </p>
+                    <ul className="text-sm text-muted-foreground mt-2 space-y-1 list-disc list-inside">
+                      <li>First and Last Name</li>
+                      <li>Email Address</li>
+                      <li>Phone Number</li>
+                      <li>Lead Source</li>
+                    </ul>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      The oldest lead in each group will be kept, newer duplicates will be removed.
+                    </p>
+                  </div>
+                  
+                  <div className="flex justify-end space-x-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setRemoveDuplicatesDialogOpen(false)}
+                      disabled={checkingDuplicates}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleCheckDuplicates}
+                      disabled={checkingDuplicates}
+                    >
+                      {checkingDuplicates ? 'Checking...' : 'Check for Duplicates'}
+                    </Button>
+                  </div>
+                </div>
+              ) : duplicateInfo.duplicates.length > 0 ? (
+                // Found duplicates - show details
+                <div className="space-y-4">
+                  <div className="max-h-[300px] overflow-y-auto space-y-3">
+                    {duplicateInfo.duplicates.map((group: any, index: number) => (
+                      <Card key={index} className="p-3">
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Duplicate Group {index + 1}</p>
+                          <div className="space-y-1">
+                            {group.leads.map((lead: any) => (
+                              <div 
+                                key={lead.id} 
+                                className={`text-xs flex items-center justify-between p-2 rounded ${
+                                  lead.toRemove ? 'bg-destructive/10 text-destructive' : 'bg-muted'
+                                }`}
+                              >
+                                <span>
+                                  {lead.name} • {lead.email || 'No email'} • {lead.phone || 'No phone'}
+                                </span>
+                                <Badge variant={lead.toRemove ? 'destructive' : 'secondary'} className="text-xs">
+                                  {lead.toRemove ? 'To Remove' : 'Keep'}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                  
+                  <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <AlertCircle className="h-5 w-5 text-destructive" />
+                      <span className="font-medium text-destructive">Warning</span>
+                    </div>
+                    <p className="text-sm text-destructive mt-2">
+                      This will permanently delete {duplicateInfo.removed || duplicateInfo.duplicates.reduce((acc: number, g: any) => acc + g.leads.filter((l: any) => l.toRemove).length, 0)} duplicate leads. This action cannot be undone.
+                    </p>
+                  </div>
+                  
+                  <div className="flex justify-end space-x-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setRemoveDuplicatesDialogOpen(false)
+                        setDuplicateInfo(null)
+                      }}
+                      disabled={removingDuplicates}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      variant="destructive"
+                      onClick={handleRemoveDuplicates}
+                      disabled={removingDuplicates}
+                    >
+                      {removingDuplicates ? 'Removing...' : 'Remove Duplicates'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                // No duplicates found
+                <div className="text-center py-4">
+                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-2" />
+                  <p className="text-sm font-medium">No duplicates found!</p>
+                  <p className="text-sm text-muted-foreground">All staging leads are unique.</p>
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>
