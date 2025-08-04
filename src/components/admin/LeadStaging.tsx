@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft, RefreshCw, Trash2, Archive } from 'lucide-react'
+import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft, RefreshCw, Trash2, Archive, Plus } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,6 +83,18 @@ export function LeadStaging({ users }: LeadStagingProps) {
   const [bulkAssigning, setBulkAssigning] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkArchiving, setBulkArchiving] = useState(false)
+  
+  // Manual lead creation state
+  const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false)
+  const [creatingLead, setCreatingLead] = useState(false)
+  const [newLeadData, setNewLeadData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    source: 'manual',
+    notes: ''
+  })
   
   const itemsPerPage = 20
 
@@ -607,14 +619,83 @@ export function LeadStaging({ users }: LeadStagingProps) {
     }
   }
 
+  // Manual lead creation handler
+  const handleCreateLead = async () => {
+    if (!newLeadData.firstName || !newLeadData.lastName) {
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'First name and last name are required',
+        type: 'error'
+      })
+      return
+    }
+
+    try {
+      setCreatingLead(true)
+      
+      const response = await fetch('/api/admin/create-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newLeadData,
+          createdBy: user?.id
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // Reset form
+        setNewLeadData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          source: 'manual',
+          notes: ''
+        })
+        setCreateLeadDialogOpen(false)
+        
+        // Refetch staging leads
+        refetchStaging()
+        
+        // Show success message
+        setAlertModal({
+          open: true,
+          title: 'Success',
+          message: `Lead ${newLeadData.firstName} ${newLeadData.lastName} has been created successfully`,
+          type: 'success'
+        })
+      } else {
+        setAlertModal({
+          open: true,
+          title: 'Error',
+          message: result.error || 'Failed to create lead',
+          type: 'error'
+        })
+      }
+    } catch (error) {
+      console.error('Error creating lead:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to create lead. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setCreatingLead(false)
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        {/* Search */}
+        {/* Search and Actions */}
         <Card>
           <CardHeader>
-            <div className="flex items-center space-x-2">
-              <div className="relative flex-1">
+            <div className="flex items-center justify-between">
+              <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search leads..."
@@ -623,6 +704,13 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   className="pl-8"
                 />
               </div>
+              <Button
+                onClick={() => setCreateLeadDialogOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Create Lead
+              </Button>
             </div>
           </CardHeader>
         </Card>
@@ -1306,6 +1394,116 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   disabled={bulkArchiving}
                 >
                   {bulkArchiving ? 'Archiving...' : `Archive ${selectedLeads.size} Leads`}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Lead Dialog */}
+        <Dialog open={createLeadDialogOpen} onOpenChange={setCreateLeadDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Create New Lead</DialogTitle>
+              <DialogDescription>
+                Manually add a new lead to the staging area
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    value={newLeadData.firstName}
+                    onChange={(e) => setNewLeadData(prev => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="John"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    value={newLeadData.lastName}
+                    onChange={(e) => setNewLeadData(prev => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newLeadData.email}
+                  onChange={(e) => setNewLeadData(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="john.doe@example.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={newLeadData.phone}
+                  onChange={(e) => setNewLeadData(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="source">Lead Source</Label>
+                <Select value={newLeadData.source} onValueChange={(value) => setNewLeadData(prev => ({ ...prev, source: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select lead source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual Entry</SelectItem>
+                    <SelectItem value="website">Website</SelectItem>
+                    <SelectItem value="referral">Referral</SelectItem>
+                    <SelectItem value="phone">Phone Call</SelectItem>
+                    <SelectItem value="walk-in">Walk-in</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={newLeadData.notes}
+                  onChange={(e) => setNewLeadData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Add any additional information about this lead..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setCreateLeadDialogOpen(false)
+                    setNewLeadData({
+                      firstName: '',
+                      lastName: '',
+                      email: '',
+                      phone: '',
+                      source: 'manual',
+                      notes: ''
+                    })
+                  }}
+                  disabled={creatingLead}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleCreateLead}
+                  disabled={creatingLead || !newLeadData.firstName || !newLeadData.lastName}
+                >
+                  {creatingLead ? 'Creating...' : 'Create Lead'}
                 </Button>
               </div>
             </div>
