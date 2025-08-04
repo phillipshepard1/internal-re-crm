@@ -317,6 +317,54 @@ export default function FollowUpsPage() {
     setSelectedPerson(null)
   }
 
+  // New function to handle direct phone/text actions
+  const handleDirectAction = (followUp: FollowUpWithPerson, type: 'call' | 'text') => {
+    if (!followUp.people) return
+
+    // Debug: Log the actual data structure
+    console.log('FollowUp people data:', {
+      id: followUp.people.id,
+      name: `${followUp.people.first_name} ${followUp.people.last_name}`,
+      phone: followUp.people.phone,
+      email: followUp.people.email,
+      phoneType: typeof followUp.people.phone,
+      emailType: typeof followUp.people.email,
+      phoneLength: followUp.people.phone?.length,
+      emailLength: followUp.people.email?.length
+    })
+
+    // Get the first phone number or email
+    const phoneNumbers = followUp.people.phone || []
+    const emails = followUp.people.email || []
+    
+    if (type === 'call') {
+      // For phone calls, use the first available phone number
+      if (phoneNumbers.length > 0) {
+        const phoneNumber = phoneNumbers[0].replace(/\D/g, '') // Remove non-digits
+        const telUrl = `tel:${phoneNumber}`
+        window.open(telUrl, '_self')
+      } else {
+        // If no phone number, open the interaction modal to add notes
+        openEnhancedInteractionModal(followUp, 'call')
+      }
+    } else if (type === 'text') {
+      // For text messages, use the first available phone number
+      if (phoneNumbers.length > 0) {
+        const phoneNumber = phoneNumbers[0].replace(/\D/g, '') // Remove non-digits
+        const smsUrl = `sms:${phoneNumber}`
+        window.open(smsUrl, '_self')
+      } else if (emails.length > 0) {
+        // If no phone but has email, open email client
+        const email = emails[0]
+        const mailtoUrl = `mailto:${email}?subject=Follow-up: ${followUp.people.first_name} ${followUp.people.last_name}`
+        window.open(mailtoUrl, '_self')
+      } else {
+        // If no contact info, open the interaction modal to add notes
+        openEnhancedInteractionModal(followUp, 'text')
+      }
+    }
+  }
+
   const openEnhancedInteractionModal = (followUp: FollowUpWithPerson, type: 'call' | 'text') => {
     setActiveFollowUp(followUp)
     setInteractionType(type)
@@ -562,7 +610,7 @@ export default function FollowUpsPage() {
           onFollowUpClick={openInteractionModal}
           onMarkCompleted={openCompletionModal}
           onOpenNotes={openNotesModal}
-          onOpenInteraction={openEnhancedInteractionModal}
+          onOpenInteraction={handleDirectAction}
           onOpenFrequency={openFrequencyModal}
           onOpenTag={openTagModal}
           onDeleteFollowUp={openDeleteModal}
@@ -1211,6 +1259,27 @@ function WeeklyListView({
                           </div>
                         </div>
                         
+                        {/* Contact Information */}
+                        {(followUp.people?.phone && followUp.people.phone.length > 0) || 
+                         (followUp.people?.email && followUp.people.email.length > 0) ? (
+                          <div className="mb-3 text-xs text-muted-foreground bg-muted/20 p-2 rounded">
+                            <div className="flex items-center space-x-2">
+                              {followUp.people.phone && followUp.people.phone.length > 0 && (
+                                <div className="flex items-center space-x-1">
+                                  <Phone className="h-3 w-3" />
+                                  <span className="truncate">{followUp.people.phone[0]}</span>
+                                </div>
+                              )}
+                              {followUp.people.email && followUp.people.email.length > 0 && (
+                                <div className="flex items-center space-x-1">
+                                  <MessageSquare className="h-3 w-3" />
+                                  <span className="truncate">{followUp.people.email[0]}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                        
                         {followUp.notes && (
                           <div className="mb-3 text-sm text-muted-foreground line-clamp-2 bg-muted/30 p-2 rounded max-h-16 overflow-hidden">
                             {followUp.notes}
@@ -1227,30 +1296,53 @@ function WeeklyListView({
                                 variant="outline"
                                 onClick={() => onOpenInteraction(followUp, 'call')}
                                 className="flex items-center gap-1 h-8 px-2"
+                                             title={(() => {
+               const hasPhone = followUp.people?.phone && followUp.people.phone.length > 0
+               return hasPhone
+                 ? `Call ${followUp.people?.phone?.[0] || ''}`
+                 : 'No phone number available - will open notes modal'
+             })()}
                               >
                                 <Phone className="h-3 w-3" />
                                 <span className="hidden sm:inline">Call</span>
+                                {followUp.people?.phone && followUp.people.phone.length > 0 && (
+                                  <div className="w-1 h-1 bg-green-500 rounded-full ml-1"></div>
+                                )}
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => onOpenInteraction(followUp, 'text')}
                                 className="flex items-center gap-1 h-8 px-2"
+                                title={(() => {
+                                  const hasPhone = followUp.people?.phone && followUp.people.phone.length > 0
+                                  const hasEmail = followUp.people?.email && followUp.people.email.length > 0
+                                  return hasPhone 
+                                    ? `Text ${followUp.people?.phone?.[0] || ''}` 
+                                    : hasEmail
+                                    ? `Email ${followUp.people?.email?.[0] || ''}`
+                                    : 'No contact info available - will open notes modal'
+                                })()}
                               >
                                 <MessageSquare className="h-3 w-3" />
                                 <span className="hidden sm:inline">Text</span>
+                                {(followUp.people?.phone && followUp.people.phone.length > 0) || 
+                                 (followUp.people?.email && followUp.people.email.length > 0) ? (
+                                  <div className="w-1 h-1 bg-green-500 rounded-full ml-1"></div>
+                                ) : null}
                               </Button>
-                            </div>
-                            <div className="flex items-center space-x-1">
                               <Button
                                 size="sm"
-                                variant="outline"
+                                variant="ghost"
                                 onClick={() => onFollowUpClick(followUp)}
-                                className="flex items-center gap-1 h-8 px-2"
+                                className="flex items-center gap-1 h-8 px-2 text-xs"
+                                title="Add note after interaction"
                               >
                                 <FileText className="h-3 w-3" />
                                 <span className="hidden sm:inline">Note</span>
                               </Button>
+                            </div>
+                            <div className="flex items-center space-x-1">
                               <Button
                                 size="sm"
                                 variant="default"

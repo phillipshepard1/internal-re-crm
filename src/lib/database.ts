@@ -442,6 +442,8 @@ export async function getFollowUps(userId?: string, userRole?: string): Promise<
         id,
         first_name,
         last_name,
+        email,
+        phone,
         assigned_to,
         lead_tag_id,
         lead_tag:lead_tag_id (
