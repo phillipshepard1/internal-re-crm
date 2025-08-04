@@ -20,7 +20,6 @@ const nextConfig: NextConfig = {
   },
   
   // Reduce build memory consumption
-  swcMinify: true,
   compress: true,
   productionBrowserSourceMaps: false,
   
