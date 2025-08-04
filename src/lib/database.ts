@@ -456,16 +456,22 @@ export async function getFollowUps(userId?: string, userRole?: string): Promise<
     `)
     .order('scheduled_date', { ascending: true })
   
-  // If user is an agent, only show follow-ups for assigned contacts
-  if (userRole === 'agent' && userId) {
-    query = query.eq('people.assigned_to', userId)
-  }
-  
   const { data, error } = await query
   if (error) throw error
   
+  // Filter follow-ups based on the person's assigned_to field
+  // Both agents and admins only see follow-ups for people assigned to them
+  let filteredData = data || []
+  
+  if (userId) {
+    filteredData = (data || []).filter((followUp: any) => {
+      const person = followUp.people
+      return person && person.assigned_to === userId
+    })
+  }
+  
   // Debug: Log orphaned follow-ups
-  const orphanedFollowUps = (data || []).filter((item: any) => {
+  const orphanedFollowUps = filteredData.filter((item: any) => {
     const people = Array.isArray(item.people) ? item.people[0] : item.people
     return !people || !people.id || !people.first_name || !people.last_name
   })
@@ -480,7 +486,7 @@ export async function getFollowUps(userId?: string, userRole?: string): Promise<
   }
   
   // Transform the data to match FollowUpWithPerson type and filter out orphaned follow-ups
-  const transformedData = (data || [])
+  const transformedData = filteredData
     .map((item: any) => ({
       ...item,
       people: Array.isArray(item.people) ? item.people[0] : item.people
@@ -984,18 +990,18 @@ export async function deleteFile(id: string) {
   if (error) throw error
 }
 
-export async function getDashboardStats(): Promise<{
+export async function getDashboardStats(userId?: string, userRole?: string): Promise<{
   totalPeople: number
   totalLeads: number
   totalFollowUps: number
   totalTasks: number
 }> {
   try {
-    // Get counts for different entities
+    // Get counts for different entities - both agents and admins see only their assigned items
     const [people, followUps, tasks] = await Promise.all([
-      getPeople(),
-      getFollowUps(),
-      getTasks()
+      getPeople(userId, userRole),
+      getFollowUps(userId, userRole),
+      getTasks(userId, userRole)
     ])
     
     const totalLeads = people.filter(p => p.client_type === 'lead').length
@@ -1038,11 +1044,11 @@ export async function getAdminDashboardStats(): Promise<{
   }>
 }> {
   try {
-    // Get all data
+    // Get all data - admins see everything
     const [people, followUps, tasks, activities, users] = await Promise.all([
-      getPeople(),
-      getFollowUps(),
-      getTasks(),
+      getAllPeople(), // Use getAllPeople to get all data for admin
+      getFollowUps(), // Admin sees all follow-ups
+      getTasks(), // Admin sees all tasks
       getAllActivities(1000), // Get more activities for stats
       getUsers()
     ])
