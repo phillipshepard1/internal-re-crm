@@ -12,19 +12,8 @@ const nextConfig: NextConfig = {
     // Enable server actions
     serverActions: {
       bodySizeLimit: '2mb'
-    },
-    
-    // Reduce memory usage during build
-    workerThreads: false,
-    cpus: 1,
-    
-    // Additional memory optimizations
-    webpackBuildWorker: true
+    }
   },
-  
-  // Reduce build memory consumption
-  compress: true,
-  productionBrowserSourceMaps: false,
   
   // Webpack configuration for better React 19 support
   webpack: (config, { dev, isServer }) => {
@@ -36,21 +25,6 @@ const nextConfig: NextConfig = {
         net: false,
         tls: false,
       }
-    }
-    
-    // Additional memory optimizations
-    config.optimization = {
-      ...config.optimization,
-      splitChunks: {
-        chunks: 'all',
-        cacheGroups: {
-          default: {
-            minChunks: 2,
-            priority: -20,
-            reuseExistingChunk: true,
-          },
-        },
-      },
     }
     
     return config
