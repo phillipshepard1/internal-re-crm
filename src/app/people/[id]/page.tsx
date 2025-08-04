@@ -577,12 +577,13 @@ export default function PersonDetailPage() {
       // Update the person to remove lead status while keeping all other data
       await updatePerson(person.id, {
         client_type: 'prospect', // Change from 'lead' to 'prospect'
-        lead_status: undefined, // Remove lead status
+        lead_status: null, // Remove lead status
         lead_tag_id: null, // Remove lead tag
         follow_up_plan_id: null, // Remove follow-up plan
-        assigned_to: '', // Set to empty string since it's required
-        assigned_by: null, // Remove assigned by
-        assigned_at: null, // Remove assigned at
+        follow_up_frequency: null, // Remove follow-up frequency
+        follow_up_day_of_week: null, // Remove follow-up day
+        // Keep assigned_to as is - don't try to clear it
+        // assigned_to field is required in DB, so we keep the current assignment
         updated_at: new Date().toISOString()
       })
       
@@ -725,23 +726,16 @@ export default function PersonDetailPage() {
                 </Tooltip>
               </DialogTrigger>
             
-            {/* Remove as Lead Button - Only show for leads */}
-            {person.client_type === 'lead' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowRemoveLeadDialog(true)}
-                    className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
-                  >
-                    <Target className="mr-2 h-4 w-4" />
-                    Remove as Lead
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Demote lead to prospect (keeps all notes and data)</p>
-                </TooltipContent>
-              </Tooltip>
+            {/* Remove as Lead Button - Only show for assigned leads (not staging) */}
+            {person.client_type === 'lead' && person.lead_status !== 'staging' && (
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRemoveLeadDialog(true)}
+                className="text-destructive border-destructive"
+              >
+                <Target className="mr-2 h-4 w-4" />
+                Remove as Lead
+              </Button>
             )}
               <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
@@ -1932,7 +1926,11 @@ export default function PersonDetailPage() {
                 <li>• Person becomes a "prospect" instead of a "lead"</li>
                 <li>• All notes, tasks, and activities are preserved</li>
                 <li>• Lead status, tags, and follow-up plans are removed</li>
-                <li>• Person is unassigned from any agent</li>
+                {person?.lead_status === 'staging' ? (
+                  <li>• Person will be available in the People section as an unassigned prospect</li>
+                ) : (
+                  <li>• Person remains assigned to current agent</li>
+                )}
                 <li>• Can be found in the People section</li>
               </ul>
             </div>
