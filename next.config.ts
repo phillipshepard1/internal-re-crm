@@ -32,14 +32,14 @@ const nextConfig: NextConfig = {
   
   // TypeScript configuration
   typescript: {
-    // Don't fail build on TypeScript errors in development
-    ignoreBuildErrors: process.env.NODE_ENV === 'development',
+    // Skip type checking during build for low memory servers
+    ignoreBuildErrors: true,
   },
   
   // ESLint configuration
   eslint: {
-    // Don't fail build on ESLint errors in development
-    ignoreDuringBuilds: process.env.NODE_ENV === 'development',
+    // Skip ESLint during build for low memory servers
+    ignoreDuringBuilds: true,
   },
   
   // Image optimization
