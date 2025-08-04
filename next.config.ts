@@ -16,7 +16,10 @@ const nextConfig: NextConfig = {
     
     // Reduce memory usage during build
     workerThreads: false,
-    cpus: 1
+    cpus: 1,
+    
+    // Additional memory optimizations
+    webpackBuildWorker: true
   },
   
   // Reduce build memory consumption
@@ -33,6 +36,21 @@ const nextConfig: NextConfig = {
         net: false,
         tls: false,
       }
+    }
+    
+    // Additional memory optimizations
+    config.optimization = {
+      ...config.optimization,
+      splitChunks: {
+        chunks: 'all',
+        cacheGroups: {
+          default: {
+            minChunks: 2,
+            priority: -20,
+            reuseExistingChunk: true,
+          },
+        },
+      },
     }
     
     return config
