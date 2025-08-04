@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft, RefreshCw } from 'lucide-react'
+import { Search, User, Target, Calendar, Phone, Mail, Eye, UserPlus, Clock, AlertCircle, CheckCircle, XCircle, ArrowLeft, RefreshCw, Trash2, Archive } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { AlertModal } from '@/components/ui/alert-modal'
-import { getStagingLeads, getAssignedLeads } from '@/lib/database'
+import { getStagingLeads, getAssignedLeads, getArchivedLeads } from '@/lib/database'
 import type { Person } from '@/lib/supabase'
 import { formatPhoneNumberForDisplay } from '@/lib/utils'
 import { useDataLoader } from '@/hooks/useDataLoader'
@@ -74,6 +74,16 @@ export function LeadStaging({ users }: LeadStagingProps) {
     message: '',
     type: 'info'
   })
+  // Bulk selection state
+  const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set())
+  const [selectAll, setSelectAll] = useState(false)
+  const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false)
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
+  const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false)
+  const [bulkAssigning, setBulkAssigning] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkArchiving, setBulkArchiving] = useState(false)
+  
   const itemsPerPage = 20
 
   // Filter users to show all users (agents and admins) so admins can assign leads to anyone including themselves
@@ -133,7 +143,21 @@ export function LeadStaging({ users }: LeadStagingProps) {
     }
   )
 
-
+  const {
+    data: archivedLeads,
+    loading: archivedLoading,
+    error: archivedError,
+    refetch: refetchArchived
+  } = useDataLoader(
+    async (userId: string, userRole: string) => {
+      return await getArchivedLeads(userId, userRole)
+    },
+    {
+      cacheKey: 'archived_leads',
+      cacheTimeout: 30 * 1000, // 30 seconds cache
+      enabled: !!user
+    }
+  )
 
   // Filter data based on search term
   const filterLeads = (leads: Person[]) => {
@@ -146,6 +170,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
 
   const filteredStagingLeads = filterLeads(stagingLeads || [])
   const filteredAssignedLeads = filterLeads(assignedLeads || [])
+  const filteredArchivedLeads = filterLeads(archivedLeads || [])
 
   // Paginate data
   const paginatedStagingLeads = filteredStagingLeads.slice(
@@ -154,6 +179,11 @@ export function LeadStaging({ users }: LeadStagingProps) {
   )
 
   const paginatedAssignedLeads = filteredAssignedLeads.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
+
+  const paginatedArchivedLeads = filteredArchivedLeads.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   )
@@ -352,19 +382,229 @@ export function LeadStaging({ users }: LeadStagingProps) {
   }
 
   const getCurrentLeads = () => {
-    return activeTab === 'staging' ? paginatedStagingLeads : paginatedAssignedLeads
+    if (activeTab === 'staging') return paginatedStagingLeads
+    if (activeTab === 'assigned') return paginatedAssignedLeads
+    if (activeTab === 'archived') return paginatedArchivedLeads
+    return paginatedStagingLeads
   }
 
   const getCurrentTotal = () => {
-    return activeTab === 'staging' ? filteredStagingLeads.length : filteredAssignedLeads.length
+    if (activeTab === 'staging') return filteredStagingLeads.length
+    if (activeTab === 'assigned') return filteredAssignedLeads.length
+    if (activeTab === 'archived') return filteredArchivedLeads.length
+    return filteredStagingLeads.length
   }
 
   const getCurrentLoading = () => {
-    return activeTab === 'staging' ? stagingLoading : assignedLoading
+    if (activeTab === 'staging') return stagingLoading
+    if (activeTab === 'assigned') return assignedLoading
+    if (activeTab === 'archived') return archivedLoading
+    return stagingLoading
   }
 
   const getCurrentError = () => {
-    return activeTab === 'staging' ? stagingError : assignedError
+    if (activeTab === 'staging') return stagingError
+    if (activeTab === 'assigned') return assignedError
+    if (activeTab === 'archived') return archivedError
+    return stagingError
+  }
+
+  // Bulk selection handlers
+  const handleSelectLead = (leadId: string) => {
+    const newSelected = new Set(selectedLeads)
+    if (newSelected.has(leadId)) {
+      newSelected.delete(leadId)
+    } else {
+      newSelected.add(leadId)
+    }
+    setSelectedLeads(newSelected)
+    setSelectAll(newSelected.size === getCurrentLeads().length)
+  }
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedLeads(new Set())
+      setSelectAll(false)
+    } else {
+      const allLeadIds = getCurrentLeads().map(lead => lead.id)
+      setSelectedLeads(new Set(allLeadIds))
+      setSelectAll(true)
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedLeads(new Set())
+    setSelectAll(false)
+  }
+
+  // Reset selection when changing tabs or pages
+  useEffect(() => {
+    clearSelection()
+  }, [activeTab, currentPage])
+
+  const getSelectedLeadsData = () => {
+    return getCurrentLeads().filter(lead => selectedLeads.has(lead.id))
+  }
+
+  // Bulk action handlers
+  const handleBulkAssign = async () => {
+    if (selectedLeads.size === 0 || !selectedUserId) return
+
+    try {
+      setBulkAssigning(true)
+      
+      const selectedLeadsData = getSelectedLeadsData()
+      const results = await Promise.allSettled(
+        selectedLeadsData.map(lead => 
+          fetch('/api/leads/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              leadId: lead.id,
+              userId: selectedUserId,
+              assignedBy: user?.id,
+              followUpFrequency: selectedFrequency,
+              followUpDayOfWeek: selectedDayOfWeek,
+              notes: assignmentNotes
+            })
+          })
+        )
+      )
+
+      const successful = results.filter(result => result.status === 'fulfilled' && result.value.ok).length
+      const failed = results.length - successful
+
+      // Refetch data
+      refetchStaging()
+      refetchAssigned()
+      
+      // Close dialog and reset form
+      setBulkAssignDialogOpen(false)
+      setSelectedUserId('')
+      setSelectedFrequency('twice_week')
+      setSelectedDayOfWeek(1)
+      setAssignmentNotes('')
+      clearSelection()
+      
+      // Show success message
+      setAlertModal({
+        open: true,
+        title: 'Bulk Assignment Complete',
+        message: `Successfully assigned ${successful} leads${failed > 0 ? `, ${failed} failed` : ''}.`,
+        type: successful > 0 ? 'success' : 'error'
+      })
+      
+    } catch (error) {
+      console.error('Error bulk assigning leads:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to assign leads. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setBulkAssigning(false)
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedLeads.size === 0) return
+
+    try {
+      setBulkDeleting(true)
+      
+      const selectedLeadsData = getSelectedLeadsData()
+      const results = await Promise.allSettled(
+        selectedLeadsData.map(lead => 
+          fetch(`/api/admin/delete-lead`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leadId: lead.id })
+          })
+        )
+      )
+
+      const successful = results.filter(result => result.status === 'fulfilled' && result.value.ok).length
+      const failed = results.length - successful
+
+      // Refetch data
+      refetchStaging()
+      refetchAssigned()
+      refetchArchived()
+      
+      // Close dialog and reset
+      setBulkDeleteDialogOpen(false)
+      clearSelection()
+      
+      // Show success message
+      setAlertModal({
+        open: true,
+        title: 'Bulk Delete Complete',
+        message: `Successfully deleted ${successful} leads${failed > 0 ? `, ${failed} failed` : ''}.`,
+        type: successful > 0 ? 'success' : 'error'
+      })
+      
+    } catch (error) {
+      console.error('Error bulk deleting leads:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to delete leads. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const handleBulkArchive = async () => {
+    if (selectedLeads.size === 0) return
+
+    try {
+      setBulkArchiving(true)
+      
+      const selectedLeadsData = getSelectedLeadsData()
+      const results = await Promise.allSettled(
+        selectedLeadsData.map(lead => 
+          fetch(`/api/admin/archive-lead`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leadId: lead.id, archivedBy: user?.id })
+          })
+        )
+      )
+
+      const successful = results.filter(result => result.status === 'fulfilled' && result.value.ok).length
+      const failed = results.length - successful
+
+      // Refetch data
+      refetchStaging()
+      refetchAssigned()
+      refetchArchived()
+      
+      // Close dialog and reset
+      setBulkArchiveDialogOpen(false)
+      clearSelection()
+      
+      // Show success message
+      setAlertModal({
+        open: true,
+        title: 'Bulk Archive Complete',
+        message: `Successfully archived ${successful} leads${failed > 0 ? `, ${failed} failed` : ''}.`,
+        type: successful > 0 ? 'success' : 'error'
+      })
+      
+    } catch (error) {
+      console.error('Error bulk archiving leads:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to archive leads. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setBulkArchiving(false)
+    }
   }
 
   return (
@@ -387,6 +627,60 @@ export function LeadStaging({ users }: LeadStagingProps) {
           </CardHeader>
         </Card>
 
+        {/* Bulk Actions */}
+        {selectedLeads.size > 0 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary" className="text-sm">
+                    {selectedLeads.size} selected
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearSelection}
+                    className="text-muted-foreground"
+                  >
+                    Clear Selection
+                  </Button>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {activeTab === 'staging' && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setBulkAssignDialogOpen(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Assign to Agent ({selectedLeads.size})
+                    </Button>
+                  )}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setBulkDeleteDialogOpen(true)}
+                    className="flex items-center gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete ({selectedLeads.size})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBulkArchiveDialogOpen(true)}
+                    className="flex items-center gap-2"
+                  >
+                    <Archive className="h-4 w-4" />
+                    Archive ({selectedLeads.size})
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+        )}
+
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList>
@@ -396,18 +690,25 @@ export function LeadStaging({ users }: LeadStagingProps) {
             <TabsTrigger value="assigned">
               Assigned Leads ({assignedLeads?.length || 0})
             </TabsTrigger>
+            <TabsTrigger value="archived">
+              Archived Leads ({archivedLeads?.length || 0})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeTab} className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {activeTab === 'staging' ? 'Staging Leads' : 'Assigned Leads'}
+                  {activeTab === 'staging' ? 'Staging Leads' : 
+                   activeTab === 'assigned' ? 'Assigned Leads' : 
+                   'Archived Leads'}
                 </CardTitle>
                 <CardDescription>
                   {activeTab === 'staging' 
                     ? 'New leads waiting to be assigned to agents' 
-                    : 'Leads that have been assigned to agents'
+                    : activeTab === 'assigned'
+                    ? 'Leads that have been assigned to agents'
+                    : 'Leads that have been archived and are no longer active'
                   }
                 </CardDescription>
               </CardHeader>
@@ -425,7 +726,9 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   <div className="text-center py-8 text-muted-foreground">
                     {activeTab === 'staging' 
                       ? 'No staging leads found' 
-                      : 'No assigned leads found'
+                      : activeTab === 'assigned'
+                      ? 'No assigned leads found'
+                      : 'No archived leads found'
                     }
                   </div>
                 ) : (
@@ -433,19 +736,36 @@ export function LeadStaging({ users }: LeadStagingProps) {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-12">
+                            <input
+                              type="checkbox"
+                              checked={selectAll}
+                              onChange={handleSelectAll}
+                              className="rounded border-gray-300"
+                            />
+                          </TableHead>
                           <TableHead>Name</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Contact</TableHead>
                           <TableHead>Source</TableHead>
                           <TableHead>Created</TableHead>
-                          {activeTab === 'assigned' && <TableHead>Assigned To</TableHead>}
-                          {activeTab === 'assigned' && <TableHead>Assigned From</TableHead>}
+                          {(activeTab === 'assigned' || activeTab === 'archived') && <TableHead>Assigned To</TableHead>}
+                          {(activeTab === 'assigned' || activeTab === 'archived') && <TableHead>Assigned From</TableHead>}
+                          {activeTab === 'archived' && <TableHead>Archived</TableHead>}
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {getCurrentLeads().map((lead: Person) => (
                           <TableRow key={lead.id}>
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                checked={selectedLeads.has(lead.id)}
+                                onChange={() => handleSelectLead(lead.id)}
+                                className="rounded border-gray-300"
+                              />
+                            </TableCell>
                             <TableCell className="font-medium">
                               <Link 
                                 href={`/people/${lead.id}?fromAdmin=true&leadTab=${activeTab}&leadPage=${currentPage}&leadSearch=${encodeURIComponent(searchTerm)}`}
@@ -482,7 +802,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                 {new Date(lead.created_at).toLocaleDateString()}
                               </div>
                             </TableCell>
-                            {activeTab === 'assigned' && (
+                            {(activeTab === 'assigned' || activeTab === 'archived') && (
                               <TableCell>
                                 {lead.assigned_user ? (
                                   <div className="flex items-center">
@@ -496,7 +816,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                 )}
                               </TableCell>
                             )}
-                            {activeTab === 'assigned' && (
+                            {(activeTab === 'assigned' || activeTab === 'archived') && (
                               <TableCell>
                                 {lead.assigned_by_user ? (
                                   <div className="flex items-center">
@@ -508,6 +828,14 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                 ) : (
                                   <span className="text-muted-foreground">-</span>
                                 )}
+                              </TableCell>
+                            )}
+                            {activeTab === 'archived' && (
+                              <TableCell>
+                                <div className="flex items-center text-sm text-muted-foreground">
+                                  <Archive className="mr-2 h-3 w-3" />
+                                  {lead.archived_at ? new Date(lead.archived_at).toLocaleDateString() : '-'}
+                                </div>
                               </TableCell>
                             )}
                             <TableCell>
@@ -799,6 +1127,185 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   disabled={!selectedUserId || reassigning}
                 >
                   {reassigning ? 'Reassigning...' : 'Reassign Lead'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Assign Dialog */}
+        <Dialog open={bulkAssignDialogOpen} onOpenChange={setBulkAssignDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Bulk Assign Leads</DialogTitle>
+              <DialogDescription>
+                Assign {selectedLeads.size} selected leads to a user with a follow-up plan
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="bulkAgent">Select User</Label>
+                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.first_name || agent.email.split('@')[0]} ({agent.role})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulkFrequency">Follow-up Frequency</Label>
+                <Select value={selectedFrequency} onValueChange={(value: 'twice_week' | 'weekly' | 'biweekly' | 'monthly') => setSelectedFrequency(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose follow-up frequency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="twice_week">Twice a Week (Monday & Thursday)</SelectItem>
+                    <SelectItem value="weekly">Every Week</SelectItem>
+                    <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
+                    <SelectItem value="monthly">Every Month</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  This will automatically create follow-up tasks based on the selected frequency
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulkDayOfWeek">Preferred Day of Week</Label>
+                <Select value={String(selectedDayOfWeek)} onValueChange={(value) => setSelectedDayOfWeek(Number(value))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose day of week" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Sunday</SelectItem>
+                    <SelectItem value="1">Monday</SelectItem>
+                    <SelectItem value="2">Tuesday</SelectItem>
+                    <SelectItem value="3">Wednesday</SelectItem>
+                    <SelectItem value="4">Thursday</SelectItem>
+                    <SelectItem value="5">Friday</SelectItem>
+                    <SelectItem value="6">Saturday</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Follow-ups will be scheduled on this day of the week
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulkNotes">Assignment Notes (Optional)</Label>
+                <Textarea
+                  id="bulkNotes"
+                  placeholder="Add any notes about this assignment..."
+                  value={assignmentNotes}
+                  onChange={(e) => setAssignmentNotes(e.target.value)}
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setBulkAssignDialogOpen(false)}
+                  disabled={bulkAssigning}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleBulkAssign}
+                  disabled={!selectedUserId || bulkAssigning}
+                >
+                  {bulkAssigning ? 'Assigning...' : `Assign ${selectedLeads.size} Leads`}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Delete Dialog */}
+        <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Bulk Delete Leads</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to permanently delete {selectedLeads.size} selected leads?
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="h-5 w-5 text-destructive" />
+                  <span className="font-medium text-destructive">Warning</span>
+                </div>
+                <p className="text-sm text-destructive mt-2">
+                  This action cannot be undone. All data associated with these leads will be permanently deleted.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setBulkDeleteDialogOpen(false)}
+                  disabled={bulkDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
+                >
+                  {bulkDeleting ? 'Deleting...' : `Delete ${selectedLeads.size} Leads`}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bulk Archive Dialog */}
+        <Dialog open={bulkArchiveDialogOpen} onOpenChange={setBulkArchiveDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Bulk Archive Leads</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to archive {selectedLeads.size} selected leads?
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="p-4 bg-muted/30 border rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <Archive className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">Archive Information</span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Archived leads will be moved to a separate archive and will no longer appear in active lists. 
+                  You can view them in the Archived tab.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setBulkArchiveDialogOpen(false)}
+                  disabled={bulkArchiving}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={handleBulkArchive}
+                  disabled={bulkArchiving}
+                >
+                  {bulkArchiving ? 'Archiving...' : `Archive ${selectedLeads.size} Leads`}
                 </Button>
               </div>
             </div>

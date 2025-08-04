@@ -1150,6 +1150,7 @@ export async function getStagingLeads() {
     `)
     .eq('client_type', 'lead')
     .eq('lead_status', 'staging')
+    .is('archived_at', null) // Exclude archived leads
     .order('created_at', { ascending: false })
   
   if (error) throw error
@@ -1176,9 +1177,48 @@ export async function getAssignedLeads(userId?: string, userRole?: string) {
     `)
     .eq('client_type', 'lead')
     .in('lead_status', ['assigned', 'contacted', 'qualified', 'lost'])
+    .is('archived_at', null) // Exclude archived leads
     .order('created_at', { ascending: false })
   
   // If user is an agent, only show their assigned leads
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+export async function getArchivedLeads(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      ),
+      assigned_by_user:users!assigned_by (
+        id,
+        email,
+        first_name,
+        last_name
+      ),
+      archived_by_user:users!archived_by (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('client_type', 'lead')
+    .not('archived_at', 'is', null) // Only archived leads
+    .order('archived_at', { ascending: false })
+  
+  // If user is an agent, only show their assigned archived leads
   if (userRole === 'agent' && userId) {
     query = query.eq('assigned_to', userId)
   }

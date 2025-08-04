@@ -115,6 +115,16 @@ export interface Person {
     first_name: string | null
     last_name: string | null
   }
+  // Archive fields
+  archived_at?: string | null
+  archived_by?: string | null
+  // Joined archived by user data
+  archived_by_user?: {
+    id: string
+    email: string
+    first_name: string | null
+    last_name: string | null
+  }
 }
 
 export interface Note {
