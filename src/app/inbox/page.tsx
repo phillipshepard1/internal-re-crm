@@ -14,6 +14,7 @@ import {
   Plus,
   MoreVertical,
   X,
+  Menu,
   User,
   Calendar,
   FileText,
@@ -31,7 +32,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Image,
+  Image as ImageIcon,
   Maximize2,
   FolderOpen
 } from 'lucide-react'
@@ -324,6 +325,7 @@ export default function InboxPage() {
   
   // Collapsible sidebar and resizable panels state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false)
   const [emailListWidth, setEmailListWidth] = useState(400) // Default width for email list
   const [emailContentWidth, setEmailContentWidth] = useState(455) // Default width for email content
   const [isResizing, setIsResizing] = useState(false)
@@ -1474,13 +1476,25 @@ export default function InboxPage() {
   }
 
   return (
-    <div className="container flex-1 flex h-[91vh] bg-background overflow-hidden">
+    <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-3.5rem)] bg-background overflow-hidden">
+      {/* Mobile Header with menu toggle */}
+      <div className="md:hidden flex items-center justify-between p-4 border-b">
+        <h2 className="text-lg font-semibold">Gmail Inbox</h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </div>
+      
       {/* Left Sidebar - Mailbox Navigation */}
-      <div className={`${sidebarCollapsed ? 'w-12' : 'w-[220px]'} border-r bg-muted/20 flex-shrink-0 transition-all duration-300 relative`}>
-        {/* Collapse/Expand Button */}
+      <div className={`${sidebarCollapsed ? 'w-12' : 'w-full md:w-[220px]'} ${showMobileSidebar ? 'block' : 'hidden md:block'} absolute md:relative top-[4rem] md:top-0 left-0 right-0 z-50 md:z-auto h-[calc(100%-4rem)] md:h-full border-b md:border-r md:border-b-0 bg-background md:bg-muted/20 flex-shrink-0 transition-all duration-300`}>
+        {/* Collapse/Expand Button - Hidden on mobile */}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-4 w-6 h-6 bg-background border rounded-full flex items-center justify-center hover:bg-muted transition-colors z-10"
+          className="hidden md:flex absolute -right-3 top-4 w-6 h-6 bg-background border rounded-full items-center justify-center hover:bg-muted transition-colors z-10"
           title={sidebarCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
         >
           {sidebarCollapsed ? (
@@ -1491,7 +1505,7 @@ export default function InboxPage() {
         </button>
         
         <div className={`p-4 ${sidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-          <h2 className="text-lg font-semibold mb-4">
+          <h2 className="hidden md:block text-lg font-semibold mb-4">
             Gmail Inbox
           </h2>
           
@@ -1671,8 +1685,8 @@ export default function InboxPage() {
 
       {/* Middle Panel - Email List */}
       <div 
-        className="flex flex-col border-r min-w-0 flex-1"
-        style={{ width: sidebarCollapsed ? 'auto' : `${emailListWidth}px` }}
+        className={`flex flex-col border-r min-w-0 flex-1 ${selectedEmail ? 'hidden md:flex' : 'flex'}`}
+        style={{ width: sidebarCollapsed || window.innerWidth < 768 ? 'auto' : `${emailListWidth}px` }}
       >
         {/* Email List Header */}
         <div className="p-4 border-b bg-background flex-shrink-0">
@@ -1822,11 +1836,22 @@ export default function InboxPage() {
       {/* Right Panel - Email Content */}
       {gmailConnected && selectedEmail && (
         <div 
-          className="flex flex-col border-r flex-shrink-0"
-          style={{ width: `${emailContentWidth}px` }}
+          className={`flex flex-col border-r flex-shrink-0 ${selectedEmail ? 'flex' : 'hidden'} absolute md:relative inset-0 md:inset-auto bg-background z-40 md:z-auto`}
+          style={{ width: window.innerWidth < 768 ? '100%' : `${emailContentWidth}px` }}
         >
           {/* Email Header */}
           <div className="p-4 border-b bg-background flex-shrink-0">
+            {/* Mobile Back Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="md:hidden mb-4"
+              onClick={() => setSelectedEmail(null)}
+            >
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Back to emails
+            </Button>
+            
             {/* Email Details */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1932,7 +1957,7 @@ export default function InboxPage() {
               {selectedEmail.images && selectedEmail.images.length > 0 && (
                 <div className="mt-6 p-4 border rounded-lg bg-muted/20">
                   <div className="flex items-center gap-2 mb-3">
-                    <Image className="h-4 w-4 flex-shrink-0" />
+                    <ImageIcon className="h-4 w-4 flex-shrink-0" />
                     <span className="text-sm font-medium">Images ({selectedEmail.images.length})</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -886,17 +886,25 @@ export function LeadStaging({ users }: LeadStagingProps) {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="staging">
-              Staging Leads ({stagingLeads?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="assigned">
-              Assigned Leads ({assignedLeads?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="archived">
-              Archived Leads ({archivedLeads?.length || 0})
-            </TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto pb-2">
+            <TabsList className="w-full md:w-fit min-w-full md:min-w-0 flex md:inline-flex">
+              <TabsTrigger value="staging" className="flex-1 md:flex-initial text-xs sm:text-sm">
+                <span className="hidden sm:inline">Staging Leads</span>
+                <span className="sm:hidden">Staging</span>
+                <span className="ml-1">({stagingLeads?.length || 0})</span>
+              </TabsTrigger>
+              <TabsTrigger value="assigned" className="flex-1 md:flex-initial text-xs sm:text-sm">
+                <span className="hidden sm:inline">Assigned Leads</span>
+                <span className="sm:hidden">Assigned</span>
+                <span className="ml-1">({assignedLeads?.length || 0})</span>
+              </TabsTrigger>
+              <TabsTrigger value="archived" className="flex-1 md:flex-initial text-xs sm:text-sm">
+                <span className="hidden sm:inline">Archived Leads</span>
+                <span className="sm:hidden">Archived</span>
+                <span className="ml-1">({archivedLeads?.length || 0})</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value={activeTab} className="space-y-4">
             <Card>

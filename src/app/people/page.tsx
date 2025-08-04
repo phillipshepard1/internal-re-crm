@@ -113,17 +113,17 @@ export default function PeoplePage() {
 
   return (
     <TooltipProvider>
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between space-y-2">
+      <div className="flex-1 space-y-4 p-4 pt-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">People</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">People</h2>
             <p className="text-muted-foreground">
               Manage your contacts and their information
             </p>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button asChild>
+              <Button asChild className="w-full sm:w-auto">
                 <Link href="/people/new">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Person

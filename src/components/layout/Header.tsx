@@ -118,7 +118,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
               <span className="sr-only">Toggle sidebar</span>
             </Button>
             
-            <h1 className="text-lg font-semibold">Internal-Re-CRM</h1>
+            <h1 className="text-base sm:text-lg font-semibold">Internal-Re-CRM</h1>
             {userRole && (
               <span className="text-xs text-muted-foreground">
                 ({userRole})

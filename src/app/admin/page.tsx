@@ -366,15 +366,17 @@ export default function AdminPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={updateTabInUrl} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="leads">Lead Staging</TabsTrigger>
-            <TabsTrigger value="users">User Management</TabsTrigger>
-            <TabsTrigger value="roles">Role Management</TabsTrigger>
-            <TabsTrigger value="sources">Lead Sources</TabsTrigger>
-            <TabsTrigger value="plans">Follow-up Frequencies</TabsTrigger>
-            <TabsTrigger value="activity">Activity Dashboard</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto pb-2">
+            <TabsList className="w-full md:w-fit min-w-full md:min-w-0 flex md:inline-flex">
+              <TabsTrigger value="leads" className="flex-1 md:flex-initial">Lead Staging</TabsTrigger>
+              <TabsTrigger value="users" className="flex-1 md:flex-initial">User Management</TabsTrigger>
+              <TabsTrigger value="roles" className="flex-1 md:flex-initial">Role Management</TabsTrigger>
+              <TabsTrigger value="sources" className="flex-1 md:flex-initial">Lead Sources</TabsTrigger>
+              <TabsTrigger value="plans" className="flex-1 md:flex-initial">Follow-up Frequencies</TabsTrigger>
+              <TabsTrigger value="activity" className="flex-1 md:flex-initial">Activity Dashboard</TabsTrigger>
+              <TabsTrigger value="reports" className="flex-1 md:flex-initial">Reports</TabsTrigger>
+            </TabsList>
+          </div>
           
           <TabsContent value="leads" className="space-y-4">
             <LeadStaging users={users} />

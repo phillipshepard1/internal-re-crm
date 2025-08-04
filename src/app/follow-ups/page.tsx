@@ -572,13 +572,13 @@ export default function FollowUpsPage() {
   }
 
   return (
-    <div className="flex-1 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="flex-1 p-4 pt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-4xl font-bold">Follow-ups</h1>
-          <p className="text-muted-foreground text-lg mt-1">Manage your scheduled activities and reminders</p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">Follow-ups</h1>
+          <p className="text-muted-foreground text-sm sm:text-base md:text-lg mt-1">Manage your scheduled activities and reminders</p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-2">
           <Button 
             variant={viewMode === 'list' ? 'default' : 'outline'}
             onClick={() => setViewMode('list')}
@@ -595,7 +595,7 @@ export default function FollowUpsPage() {
             <Clock className="h-4 w-4" />
             Week View
           </Button>
-          <Button className="flex items-center gap-2" variant="default" onClick={openScheduleModal}>
+          <Button className="flex items-center gap-2 w-full sm:w-auto" variant="default" onClick={openScheduleModal}>
             <Plus className="h-4 w-4" />
             Schedule Follow-up
           </Button>
@@ -1072,26 +1072,33 @@ function WeeklyListView({
       {/* Week Navigation Header */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <CardTitle className="text-2xl">Weekly Follow-ups</CardTitle>
-              <CardDescription className="text-lg">
-                {currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString('en-US', { 
+              <CardTitle className="text-xl sm:text-2xl">Weekly Follow-ups</CardTitle>
+              <CardDescription className="text-sm sm:text-lg">
+                <span className="hidden sm:inline">{currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString('en-US', { 
                   month: 'long', 
                   day: 'numeric', 
                   year: 'numeric' 
-                })}
+                })}</span>
+                <span className="sm:hidden">Week of {currentWeek.toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric' 
+                })}</span>
               </CardDescription>
             </div>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-                ← Previous Week
+            <div className="flex items-center gap-1 sm:gap-2">
+              <Button variant="outline" size="sm" onClick={goToPreviousWeek} className="px-2 sm:px-3">
+                <span className="hidden sm:inline">← Previous Week</span>
+                <span className="sm:hidden">← Prev</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
-                This Week
+              <Button variant="outline" size="sm" onClick={goToCurrentWeek} className="px-2 sm:px-3">
+                <span className="hidden sm:inline">This Week</span>
+                <span className="sm:hidden">Current</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={goToNextWeek}>
-                Next Week →
+              <Button variant="outline" size="sm" onClick={goToNextWeek} className="px-2 sm:px-3">
+                <span className="hidden sm:inline">Next Week →</span>
+                <span className="sm:hidden">Next →</span>
               </Button>
             </div>
           </div>

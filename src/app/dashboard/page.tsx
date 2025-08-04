@@ -106,7 +106,7 @@ export default function DashboardPage() {
   
   if (isLoading) {
     return (
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+      <div className="flex-1 space-y-4 p-4 pt-6">
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4 text-muted-foreground">
@@ -119,7 +119,7 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+      <div className="flex-1 space-y-4 p-4 pt-6">
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -133,15 +133,15 @@ export default function DashboardPage() {
   const pendingTasks = myTasks.filter((t: Task) => t.status === 'pending')
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="flex-1 space-y-4 p-4 pt-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
           <p className="text-muted-foreground">
             Welcome back! Here&apos;s what&apos;s happening with your leads and contacts.
           </p>
         </div>
-        <HomeStackSSOButton variant="outline" size="sm">
+        <HomeStackSSOButton variant="outline" size="sm" className="w-full sm:w-auto">
           Go to HomeStack
         </HomeStackSSOButton>
       </div>
@@ -154,7 +154,7 @@ export default function DashboardPage() {
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{myPeople.length}</div>
+            <div className="text-xl sm:text-2xl font-bold">{myPeople.length}</div>
             <p className="text-xs text-muted-foreground">
               {myLeads.length} leads, {myPeople.length - myLeads.length} clients
             </p>
@@ -166,7 +166,7 @@ export default function DashboardPage() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingFollowUps.length}</div>
+            <div className="text-xl sm:text-2xl font-bold">{pendingFollowUps.length}</div>
             <p className="text-xs text-muted-foreground">
               {overdueFollowUps.length} overdue
             </p>
@@ -178,7 +178,7 @@ export default function DashboardPage() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingTasks.length}</div>
+            <div className="text-xl sm:text-2xl font-bold">{pendingTasks.length}</div>
             <p className="text-xs text-muted-foreground">
               Tasks to complete
             </p>
@@ -190,7 +190,7 @@ export default function DashboardPage() {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{recentActivities.length}</div>
+            <div className="text-xl sm:text-2xl font-bold">{recentActivities.length}</div>
             <p className="text-xs text-muted-foreground">
               Last 7 days
             </p>
@@ -255,7 +255,7 @@ export default function DashboardPage() {
       </Card>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Overdue Follow-ups</CardTitle>

@@ -353,11 +353,11 @@ export default function MyLeadsPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+      <div className="flex-1 space-y-4 p-4 pt-6">
         {/* Header */}
-        <div className="flex items-center justify-between space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
               {userRole === 'admin' ? 'My Assigned Leads' : 'My Leads'}
             </h2>
             <p className="text-muted-foreground">
@@ -371,14 +371,14 @@ export default function MyLeadsPage() {
 
         {/* Stats Cards */}
         {leadStats && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
                 <Target className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leadStats.total}</div>
+                <div className="text-xl sm:text-2xl font-bold">{leadStats.total}</div>
               </CardContent>
             </Card>
             <Card>
@@ -387,7 +387,7 @@ export default function MyLeadsPage() {
                 <Badge variant="outline" style={{ borderColor: '#EF4444', color: '#EF4444' }}>H</Badge>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leadStats.tags.hot}</div>
+                <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.hot}</div>
               </CardContent>
             </Card>
             <Card>
@@ -396,7 +396,7 @@ export default function MyLeadsPage() {
                 <Badge variant="outline" style={{ borderColor: '#F59E0B', color: '#F59E0B' }}>W</Badge>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leadStats.tags.warm}</div>
+                <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.warm}</div>
               </CardContent>
             </Card>
             <Card>
@@ -405,7 +405,7 @@ export default function MyLeadsPage() {
                 <Badge variant="outline" style={{ borderColor: '#6B7280', color: '#6B7280' }}>C</Badge>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leadStats.tags.cold}</div>
+                <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.cold}</div>
               </CardContent>
             </Card>
             <Card>
@@ -414,7 +414,7 @@ export default function MyLeadsPage() {
                 <Badge variant="outline" style={{ borderColor: '#374151', color: '#374151' }}>D</Badge>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leadStats.tags.dead}</div>
+                <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.dead}</div>
               </CardContent>
             </Card>
             <Card>
@@ -423,7 +423,7 @@ export default function MyLeadsPage() {
                 <Phone className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leadStats.contacted}</div>
+                <div className="text-xl sm:text-2xl font-bold">{leadStats.contacted}</div>
               </CardContent>
             </Card>
             <Card>
@@ -432,7 +432,7 @@ export default function MyLeadsPage() {
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leadStats.converted}</div>
+                <div className="text-xl sm:text-2xl font-bold">{leadStats.converted}</div>
               </CardContent>
             </Card>
           </div>
