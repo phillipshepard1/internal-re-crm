@@ -52,11 +52,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
       
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-16 flex-col border-r bg-background transition-transform duration-300 ease-in-out md:relative md:translate-x-0",
+        "fixed inset-y-0 left-0 z-50 flex w-20 flex-col border-r bg-background transition-transform duration-300 ease-in-out md:sticky md:translate-x-0 h-screen",
         open ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="flex h-16 w-16 items-center justify-center">
-          <div className="h-8 w-8 rounded-lg bg-primary"></div>
+        <div className="flex h-20 w-20 items-center justify-center">
+          <div className="h-12 w-12 rounded-lg bg-primary"></div>
         </div>
         
         <nav className="flex flex-1 flex-col items-center space-y-2 py-4">
@@ -70,11 +70,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                     asChild
                     variant={isActive ? 'default' : 'ghost'}
                     size="sm"
-                    className="h-10 w-10 p-0"
+                    className="h-14 w-14 p-0"
                     onClick={() => setOpen(false)} // Close mobile menu when clicking
                   >
                     <Link href={item.href}>
-                      <IconComponent className="h-5 w-5" />
+                      <IconComponent className="h-10 w-10" />
                       <span className="sr-only">{item.name}</span>
                     </Link>
                   </Button>
@@ -88,7 +88,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
           
           {userRole === 'admin' && (
             <>
-              <div className="h-px w-8 bg-border my-2"></div>
+              <div className="h-px w-12 bg-border my-2"></div>
               {adminNavigation.map((item) => {
                 const isActive = pathname === item.href
                 const IconComponent = item.icon
@@ -103,7 +103,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                         onClick={() => setOpen(false)} // Close mobile menu when clicking
                       >
                         <Link href={item.href}>
-                          <IconComponent className="h-5 w-5" />
+                          <IconComponent className="h-10 w-10" />
                           <span className="sr-only">{item.name}</span>
                         </Link>
                       </Button>

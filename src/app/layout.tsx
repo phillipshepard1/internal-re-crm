@@ -26,13 +26,18 @@ function AppContent({ children }: { children: React.ReactNode }) {
           <>{children}</>
         ) : (
           // Authenticated pages - with sidebar/header
-          <div className="min-h-screen bg-background">
-            <div className="flex">
+          <div className="h-screen bg-background overflow-hidden">
+            <div className="flex h-full">
+              {/* Fixed Sidebar */}
               <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
-              <div className="flex-1 flex flex-col">
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Fixed Header */}
                 <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-                <main className="flex-1">
-                  {children}
+                {/* Scrollable Content Area */}
+                <main className="flex-1 overflow-y-auto">
+                  <div className="h-full">
+                    {children}
+                  </div>
                 </main>
               </div>
             </div>
