@@ -372,7 +372,7 @@ export default function AdminPage() {
               <TabsTrigger value="users" className="flex-1 md:flex-initial">User Management</TabsTrigger>
               <TabsTrigger value="roles" className="flex-1 md:flex-initial">Role Management</TabsTrigger>
               <TabsTrigger value="sources" className="flex-1 md:flex-initial">Lead Sources</TabsTrigger>
-              <TabsTrigger value="plans" className="flex-1 md:flex-initial">Follow-up Frequencies</TabsTrigger>
+              {/* <TabsTrigger value="plans" className="flex-1 md:flex-initial">Follow-up Frequencies</TabsTrigger> */}
               <TabsTrigger value="activity" className="flex-1 md:flex-initial">Activity Dashboard</TabsTrigger>
               <TabsTrigger value="reports" className="flex-1 md:flex-initial">Reports</TabsTrigger>
             </TabsList>
@@ -598,9 +598,9 @@ export default function AdminPage() {
             <LeadSourceManagement />
           </TabsContent>
 
-          <TabsContent value="plans" className="space-y-4">
+          {/* <TabsContent value="plans" className="space-y-4">
             <FollowUpFrequencyManagement users={users} />
-          </TabsContent>
+          </TabsContent> */}
 
           <TabsContent value="reports" className="space-y-4">
             <AgentReports users={users} />
