@@ -105,20 +105,20 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   return (
     <TooltipProvider>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center justify-between">
+        <div className="container flex h-16 md:h-14 items-center justify-between">
           <div className="flex items-center space-x-2">
             {/* Mobile menu button */}
             <Button
               variant="ghost"
               size="sm"
-              className="md:hidden"
+              className="md:hidden h-10 w-10 p-0"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-6 w-6" />
               <span className="sr-only">Toggle sidebar</span>
             </Button>
             
-            <h1 className="text-base sm:text-lg font-semibold">Internal-Re-CRM</h1>
+            <h1 className="text-lg sm:text-lg font-semibold">Internal-Re-CRM</h1>
             {userRole && (
               <span className="text-xs text-muted-foreground">
                 ({userRole})
@@ -135,9 +135,9 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                     <Button 
                       variant="ghost" 
                       size="sm"
-                      className="relative"
+                      className="relative h-10 w-10 md:h-8 md:w-8 p-0"
                     >
-                      <Bell className="h-4 w-4" />
+                      <Bell className="h-5 w-5 md:h-4 md:w-4" />
                       <span className="sr-only">Notifications</span>
                     </Button>
                   </TooltipTrigger>
@@ -197,9 +197,10 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                   <Button 
                     variant="ghost" 
                     size="sm"
+                    className="h-10 w-10 md:h-8 md:w-8 p-0"
                     onClick={handleSettings}
                   >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="h-5 w-5 md:h-4 md:w-4" />
                     <span className="sr-only">Admin Panel</span>
                   </Button>
                 </TooltipTrigger>
@@ -214,8 +215,8 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
               <DialogTrigger asChild>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      <User className="h-4 w-4" />
+                    <Button variant="ghost" size="sm" className="h-10 w-10 md:h-8 md:w-8 p-0">
+                      <User className="h-5 w-5 md:h-4 md:w-4" />
                       <span className="sr-only">Profile</span>
                     </Button>
                   </TooltipTrigger>
@@ -286,9 +287,10 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                     <Button 
                       variant="ghost" 
                       size="sm" 
+                      className="h-10 w-10 md:h-8 md:w-8 p-0"
                       onClick={() => setLogoutConfirmOpen(true)}
                     >
-                      <LogOut className="h-4 w-4" />
+                      <LogOut className="h-5 w-5 md:h-4 md:w-4" />
                       <span className="sr-only">Logout</span>
                     </Button>
                   </TooltipTrigger>
