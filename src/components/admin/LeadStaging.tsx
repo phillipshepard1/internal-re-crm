@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { AlertModal } from '@/components/ui/alert-modal'
 import { getStagingLeads, getAssignedLeads, getArchivedLeads } from '@/lib/database'
 import type { Person } from '@/lib/supabase'
-import { formatPhoneNumberForDisplay } from '@/lib/utils'
+import { formatPhoneNumberForDisplay, formatPhoneNumber, unformatPhoneNumber } from '@/lib/utils'
 import { useDataLoader } from '@/hooks/useDataLoader'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -645,6 +645,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newLeadData,
+          phone: unformatPhoneNumber(newLeadData.phone),
           createdBy: user?.id
         })
       })
@@ -1571,8 +1572,9 @@ export function LeadStaging({ users }: LeadStagingProps) {
                 <Input
                   id="phone"
                   value={newLeadData.phone}
-                  onChange={(e) => setNewLeadData(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="(555) 123-4567"
+                  onChange={(e) => setNewLeadData(prev => ({ ...prev, phone: formatPhoneNumber(e.target.value) }))}
+                  placeholder="555-123-4567"
+                  type="tel"
                 />
               </div>
 

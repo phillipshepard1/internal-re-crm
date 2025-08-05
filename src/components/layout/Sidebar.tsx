@@ -70,11 +70,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                     asChild
                     variant={isActive ? 'default' : 'ghost'}
                     size="sm"
-                    className="h-12 w-12 md:h-14 md:w-14 p-0"
+                    className="h-14 w-14 md:h-14 md:w-14 p-0"
                     onClick={() => setOpen(false)} // Close mobile menu when clicking
                   >
                     <Link href={item.href}>
-                      <IconComponent className="h-6 w-6 md:h-8 md:w-8" />
+                      <IconComponent className="h-8 w-8 md:h-8 md:w-8" />
                       <span className="sr-only">{item.name}</span>
                     </Link>
                   </Button>
@@ -99,11 +99,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                         asChild
                         variant={isActive ? 'default' : 'ghost'}
                         size="sm"
-                        className="h-10 w-10 md:h-12 md:w-12 p-0"
+                        className="h-14 w-14 md:h-14 md:w-14 p-0"
                         onClick={() => setOpen(false)} // Close mobile menu when clicking
                       >
                         <Link href={item.href}>
-                          <IconComponent className="h-6 w-6 md:h-8 md:w-8" />
+                          <IconComponent className="h-8 w-8 md:h-8 md:w-8" />
                           <span className="sr-only">{item.name}</span>
                         </Link>
                       </Button>

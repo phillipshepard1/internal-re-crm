@@ -1,0 +1,211 @@
+{
+  "emailFiltering": {
+    "version": "1.0",
+    "description": "Email filtering configuration to reduce OpenAI costs",
+    "lastUpdated": "2024-01-15",
+    "settings": {
+      "enablePreFiltering": true,
+      "enableGmailFilters": true,
+      "enableKeywordFiltering": true,
+      "enableDomainFiltering": true,
+      "enableExclusionFiltering": true
+    },
+    "leadSources": {
+      "domains": [
+        "followupboss.com",
+        "homestack.com",
+        "realtor.com",
+        "squarespace.info",
+        "zillow.com"
+      ],
+      "emailPatterns": [
+        "leads@followupboss.com",
+        "noreply@homestack.com",
+        "leads@homestack.com",
+        "noreply@realtor.com",
+        "leads@realtor.com",
+        "form-submission@squarespace.info",
+        "noreply@zillow.com",
+        "leads@zillow.com"
+      ]
+    },
+    "keywords": {
+      "subject": [
+        "property",
+        "house",
+        "home",
+        "listing",
+        "inquiry",
+        "interest",
+        "buy",
+        "buying",
+        "sell",
+        "selling",
+        "invest",
+        "investment",
+        "viewing",
+        "showing",
+        "appointment",
+        "consultation",
+        "estimate",
+        "quote",
+        "real estate",
+        "realtor",
+        "agent"
+      ],
+      "body": [
+        "property inquiry",
+        "house viewing",
+        "home interest",
+        "real estate",
+        "agent help",
+        "interested in",
+        "looking for",
+        "price range",
+        "budget",
+        "location",
+        "neighborhood",
+        "bedroom",
+        "bathroom",
+        "square feet",
+        "sq ft",
+        "acres",
+        "lot size",
+        "schedule viewing",
+        "property details",
+        "market value"
+      ]
+    },
+    "exclusions": {
+      "domains": [
+        "noreply",
+        "no-reply",
+        "donotreply",
+        "mailer-daemon",
+        "postmaster",
+        "bounce",
+        "spam",
+        "newsletter",
+        "marketing",
+        "social",
+        "notification",
+        "alert",
+        "update",
+        "system",
+        "automated"
+      ],
+      "emailPatterns": [
+        "*@noreply.*",
+        "*@no-reply.*",
+        "*@donotreply.*",
+        "*@mailer-daemon.*",
+        "*@postmaster.*",
+        "*@bounce.*",
+        "*@spam.*",
+        "*@newsletter.*",
+        "*@marketing.*"
+      ],
+      "subjects": [
+        "newsletter",
+        "marketing",
+        "promotion",
+        "sale",
+        "discount",
+        "offer",
+        "update",
+        "notification",
+        "alert",
+        "system",
+        "automated",
+        "confirmation",
+        "receipt",
+        "invoice",
+        "billing"
+      ]
+    },
+    "gmailFilters": {
+      "dedicatedEmail": "leads@yourdomain.com",
+      "labels": {
+        "leadSources": "Lead Sources",
+        "websiteLeads": "Website Leads",
+        "keywordMatches": "Keyword Matches",
+        "filteredOut": "Filtered Out"
+      },
+      "filterRules": [
+        {
+          "name": "Real Estate Lead Sources",
+          "criteria": {
+            "from": "*@zillow.com OR *@realtor.com OR *@homestack.com OR *@redfin.com OR *@trulia.com OR *@realtor.ca OR *@remax.ca OR *@century21.ca OR *@royallepage.ca OR *@sothebysrealty.ca"
+          },
+          "actions": {
+            "forwardTo": "leads@yourdomain.com",
+            "skipInbox": true,
+            "applyLabel": "Lead Sources"
+          }
+        },
+        {
+          "name": "Website Contact Forms",
+          "criteria": {
+            "from": "*@yourdomain.com OR *@stresslesscrm.com",
+            "subject": "contact OR inquiry OR form OR lead"
+          },
+          "actions": {
+            "forwardTo": "leads@yourdomain.com",
+            "skipInbox": true,
+            "applyLabel": "Website Leads"
+          }
+        },
+        {
+          "name": "Real Estate Keywords",
+          "criteria": {
+            "subject": "property OR house OR home OR listing OR inquiry OR interest OR buy OR sell OR invest OR viewing OR showing OR appointment OR consultation OR estimate OR quote OR real estate OR realtor OR agent",
+            "hasWords": "property inquiry OR house viewing OR home interest OR real estate OR agent help OR interested in OR looking for OR price range OR budget OR location OR neighborhood OR bedroom OR bathroom OR square feet OR sq ft OR acres OR lot size OR schedule viewing OR property details OR market value"
+          },
+          "actions": {
+            "forwardTo": "leads@yourdomain.com",
+            "skipInbox": true,
+            "applyLabel": "Keyword Matches"
+          }
+        },
+        {
+          "name": "Exclude Non-Leads",
+          "criteria": {
+            "from": "*@noreply.* OR *@no-reply.* OR *@donotreply.* OR *@mailer-daemon.* OR *@postmaster.* OR *@bounce.* OR *@spam.* OR *@newsletter.* OR *@marketing.* OR *@social.* OR *@notification.* OR *@alert.* OR *@update.* OR *@system.* OR *@automated.*"
+          },
+          "actions": {
+            "skipInbox": true,
+            "delete": true
+          }
+        }
+      ]
+    },
+    "n8nWorkflow": {
+      "preFilterNode": {
+        "enabled": true,
+        "confidenceThreshold": 0.7,
+        "logFilteredEmails": true,
+        "logProcessingCosts": true
+      },
+      "openAISettings": {
+        "model": "gpt-4",
+        "maxTokens": 1000,
+        "temperature": 0.1,
+        "enableCostTracking": true
+      }
+    },
+    "costOptimization": {
+      "targetSavings": 80,
+      "maxEmailsPerDay": 100,
+      "maxTokensPerEmail": 1000,
+      "enableBatching": false,
+      "enableCaching": true
+    },
+    "monitoring": {
+      "enableCostTracking": true,
+      "enableFilterEffectiveness": true,
+      "enableLeadQualityTracking": true,
+      "weeklyReports": true,
+      "monthlyReports": true
+    }
+  }
+} 

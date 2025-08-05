@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Person } from '@/lib/supabase'
+import { unformatPhoneNumber } from '@/lib/utils'
 
 // Initialize Supabase client with service role key for admin operations
 const supabase = createClient(
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       email: email ? [email.trim()] : [],
-      phone: phone ? [phone.trim()] : [],
+      phone: phone ? [unformatPhoneNumber(phone.trim())] : [],
       client_type: 'lead',
       lead_status: 'staging',
       lead_source: source || 'manual',
