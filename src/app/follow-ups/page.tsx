@@ -182,11 +182,15 @@ export default function FollowUpsPage() {
     }
   }, [followUpsArray, userRole, user?.id])
 
-  const filteredFollowUps = followUpsArray.filter((fu: FollowUpWithPerson) =>
-    filter === 'upcoming'
-      ? fu.status !== 'completed' && new Date(fu.scheduled_date) >= new Date()
-      : isOverdue(fu)
-  )
+  const filteredFollowUps = followUpsArray.filter((fu: FollowUpWithPerson) => {
+    if (filter === 'upcoming') {
+      // Show all pending follow-ups (including rescheduled ones from missed weeks)
+      return fu.status !== 'completed'
+    } else {
+      // Show overdue follow-ups
+      return isOverdue(fu)
+    }
+  })
 
   // Load people for the person selector
   useEffect(() => {
@@ -212,6 +216,30 @@ export default function FollowUpsPage() {
     }
     loadLeadTags()
   }, [])
+
+  // Check for missed follow-ups on component mount
+  useEffect(() => {
+    async function checkMissedFollowUps() {
+      try {
+        // Call the database function to check and create missed follow-ups
+        const { data, error } = await supabase.rpc('check_and_create_missed_followups')
+        
+        if (error) {
+          console.error('Error checking missed follow-ups:', error)
+        } else if (data && data > 0) {
+          console.log(`Created ${data} missed follow-ups for current week`)
+          // Refetch follow-ups if any were created
+          refetch()
+        }
+      } catch (error) {
+        console.error('Error in checkMissedFollowUps:', error)
+      }
+    }
+    
+    if (user?.id && userRole) {
+      checkMissedFollowUps()
+    }
+  }, [user?.id, userRole])
 
   const openInteractionModal = (fu: FollowUpWithPerson) => {
     setActiveFollowUp(fu)
