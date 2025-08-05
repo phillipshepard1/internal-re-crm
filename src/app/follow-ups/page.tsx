@@ -600,13 +600,13 @@ export default function FollowUpsPage() {
   }
 
   return (
-    <div className="flex-1 p-4 pt-6">
+    <div className="flex-1 p-2 sm:p-4 pt-6 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">Follow-ups</h1>
           <p className="text-muted-foreground text-sm sm:text-base md:text-lg mt-1">Manage your scheduled activities and reminders</p>
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <Button 
             variant={viewMode === 'list' ? 'default' : 'outline'}
             onClick={() => setViewMode('list')}
@@ -1218,7 +1218,7 @@ function WeeklyListView({
                 </CardHeader>
                 
                 <CardContent className="pt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     {dayFollowUps.map((followUp) => (
                       <div
                         key={followUp.id}
@@ -1293,18 +1293,18 @@ function WeeklyListView({
                         {/* Contact Information */}
                         {(followUp.people?.phone && followUp.people.phone.length > 0) || 
                          (followUp.people?.email && followUp.people.email.length > 0) ? (
-                          <div className="mb-3 text-xs text-muted-foreground bg-muted/20 p-2 rounded">
-                            <div className="flex items-center space-x-2">
+                          <div className="mb-3 text-xs text-muted-foreground bg-muted/20 p-2 rounded overflow-hidden">
+                            <div className="flex flex-wrap items-center gap-2">
                               {followUp.people.phone && followUp.people.phone.length > 0 && (
-                                <div className="flex items-center space-x-1">
-                                  <Phone className="h-3 w-3" />
-                                  <span className="truncate">{followUp.people.phone[0]}</span>
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <Phone className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate max-w-[120px]">{followUp.people.phone[0]}</span>
                                 </div>
                               )}
                               {followUp.people.email && followUp.people.email.length > 0 && (
-                                <div className="flex items-center space-x-1">
-                                  <MessageSquare className="h-3 w-3" />
-                                  <span className="truncate">{followUp.people.email[0]}</span>
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <MessageSquare className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate max-w-[120px]">{followUp.people.email[0]}</span>
                                 </div>
                               )}
                             </div>
@@ -1320,13 +1320,13 @@ function WeeklyListView({
                         {/* Enhanced Action Buttons */}
                         <div className="flex flex-col space-y-2 pt-2 border-t border-border/50">
                           {/* Primary Actions Row */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-1">
+                          <div className="flex flex-wrap items-center justify-between gap-1">
+                            <div className="flex items-center flex-wrap gap-1">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => onOpenInteraction(followUp, 'call')}
-                                className="flex items-center gap-1 h-8 px-2"
+                                className="flex items-center gap-1 h-8 px-1 sm:px-2"
                                              title={(() => {
                const hasPhone = followUp.people?.phone && followUp.people.phone.length > 0
                return hasPhone
@@ -1344,7 +1344,7 @@ function WeeklyListView({
                                 size="sm"
                                 variant="outline"
                                 onClick={() => onOpenInteraction(followUp, 'text')}
-                                className="flex items-center gap-1 h-8 px-2"
+                                className="flex items-center gap-1 h-8 px-1 sm:px-2"
                                 title={(() => {
                                   const hasPhone = followUp.people?.phone && followUp.people.phone.length > 0
                                   const hasEmail = followUp.people?.email && followUp.people.email.length > 0
@@ -1387,8 +1387,8 @@ function WeeklyListView({
                           </div>
                           
                           {/* Secondary Actions Row */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-1">
+                          <div className="flex flex-wrap items-center justify-between gap-1">
+                            <div className="flex items-center flex-wrap gap-1">
                               {followUp.people && (
                                 <Button
                                   size="sm"
@@ -1421,7 +1421,7 @@ function WeeklyListView({
                                 >
                                   <Badge 
                                     variant="outline" 
-                                    className="text-xs"
+                                    className="text-xs max-w-[60px] truncate"
                                     style={{
                                       borderColor: followUp.people.lead_tag?.color || '#6b7280',
                                       color: followUp.people.lead_tag?.color || '#6b7280',
@@ -1491,28 +1491,91 @@ function WeekView({ followUps, currentWeek, onWeekChange, onFollowUpClick }: Wee
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <CardTitle>Week View</CardTitle>
-            <CardDescription>
-              {currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString()}
+            <CardTitle className="text-xl sm:text-2xl">Week View</CardTitle>
+            <CardDescription className="text-sm">
+              <span className="hidden sm:inline">{currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString()}</span>
+              <span className="sm:hidden">Week of {currentWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </CardDescription>
           </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-              ← Previous
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Button variant="outline" size="sm" onClick={goToPreviousWeek} className="px-2 sm:px-3">
+              <span className="hidden sm:inline">← Previous</span>
+              <span className="sm:hidden">← Prev</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={goToCurrentWeek}>
+            <Button variant="outline" size="sm" onClick={goToCurrentWeek} className="px-2 sm:px-3">
               Today
             </Button>
-            <Button variant="outline" size="sm" onClick={goToNextWeek}>
-              Next →
+            <Button variant="outline" size="sm" onClick={goToNextWeek} className="px-2 sm:px-3">
+              <span className="hidden sm:inline">Next →</span>
+              <span className="sm:hidden">Next →</span>
             </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-7 gap-2">
+      <CardContent className="p-2 sm:p-6">
+        {/* Mobile view - vertical list */}
+        <div className="block sm:hidden space-y-2">
+          {weekDays.map((day, index) => {
+            const dayFollowUps = getFollowUpsForDay(followUps, day)
+            const isCurrentDay = isToday(day)
+            
+            return (
+              <div 
+                key={index} 
+                className={`p-3 border rounded-lg ${
+                  isCurrentDay ? 'bg-primary/10 border-primary' : 'bg-muted/20'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`text-lg font-bold ${
+                      isCurrentDay ? 'text-primary' : ''
+                    }`}>
+                      {getDayName(day).slice(0, 3)}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {getDayNumber(day)}
+                    </div>
+                    {isCurrentDay && (
+                      <Badge variant="default" className="text-xs">Today</Badge>
+                    )}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {dayFollowUps.length} follow-up{dayFollowUps.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                
+                {dayFollowUps.length > 0 && (
+                  <div className="space-y-1">
+                    {dayFollowUps.map((followUp) => (
+                      <div
+                        key={followUp.id}
+                        className="p-2 bg-background border rounded text-sm cursor-pointer hover:bg-muted/50"
+                        onClick={() => onFollowUpClick(followUp)}
+                      >
+                        <div className="font-medium">
+                          {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown'}
+                        </div>
+                        <div className="text-xs text-muted-foreground capitalize">
+                          {followUp.type} • {new Date(followUp.scheduled_date).toLocaleTimeString('en-US', { 
+                            hour: 'numeric', 
+                            minute: '2-digit',
+                            hour12: true 
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        
+        {/* Desktop view - grid */}
+        <div className="hidden sm:grid sm:grid-cols-7 gap-2">
           {weekDays.map((day, index) => {
             const dayFollowUps = getFollowUpsForDay(followUps, day)
             const isCurrentDay = isToday(day)

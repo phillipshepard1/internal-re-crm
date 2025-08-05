@@ -52,11 +52,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
       
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-16 md:w-20 flex-col border-r bg-background transition-transform duration-300 ease-in-out md:sticky md:translate-x-0 h-screen",
+        "fixed inset-y-0 left-0 z-50 flex w-20 md:w-20 flex-col border-r bg-background transition-transform duration-300 ease-in-out md:sticky md:translate-x-0 h-screen",
         open ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="flex h-16 md:h-20 w-16 md:w-20 items-center justify-center">
-          <div className="h-8 w-8 md:h-12 md:w-12 rounded-lg bg-primary"></div>
+        <div className="flex h-20 md:h-20 w-20 md:w-20 items-center justify-center">
+          <div className="h-10 w-10 md:h-12 md:w-12 rounded-lg bg-primary"></div>
         </div>
         
         <nav className="flex flex-1 flex-col items-center space-y-2 py-4">
@@ -70,11 +70,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                     asChild
                     variant={isActive ? 'default' : 'ghost'}
                     size="sm"
-                    className="h-14 w-14 md:h-14 md:w-14 p-0"
+                    className="h-16 w-16 md:h-14 md:w-14 p-0"
                     onClick={() => setOpen(false)} // Close mobile menu when clicking
                   >
                     <Link href={item.href}>
-                      <IconComponent className="h-8 w-8 md:h-8 md:w-8" />
+                      <IconComponent className="h-10 w-10 md:h-8 md:w-8" />
                       <span className="sr-only">{item.name}</span>
                     </Link>
                   </Button>
@@ -99,11 +99,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
                         asChild
                         variant={isActive ? 'default' : 'ghost'}
                         size="sm"
-                        className="h-14 w-14 md:h-14 md:w-14 p-0"
+                        className="h-16 w-16 md:h-14 md:w-14 p-0"
                         onClick={() => setOpen(false)} // Close mobile menu when clicking
                       >
                         <Link href={item.href}>
-                          <IconComponent className="h-8 w-8 md:h-8 md:w-8" />
+                          <IconComponent className="h-10 w-10 md:h-8 md:w-8" />
                           <span className="sr-only">{item.name}</span>
                         </Link>
                       </Button>

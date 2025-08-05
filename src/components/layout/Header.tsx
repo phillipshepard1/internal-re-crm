@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut, User, Settings, Bell, Menu, Calendar } from 'lucide-react'
+import { LogOut, User, Settings, Bell, Menu, Calendar, Shield, Phone, FileText, Home } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -28,6 +29,7 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   const router = useRouter()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [alertModal, setAlertModal] = useState<{
     open: boolean
@@ -105,20 +107,20 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
   return (
     <TooltipProvider>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 md:h-14 items-center justify-between">
+        <div className="container flex h-20 md:h-14 items-center justify-between">
           <div className="flex items-center space-x-2">
             {/* Mobile menu button */}
             <Button
               variant="ghost"
               size="sm"
-              className="md:hidden h-10 w-10 p-0"
+              className="md:hidden h-12 w-12 p-0"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              <Menu className="h-6 w-6" />
+              <Menu className="h-8 w-8" />
               <span className="sr-only">Toggle sidebar</span>
             </Button>
             
-            <h1 className="text-lg sm:text-lg font-semibold">Internal-Re-CRM</h1>
+            <h1 className="text-xl sm:text-lg font-semibold">Internal-Re-CRM</h1>
             {userRole && (
               <span className="text-xs text-muted-foreground">
                 ({userRole})
@@ -126,26 +128,26 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
             )}
           </div>
           
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-0.5 md:space-x-1">
             {/* Notifications */}
             <Dialog open={notificationsOpen} onOpenChange={setNotificationsOpen}>
-              <DialogTrigger asChild>
-                <Tooltip>
-                  <TooltipTrigger asChild>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DialogTrigger asChild>
                     <Button 
                       variant="ghost" 
                       size="sm"
-                      className="relative h-10 w-10 md:h-8 md:w-8 p-0"
+                      className="relative h-12 w-12 md:h-8 md:w-8 p-0"
                     >
-                      <Bell className="h-5 w-5 md:h-4 md:w-4" />
+                      <Bell className="h-6 w-6 md:h-4 md:w-4" />
                       <span className="sr-only">Notifications</span>
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Notifications</p>
-                  </TooltipContent>
-                </Tooltip>
-              </DialogTrigger>
+                  </DialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Notifications</p>
+                </TooltipContent>
+              </Tooltip>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Notifications</DialogTitle>
@@ -157,7 +159,20 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center text-sm">
-                        <Calendar className="mr-2 h-4 w-4 text-blue-600" />
+                        <Bell className="mr-2 h-4 w-4 text-blue-600" />
+                        Recent Activity
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-muted-foreground text-center py-4">
+                        No new notifications
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center text-sm">
+                        <Calendar className="mr-2 h-4 w-4 text-green-600" />
                         Quick Actions
                       </CardTitle>
                     </CardHeader>
@@ -165,24 +180,38 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="w-full"
+                        className="w-full justify-start"
                         onClick={() => {
                           setNotificationsOpen(false)
                           router.push('/follow-ups')
                         }}
                       >
+                        <Phone className="mr-2 h-4 w-4" />
                         View Follow-ups
                       </Button>
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="w-full"
+                        className="w-full justify-start"
                         onClick={() => {
                           setNotificationsOpen(false)
                           router.push('/tasks')
                         }}
                       >
+                        <FileText className="mr-2 h-4 w-4" />
                         View Tasks
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full justify-start"
+                        onClick={() => {
+                          setNotificationsOpen(false)
+                          router.push('/dashboard')
+                        }}
+                      >
+                        <Home className="mr-2 h-4 w-4" />
+                        Dashboard
                       </Button>
                     </CardContent>
                   </Card>
@@ -190,41 +219,94 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
               </DialogContent>
             </Dialog>
             
-            {/* Admin Panel - Only show for admin users */}
-            {userRole === 'admin' && (
+            {/* Settings - Show for all users */}
+            <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="h-10 w-10 md:h-8 md:w-8 p-0"
-                    onClick={handleSettings}
-                  >
-                    <Settings className="h-5 w-5 md:h-4 md:w-4" />
-                    <span className="sr-only">Admin Panel</span>
-                  </Button>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="h-12 w-12 md:h-8 md:w-8 p-0"
+                    >
+                      <Settings className="h-6 w-6 md:h-4 md:w-4" />
+                      <span className="sr-only">Settings</span>
+                    </Button>
+                  </DialogTrigger>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Admin Panel</p>
+                  <p>Settings</p>
                 </TooltipContent>
               </Tooltip>
-            )}
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Settings</DialogTitle>
+                  <DialogDescription>
+                    Application settings and preferences
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {userRole === 'admin' && (
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={() => {
+                            setSettingsOpen(false)
+                            router.push('/admin')
+                          }}
+                        >
+                          <Shield className="mr-2 h-4 w-4" />
+                          Admin Panel
+                        </Button>
+                      )}
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => {
+                          setSettingsOpen(false)
+                          setProfileOpen(true)
+                        }}
+                      >
+                        <User className="mr-2 h-4 w-4" />
+                        View Profile
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        disabled
+                      >
+                        <Bell className="mr-2 h-4 w-4" />
+                        Notification Preferences
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setSettingsOpen(false)}>Close</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             
             {/* Profile */}
             <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
-              <DialogTrigger asChild>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-10 w-10 md:h-8 md:w-8 p-0">
-                      <User className="h-5 w-5 md:h-4 md:w-4" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-12 w-12 md:h-8 md:w-8 p-0">
+                      <User className="h-6 w-6 md:h-4 md:w-4" />
                       <span className="sr-only">Profile</span>
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Profile</p>
-                  </TooltipContent>
-                </Tooltip>
-              </DialogTrigger>
+                  </DialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Profile</p>
+                </TooltipContent>
+              </Tooltip>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Profile</DialogTitle>
@@ -280,25 +362,25 @@ export default function Header({ sidebarOpen, setSidebarOpen }: HeaderProps) {
             </Dialog>
             
             {/* Logout (standalone for quick access) */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-12 w-12 md:h-8 md:w-8 p-0"
+                  onClick={() => setLogoutConfirmOpen(true)}
+                >
+                  <LogOut className="h-6 w-6 md:h-4 md:w-4" />
+                  <span className="sr-only">Logout</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Logout</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            {/* Logout Confirmation Dialog */}
             <Dialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
-              <DialogTrigger asChild>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-10 w-10 md:h-8 md:w-8 p-0"
-                      onClick={() => setLogoutConfirmOpen(true)}
-                    >
-                      <LogOut className="h-5 w-5 md:h-4 md:w-4" />
-                      <span className="sr-only">Logout</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Logout</p>
-                  </TooltipContent>
-                </Tooltip>
-              </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Confirm Logout</DialogTitle>
