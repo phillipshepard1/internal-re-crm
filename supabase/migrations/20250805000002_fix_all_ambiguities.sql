@@ -1,8 +1,12 @@
--- Handle missed follow-ups by rescheduling them for the current week
--- Migration: 20250805000000_handle_missed_followups.sql
+-- Fix all ambiguous column references in follow-up functions
+-- Migration: 20250805000002_fix_all_ambiguities.sql
 
--- Enhanced function to create next follow-up that handles missed follow-ups
-CREATE OR REPLACE FUNCTION create_next_followup_for_person(person_id UUID)
+-- Drop existing functions to recreate them
+DROP FUNCTION IF EXISTS create_next_followup_for_person(UUID);
+DROP FUNCTION IF EXISTS check_and_create_missed_followups();
+
+-- Recreate create_next_followup_for_person with fixed parameter name
+CREATE OR REPLACE FUNCTION create_next_followup_for_person(p_person_id UUID)
 RETURNS UUID AS $$
 DECLARE
   person_record RECORD;
@@ -21,7 +25,7 @@ BEGIN
     p.assigned_to
   INTO person_record
   FROM people p
-  WHERE p.id = person_id;
+  WHERE p.id = p_person_id;
 
   -- If no frequency set, don't create follow-up
   IF person_record.follow_up_frequency IS NULL THEN
@@ -35,7 +39,7 @@ BEGIN
   -- Check if there's already a follow-up scheduled for this week
   SELECT EXISTS (
     SELECT 1 FROM follow_ups fu 
-    WHERE fu.person_id = person_id 
+    WHERE fu.person_id = p_person_id 
     AND fu.status = 'pending'
     AND fu.scheduled_date >= current_week_start 
     AND fu.scheduled_date <= current_week_end
@@ -47,12 +51,12 @@ BEGIN
   END IF;
 
   -- Get the last completed follow-up to determine the base date
-  SELECT scheduled_date 
+  SELECT fu.scheduled_date 
   INTO last_completed_followup
-  FROM follow_ups 
-  WHERE person_id = person_id 
-  AND status = 'completed'
-  ORDER BY scheduled_date DESC 
+  FROM follow_ups fu
+  WHERE fu.person_id = p_person_id 
+  AND fu.status = 'completed'
+  ORDER BY fu.scheduled_date DESC 
   LIMIT 1;
 
   -- For missed follow-ups: if they should have had a follow-up this week based on frequency,
@@ -89,7 +93,7 @@ BEGIN
     notes,
     assigned_to
   ) VALUES (
-    person_id,
+    p_person_id,
     next_date::TIMESTAMP WITH TIME ZONE,
     'pending',
     'call',
@@ -100,78 +104,13 @@ BEGIN
   -- Update the person's last follow-up date
   UPDATE people 
   SET last_follow_up_date = next_date::TIMESTAMP WITH TIME ZONE
-  WHERE id = person_id;
+  WHERE id = p_person_id;
 
   RETURN new_followup_id;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to calculate next follow-up date within the current week
-CREATE OR REPLACE FUNCTION calculate_next_followup_date_for_current_week(
-  frequency TEXT,
-  day_of_week INTEGER
-)
-RETURNS DATE AS $$
-DECLARE
-  next_date DATE;
-  current_week_start DATE;
-  today_dow INTEGER;
-BEGIN
-  -- Calculate current week start (Monday)
-  current_week_start := CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE)::INTEGER + 1;
-  today_dow := EXTRACT(DOW FROM CURRENT_DATE);
-
-  CASE frequency
-    WHEN 'twice_week' THEN
-      -- For twice a week, schedule for next available Monday or Thursday
-      IF today_dow <= 1 THEN
-        -- Today is Sunday or Monday, schedule for Monday
-        next_date := current_week_start;
-      ELSIF today_dow <= 4 THEN
-        -- Today is Tuesday-Thursday, schedule for Thursday
-        next_date := current_week_start + 3;
-      ELSE
-        -- Today is Friday-Saturday, schedule for next Monday
-        next_date := current_week_start + 7;
-      END IF;
-      
-    WHEN 'weekly' THEN
-      -- Schedule for the specified day of week in current week
-      next_date := current_week_start + (day_of_week - 1);
-      
-      -- If that day has already passed this week, schedule for today
-      IF next_date < CURRENT_DATE THEN
-        next_date := CURRENT_DATE;
-      END IF;
-      
-    WHEN 'biweekly' THEN
-      -- For biweekly, use the same logic as weekly for current week
-      next_date := current_week_start + (day_of_week - 1);
-      
-      -- If that day has already passed this week, schedule for today
-      IF next_date < CURRENT_DATE THEN
-        next_date := CURRENT_DATE;
-      END IF;
-      
-    WHEN 'monthly' THEN
-      -- For monthly, use the same logic as weekly for current week
-      next_date := current_week_start + (day_of_week - 1);
-      
-      -- If that day has already passed this week, schedule for today
-      IF next_date < CURRENT_DATE THEN
-        next_date := CURRENT_DATE;
-      END IF;
-      
-    ELSE
-      -- Default to today
-      next_date := CURRENT_DATE;
-  END CASE;
-
-  RETURN next_date;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to check and create missed follow-ups for current week
+-- Recreate check_and_create_missed_followups with fixed references
 CREATE OR REPLACE FUNCTION check_and_create_missed_followups()
 RETURNS INTEGER AS $$
 DECLARE
@@ -179,7 +118,6 @@ DECLARE
   followup_count INTEGER := 0;
   current_week_start DATE;
   current_week_end DATE;
-  last_followup_date DATE;
   should_have_followup BOOLEAN;
 BEGIN
   -- Calculate current week boundaries
@@ -189,7 +127,7 @@ BEGIN
   -- Find all people who might have missed follow-ups
   FOR person_record IN 
     SELECT 
-      p.id,
+      p.id as person_id,
       p.follow_up_frequency,
       p.follow_up_day_of_week,
       p.assigned_to,
@@ -207,7 +145,7 @@ BEGIN
         AND fu2.scheduled_date >= current_week_start
         AND fu2.scheduled_date <= current_week_end
       )
-    GROUP BY p.id
+    GROUP BY p.id, p.follow_up_frequency, p.follow_up_day_of_week, p.assigned_to
   LOOP
     should_have_followup := FALSE;
     
@@ -236,7 +174,7 @@ BEGIN
     
     -- If they should have a follow-up, create one for current week
     IF should_have_followup THEN
-      PERFORM create_next_followup_for_person(person_record.id);
+      PERFORM create_next_followup_for_person(person_record.person_id);
       followup_count := followup_count + 1;
     END IF;
   END LOOP;
@@ -244,7 +182,3 @@ BEGIN
   RETURN followup_count;
 END;
 $$ LANGUAGE plpgsql;
-
--- Create a scheduled job to check for missed follow-ups daily
--- This would typically be run by a cron job or scheduled task
--- For now, we'll just create the function that can be called manually or by a scheduler

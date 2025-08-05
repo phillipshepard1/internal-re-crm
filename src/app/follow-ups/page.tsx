@@ -1222,11 +1222,7 @@ function WeeklyListView({
                     {dayFollowUps.map((followUp) => (
                       <div
                         key={followUp.id}
-                        className={`p-4 border rounded-lg transition-all hover:shadow-md hover:border-primary/50 ${
-                          isOverdue(followUp) 
-                            ? 'border-destructive/50 bg-destructive/5 hover:border-destructive' 
-                            : 'border-border hover:bg-muted/30'
-                        }`}
+                        className="p-4 border rounded-lg transition-all hover:shadow-md hover:border-primary/50 border-border hover:bg-muted/30"
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -1437,18 +1433,16 @@ function WeeklyListView({
                                 </Button>
                               )}
                             </div>
-                            {/* Delete button - only show for overdue follow-ups */}
-                            {isOverdue(followUp) && (
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => onDeleteFollowUp(followUp)}
-                                className="flex items-center gap-1 h-7 px-2 text-xs"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                                <span className="hidden sm:inline">Delete</span>
-                              </Button>
-                            )}
+                            {/* Delete button - available for all follow-ups */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onDeleteFollowUp(followUp)}
+                              className="flex items-center gap-1 h-7 px-2 text-xs text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span className="hidden sm:inline">Delete</span>
+                            </Button>
                           </div>
                         </div>
                       </div>
