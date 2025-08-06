@@ -795,14 +795,14 @@ export function LeadStaging({ users }: LeadStagingProps) {
         {/* Search and Actions */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="relative flex-1 max-w-md">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1 sm:max-w-md">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search leads..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  className="pl-8"
+                  className="pl-8 w-full"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -813,18 +813,20 @@ export function LeadStaging({ users }: LeadStagingProps) {
                       setRemoveDuplicatesDialogOpen(true)
                       setDuplicateInfo(null)
                     }}
-                    className="flex items-center gap-2"
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 text-xs sm:text-sm px-3 sm:px-4"
                   >
-                    <Sparkles className="h-4 w-4" />
-                    Remove Duplicates
+                    <Sparkles className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden sm:inline">Remove Duplicates</span>
+                    <span className="sm:hidden">Remove Dupes</span>
                   </Button>
                 )}
                 <Button
                   onClick={() => setCreateLeadDialogOpen(true)}
-                  className="flex items-center gap-2"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-2 text-xs sm:text-sm px-3 sm:px-4"
                 >
-                  <Plus className="h-4 w-4" />
-                  Create Lead
+                  <Plus className="h-4 w-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">Create Lead</span>
+                  <span className="sm:hidden">Create</span>
                 </Button>
               </div>
             </div>
@@ -835,49 +837,55 @@ export function LeadStaging({ users }: LeadStagingProps) {
         {selectedLeads.size > 0 && (
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                 <div className="flex items-center space-x-2">
-                  <Badge variant="secondary" className="text-sm">
+                  <Badge variant="secondary" className="text-xs sm:text-sm">
                     {selectedLeads.size} selected
                   </Badge>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={clearSelection}
-                    className="text-muted-foreground"
+                    className="text-muted-foreground text-xs sm:text-sm"
                   >
                     Clear Selection
                   </Button>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                   {activeTab === 'staging' && (
                     <Button
                       variant="default"
                       size="sm"
                       onClick={() => setBulkAssignDialogOpen(true)}
-                      className="flex items-center gap-2"
+                      className="flex-1 md:flex-initial flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3"
                     >
-                      <UserPlus className="h-4 w-4" />
-                      Assign to Agent ({selectedLeads.size})
+                      <UserPlus className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">Assign to Agent</span>
+                      <span className="sm:hidden">Assign</span>
+                      <span>({selectedLeads.size})</span>
                     </Button>
                   )}
                   <Button
                     variant="destructive"
                     size="sm"
                     onClick={() => setBulkDeleteDialogOpen(true)}
-                    className="flex items-center gap-2"
+                    className="flex-1 md:flex-initial flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3"
                   >
-                    <Trash2 className="h-4 w-4" />
-                    Delete ({selectedLeads.size})
+                    <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Delete</span>
+                    <span className="sm:hidden">Del</span>
+                    <span>({selectedLeads.size})</span>
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setBulkArchiveDialogOpen(true)}
-                    className="flex items-center gap-2"
+                    className="flex-1 md:flex-initial flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3"
                   >
-                    <Archive className="h-4 w-4" />
-                    Archive ({selectedLeads.size})
+                    <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Archive</span>
+                    <span className="sm:hidden">Arch</span>
+                    <span>({selectedLeads.size})</span>
                   </Button>
                 </div>
               </div>

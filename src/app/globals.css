@@ -121,6 +121,42 @@
   }
 }
 
+/* Custom scrollbar styles for tab navigation */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-muted/30 rounded-full;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+  }
+  
+  /* Mobile-specific tab styles */
+  @media (max-width: 767px) {
+    .tabs-mobile-scroll {
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x mandatory;
+    }
+    
+    .tabs-mobile-scroll > * > * {
+      scroll-snap-align: start;
+    }
+  }
+}
+
 /* Custom toast styles for better visibility */
 [data-sonner-toaster] {
   z-index: 9999 !important;

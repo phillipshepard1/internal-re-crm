@@ -1,7 +1,8 @@
+
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Search, Eye, Mail, Phone, Calendar, Clock, User } from 'lucide-react'
+import { Plus, Search, Eye, Mail, Phone, Calendar, Clock, User, Upload, UserPlus, X, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,13 +10,16 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Progress } from '@/components/ui/progress'
 import { useAuth } from '@/contexts/AuthContext'
-import { getPeople } from '@/lib/database'
+import { getPeople, updatePerson } from '@/lib/database'
 import type { Person } from '@/lib/supabase'
 import { formatPhoneNumberForDisplay } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { useDataLoader } from '@/hooks/useDataLoader'
+import { useToast } from '@/components/ui/use-toast'
 import Link from 'next/link'
 
 // Move loadFunction outside component to prevent recreation on every render
@@ -26,6 +30,10 @@ const loadPeopleData = async (userId: string, userRole: string) => {
 export default function PeoplePage() {
   const { user, userRole } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedPeople, setSelectedPeople] = useState<Set<string>>(new Set())
+  const [isConverting, setIsConverting] = useState(false)
+  const [conversionProgress, setConversionProgress] = useState(0)
+  const { toast } = useToast()
 
   // Debug component lifecycle
   useEffect(() => {
@@ -55,6 +63,77 @@ export default function PeoplePage() {
     `${person.first_name} ${person.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (person.email && person.email[0]?.toLowerCase().includes(searchQuery.toLowerCase()))
   )
+
+  const toggleSelectPerson = (personId: string) => {
+    const newSelected = new Set(selectedPeople)
+    if (newSelected.has(personId)) {
+      newSelected.delete(personId)
+    } else {
+      newSelected.add(personId)
+    }
+    setSelectedPeople(newSelected)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedPeople.size === paginatedPeople.length) {
+      setSelectedPeople(new Set())
+    } else {
+      setSelectedPeople(new Set(paginatedPeople.map(p => p.id)))
+    }
+  }
+
+  const convertToLeads = async () => {
+    if (selectedPeople.size === 0) return
+
+    setIsConverting(true)
+    setConversionProgress(0)
+    
+    try {
+      const selectedArray = Array.from(selectedPeople)
+      const totalToConvert = selectedArray.length
+      let successCount = 0
+
+      for (let i = 0; i < selectedArray.length; i++) {
+        try {
+          await updatePerson(selectedArray[i], {
+            client_type: 'lead',
+            lead_status: 'staging'
+          })
+          successCount++
+        } catch (error) {
+          console.error(`Failed to convert person ${selectedArray[i]}:`, error)
+        }
+        
+        setConversionProgress(((i + 1) / totalToConvert) * 100)
+      }
+
+      if (successCount === totalToConvert) {
+        toast({
+          title: 'Success',
+          description: `Successfully converted ${successCount} people to leads. They are now in the staging area.`
+        })
+      } else {
+        toast({
+          title: 'Partial Success',
+          description: `Converted ${successCount} out of ${totalToConvert} people to leads.`,
+          variant: successCount === 0 ? 'destructive' : 'default'
+        })
+      }
+
+      setSelectedPeople(new Set())
+      refetch()
+    } catch (error) {
+      console.error('Error converting to leads:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to convert people to leads',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsConverting(false)
+      setConversionProgress(0)
+    }
+  }
 
   const {
     currentData: paginatedPeople,
@@ -121,19 +200,34 @@ export default function PeoplePage() {
               Manage your contacts and their information
             </p>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button asChild className="w-full sm:w-auto">
-                <Link href="/people/new">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Person
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Add a new contact to your CRM</p>
-            </TooltipContent>
-          </Tooltip>
+          <div className="flex gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" asChild>
+                  <Link href="/people/import">
+                    <Upload className="mr-2 h-4 w-4" />
+                    Import CSV
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Import multiple contacts from a CSV file</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button asChild className="w-full sm:w-auto">
+                  <Link href="/people/new">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Person
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add a new contact to your CRM</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
 
         <Card>
@@ -153,11 +247,40 @@ export default function PeoplePage() {
             </div>
           </CardHeader>
           <CardContent>
+            {selectedPeople.size > 0 && (
+              <div className="mb-4 p-4 bg-muted rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{selectedPeople.size} selected</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedPeople(new Set())}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear selection
+                  </Button>
+                </div>
+                <Button
+                  onClick={convertToLeads}
+                  disabled={isConverting}
+                  size="sm"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Convert to Leads
+                </Button>
+              </div>
+            )}
             {filteredPeople.length > 0 ? (
               <>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px]">
+                      <Checkbox
+                        checked={paginatedPeople.length > 0 && selectedPeople.size === paginatedPeople.length}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Assigned To</TableHead>
                     <TableHead>Next Follow-up</TableHead>
@@ -171,6 +294,13 @@ export default function PeoplePage() {
                 <TableBody>
                     {paginatedPeople.map((person: Person) => (
                     <TableRow key={person.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedPeople.has(person.id)}
+                          onCheckedChange={() => toggleSelectPerson(person.id)}
+                          disabled={person.client_type === 'lead'}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         <Link 
                           href={`/people/${person.id}`}

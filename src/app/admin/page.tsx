@@ -240,8 +240,8 @@ export default function AdminPage() {
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Admin Panel</h2>
-            <p className="text-muted-foreground">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Panel</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Manage system settings and user access
             </p>
           </div>
@@ -259,8 +259,8 @@ export default function AdminPage() {
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Admin Panel</h2>
-            <p className="text-muted-foreground">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Panel</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Manage system settings and user access
             </p>
           </div>
@@ -282,8 +282,8 @@ export default function AdminPage() {
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Admin Panel</h2>
-            <p className="text-muted-foreground">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Panel</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Manage system settings and user access
             </p>
           </div>
@@ -366,16 +366,20 @@ export default function AdminPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={updateTabInUrl} className="space-y-4">
-          <div className="w-full overflow-x-auto pb-2">
-            <TabsList className="w-full md:w-fit min-w-full md:min-w-0 flex md:inline-flex">
-              <TabsTrigger value="leads" className="flex-1 md:flex-initial">Lead Staging</TabsTrigger>
-              <TabsTrigger value="users" className="flex-1 md:flex-initial">User Management</TabsTrigger>
-              <TabsTrigger value="roles" className="flex-1 md:flex-initial">Role Management</TabsTrigger>
-              <TabsTrigger value="sources" className="flex-1 md:flex-initial">Lead Sources</TabsTrigger>
-              {/* <TabsTrigger value="plans" className="flex-1 md:flex-initial">Follow-up Frequencies</TabsTrigger> */}
-              <TabsTrigger value="activity" className="flex-1 md:flex-initial">Activity Dashboard</TabsTrigger>
-              <TabsTrigger value="reports" className="flex-1 md:flex-initial">Reports</TabsTrigger>
-            </TabsList>
+          <div className="relative w-full">
+            <div className="w-full overflow-x-auto pb-2 scrollbar-thin tabs-mobile-scroll">
+              <TabsList className="w-full md:w-auto flex flex-nowrap md:flex-wrap justify-start md:justify-center min-w-max bg-muted/50">
+                <TabsTrigger value="leads" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Lead Staging</TabsTrigger>
+                <TabsTrigger value="users" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">User Mgmt</TabsTrigger>
+                <TabsTrigger value="roles" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Roles</TabsTrigger>
+                <TabsTrigger value="sources" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Lead Sources</TabsTrigger>
+                {/* <TabsTrigger value="plans" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Follow-up Plans</TabsTrigger> */}
+                <TabsTrigger value="activity" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Activity</TabsTrigger>
+                <TabsTrigger value="reports" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Reports</TabsTrigger>
+              </TabsList>
+            </div>
+            {/* Mobile scroll indicator */}
+            <div className="md:hidden absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
           </div>
           
           <TabsContent value="leads" className="space-y-4">

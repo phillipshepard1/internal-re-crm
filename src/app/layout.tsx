@@ -26,8 +26,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
           <>{children}</>
         ) : (
           // Authenticated pages - with sidebar/header
-          <div className="h-screen bg-background overflow-hidden">
-            <div className="flex h-full">
+          <div className="h-screen bg-background">
+            <div className="flex">
               {/* Fixed Sidebar */}
               <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
               <div className="flex-1 flex flex-col overflow-hidden">
