@@ -1686,6 +1686,105 @@ export async function getLeadsWithTags(status?: 'staging' | 'assigned' | 'contac
   return data || []
 }
 
+// Get converted leads only (for Converted Leads tab)
+export async function getConvertedLeads(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('client_type', 'lead')
+    .eq('lead_status', 'converted')
+    .order('last_interaction', { ascending: false })
+  
+  // If user is an agent, only show assigned contacts
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+// Get imported leads (people with lead_source = 'csv_import')
+export async function getImportedLeads(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .eq('lead_source', 'csv_import')
+    .eq('client_type', 'lead')
+    .neq('lead_status', 'converted')
+    .order('created_at', { ascending: false })
+  
+  // If user is an agent, only show assigned contacts
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+// Get regular people (non-leads, excluding converted leads)
+export async function getRegularPeople(userId?: string, userRole?: string) {
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .or('client_type.is.null,client_type.neq.lead')
+    .order('last_interaction', { ascending: false })
+  
+  // If user is an agent, only show assigned contacts
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+// Bulk convert people to leads
+export async function bulkConvertPeopleToLeads(personIds: string[], userId: string) {
+  const { data, error } = await supabase
+    .from('people')
+    .update({
+      client_type: 'lead',
+      lead_status: 'staging',
+      lead_source: 'csv_import',
+      assigned_to: userId,
+      updated_at: new Date().toISOString()
+    })
+    .in('id', personIds)
+    .select()
+
+  if (error) throw error
+  return data || []
+}
+
 // Get leads by tag
 export async function getLeadsByTag(tagName: string, userId?: string, userRole?: string): Promise<Person[]> {
   // First, get the tag ID for the given tag name

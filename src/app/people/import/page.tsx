@@ -21,10 +21,10 @@ interface ParsedPerson {
   phone?: string
   company?: string
   position?: string
-  street_address?: string
+  address?: string
   city?: string
   state?: string
-  zip?: string
+  zip_code?: string
   notes?: string
 }
 
@@ -45,38 +45,51 @@ export default function ImportPeoplePage() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedCount, setUploadedCount] = useState(0)
+  const [showAllRecords, setShowAllRecords] = useState(false)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
-    if (selectedFile && selectedFile.type === 'text/csv') {
-      setFile(selectedFile)
-      parseCSV(selectedFile)
-    } else {
-      toast({
-        title: 'Invalid file type',
-        description: 'Please select a CSV file',
-        variant: 'destructive'
-      })
+    if (selectedFile) {
+      // Check if it's a CSV file by extension or MIME type
+      const isCSV = selectedFile.type === 'text/csv' || 
+                   selectedFile.name.toLowerCase().endsWith('.csv') ||
+                   selectedFile.type === 'application/csv'
+      
+      if (isCSV) {
+        setFile(selectedFile)
+        parseCSV(selectedFile)
+      } else {
+        toast({
+          title: 'Invalid file type',
+          description: 'Please select a CSV file',
+          variant: 'destructive'
+        })
+      }
     }
   }
 
   const parseCSV = (file: File) => {
     const reader = new FileReader()
     reader.onload = (e) => {
-      const text = e.target?.result as string
-      const lines = text.split('\n').filter(line => line.trim())
-      
-      if (lines.length < 2) {
-        toast({
-          title: 'Invalid CSV',
-          description: 'CSV file must have a header row and at least one data row',
-          variant: 'destructive'
-        })
-        return
-      }
+      try {
+        const text = e.target?.result as string
+        console.log('CSV content:', text.substring(0, 500)) // Debug log
+        
+        const lines = text.split('\n').filter(line => line.trim())
+        console.log('Number of lines:', lines.length) // Debug log
+        
+        if (lines.length < 2) {
+          toast({
+            title: 'Invalid CSV',
+            description: 'CSV file must have a header row and at least one data row',
+            variant: 'destructive'
+          })
+          return
+        }
 
       // Parse header
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
+      console.log('Detected headers:', headers) // Debug log
       
       // Map headers to our expected fields
       const headerMap: Record<string, string> = {
@@ -87,25 +100,34 @@ export default function ImportPeoplePage() {
         'lastname': 'last_name',
         'last': 'last_name',
         'email': 'email',
+        'email 1': 'email',
+        'email 2': 'email',
+        'email address': 'email',
         'phone': 'phone',
         'phone number': 'phone',
         'mobile': 'phone',
+        'telephone': 'phone',
         'company': 'company',
         'organization': 'company',
         'position': 'position',
         'title': 'position',
         'job title': 'position',
-        'address': 'street_address',
-        'street': 'street_address',
-        'street address': 'street_address',
+        'address': 'address',
+        'street': 'address',
+        'street address': 'address',
+        'property address': 'address',
         'city': 'city',
+        'property city': 'city',
         'state': 'state',
-        'zip': 'zip',
-        'zipcode': 'zip',
-        'zip code': 'zip',
-        'postal code': 'zip',
+        'property state': 'state',
+        'zip': 'zip_code',
+        'zipcode': 'zip_code',
+        'zip code': 'zip_code',
+        'postal code': 'zip_code',
+        'property postal code': 'zip_code',
         'notes': 'notes',
-        'comments': 'notes'
+        'comments': 'notes',
+        'description': 'notes'
       }
 
       const fieldIndices: Record<string, number> = {}
@@ -115,12 +137,14 @@ export default function ImportPeoplePage() {
           fieldIndices[mappedField] = index
         }
       })
+      console.log('Field mapping:', fieldIndices) // Debug log
 
       // Check required fields
       if (fieldIndices.first_name === undefined || fieldIndices.email === undefined) {
+        console.log('Missing required fields. Available fields:', Object.keys(fieldIndices)) // Debug log
         toast({
           title: 'Missing required columns',
-          description: 'CSV must have "First Name" and "Email" columns',
+          description: 'CSV must have "First Name" and "Email" columns. Found: ' + headers.join(', '),
           variant: 'destructive'
         })
         return
@@ -141,10 +165,10 @@ export default function ImportPeoplePage() {
           phone: fieldIndices.phone !== undefined ? values[fieldIndices.phone]?.trim() : undefined,
           company: fieldIndices.company !== undefined ? values[fieldIndices.company]?.trim() : undefined,
           position: fieldIndices.position !== undefined ? values[fieldIndices.position]?.trim() : undefined,
-          street_address: fieldIndices.street_address !== undefined ? values[fieldIndices.street_address]?.trim() : undefined,
+          address: fieldIndices.address !== undefined ? values[fieldIndices.address]?.trim() : undefined,
           city: fieldIndices.city !== undefined ? values[fieldIndices.city]?.trim() : undefined,
           state: fieldIndices.state !== undefined ? values[fieldIndices.state]?.trim() : undefined,
-          zip: fieldIndices.zip !== undefined ? values[fieldIndices.zip]?.trim() : undefined,
+          zip_code: fieldIndices.zip_code !== undefined ? values[fieldIndices.zip_code]?.trim() : undefined,
           notes: fieldIndices.notes !== undefined ? values[fieldIndices.notes]?.trim() : undefined
         }
 
@@ -167,6 +191,14 @@ export default function ImportPeoplePage() {
 
       setParsedData(parsed)
       setValidationErrors(errors)
+      } catch (error) {
+        console.error('Error parsing CSV:', error)
+        toast({
+          title: 'Error parsing CSV',
+          description: 'There was an error reading the CSV file. Please check the file format.',
+          variant: 'destructive'
+        })
+      }
     }
 
     reader.readAsText(file)
@@ -226,6 +258,7 @@ export default function ImportPeoplePage() {
             email: [person.email],
             phone: person.phone ? [person.phone] : [],
             client_type: 'person', // Default to person, not lead
+            lead_source: 'csv_import', // Mark as imported via CSV
             assigned_to: user.id
           })
           
@@ -383,7 +416,7 @@ export default function ImportPeoplePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {parsedData.slice(0, 10).map((person, index) => (
+                  {(showAllRecords ? parsedData : parsedData.slice(0, 10)).map((person, index) => (
                     <TableRow key={index}>
                       <TableCell>
                         {person.first_name} {person.last_name}
@@ -396,10 +429,29 @@ export default function ImportPeoplePage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {parsedData.length > 10 && (
+                  {parsedData.length > 10 && !showAllRecords && (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
-                        ... and {parsedData.length - 10} more records
+                      <TableCell colSpan={5} className="text-center">
+                        <Button
+                          variant="ghost"
+                          onClick={() => setShowAllRecords(true)}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          Show all {parsedData.length} records
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {parsedData.length > 10 && showAllRecords && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center">
+                        <Button
+                          variant="ghost"
+                          onClick={() => setShowAllRecords(false)}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          Show less (first 10 records)
+                        </Button>
                       </TableCell>
                     </TableRow>
                   )}

@@ -45,6 +45,15 @@ const listOptions = [
   { value: 'past_clients', label: 'Past Clients' },
 ]
 
+const leadStatusOptions = [
+  { value: 'staging', label: 'Staging' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'qualified', label: 'Qualified' },
+  { value: 'converted', label: 'Converted' },
+  { value: 'lost', label: 'Lost' },
+]
+
 export default function PersonDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -108,6 +117,7 @@ export default function PersonDetailPage() {
     zip_code: '',
     country: '',
     client_type: 'lead',
+    lead_status: 'staging' as 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost',
     notes: '',
     // Missing fields
     profile_picture: '',
@@ -182,6 +192,7 @@ export default function PersonDetailPage() {
           zip_code: personData.zip_code || '',
           country: personData.country || '',
           client_type: personData.client_type || 'lead',
+          lead_status: personData.lead_status || 'staging',
           notes: personData.notes || '',
           profile_picture: personData.profile_picture || '',
           birthday: personData.birthday || '',
@@ -224,6 +235,7 @@ export default function PersonDetailPage() {
         zip_code: formData.zip_code,
         country: formData.country,
         client_type: formData.client_type as 'lead' | 'prospect' | 'client' | 'partner' | 'vendor',
+        lead_status: formData.lead_status,
         notes: formData.notes,
         profile_picture: formData.profile_picture,
         birthday: formData.birthday || null,
@@ -648,11 +660,11 @@ export default function PersonDetailPage() {
   return (
     <TooltipProvider>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={handleBackNavigation}>
+                <Button variant="ghost" size="sm" onClick={handleBackNavigation} className="w-full sm:w-auto">
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
@@ -661,63 +673,64 @@ export default function PersonDetailPage() {
                 <p>Go back to previous page</p>
               </TooltipContent>
             </Tooltip>
-                <div className="flex items-center space-x-4">
-                  <div className="relative group">
-                    {person.profile_picture ? (
-                      <Image
-                        src={person.profile_picture}
-                        alt={`${person.first_name} ${person.last_name}`}
-                        width={64}
-                        height={64}
-                        className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                        onError={() => {
-                          // Handle error by hiding the image
-                        }}
-                      />
-                    ) : (
-                      <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
-                        <User className="w-8 h-8 text-gray-500" />
-                      </div>
-                    )}
-                    
-                    {/* Quick Upload Overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <label className="cursor-pointer">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) {
-                              setSelectedProfilePicture(file)
-                              // We'll handle the upload in the edit modal for better UX
-                              setShowEditModal(true)
-                            }
-                          }}
-                        />
-                        <Upload className="w-6 h-6 text-white" />
-                      </label>
-                    </div>
+            <div className="flex items-center space-x-4">
+              <div className="relative group">
+                {person.profile_picture ? (
+                  <Image
+                    src={person.profile_picture}
+                    alt={`${person.first_name} ${person.last_name}`}
+                    width={64}
+                    height={64}
+                    className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                    onError={() => {
+                      // Handle error by hiding the image
+                    }}
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
+                    <User className="w-8 h-8 text-gray-500" />
                   </div>
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">
-                {person.first_name} {person.last_name}
-              </h2>
-              <p className="text-muted-foreground">
-                Contact details and information
-              </p>
-                  </div>
+                )}
+                
+                {/* Quick Upload Overlay */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setSelectedProfilePicture(file)
+                          // We'll handle the upload in the edit modal for better UX
+                          setShowEditModal(true)
+                        }
+                      }}
+                    />
+                    <Upload className="w-6 h-6 text-white" />
+                  </label>
+                </div>
+              </div>
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                  {person.first_name} {person.last_name}
+                </h2>
+                <p className="text-muted-foreground">
+                  Contact details and information
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
               <DialogTrigger asChild>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button onClick={() => setShowEditModal(true)}>
+                    <Button onClick={() => setShowEditModal(true)} className="w-full sm:w-auto">
                       <Edit className="mr-2 h-4 w-4" />
-                      Edit
+                      <span className="hidden sm:inline">Edit</span>
+                      <span className="sm:hidden">Edit Contact</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -725,18 +738,6 @@ export default function PersonDetailPage() {
                   </TooltipContent>
                 </Tooltip>
               </DialogTrigger>
-            
-            {/* Remove as Lead Button - Only show for assigned leads (not staging) */}
-            {person.client_type === 'lead' && person.lead_status !== 'staging' && (
-              <Button 
-                variant="outline" 
-                onClick={() => setShowRemoveLeadDialog(true)}
-                className="text-destructive border-destructive"
-              >
-                <Target className="mr-2 h-4 w-4" />
-                Remove as Lead
-              </Button>
-            )}
               <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Edit Contact</DialogTitle>
@@ -745,7 +746,7 @@ export default function PersonDetailPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <label htmlFor="firstName" className="text-sm font-medium">First Name</label>
                       <Input
@@ -762,6 +763,42 @@ export default function PersonDetailPage() {
                         onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
                       />
                     </div>
+                  </div>
+
+                  {/* Client Type and Lead Status */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <label htmlFor="clientType" className="text-sm font-medium">Client Type</label>
+                      <Select value={formData.client_type} onValueChange={(value) => setFormData(prev => ({ ...prev, client_type: value }))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select client type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clientTypeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {formData.client_type === 'lead' && (
+                      <div className="grid gap-2">
+                        <label htmlFor="leadStatus" className="text-sm font-medium">Lead Status</label>
+                        <Select value={formData.lead_status} onValueChange={(value) => setFormData(prev => ({ ...prev, lead_status: value as 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost' }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select lead status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {leadStatusOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="grid gap-2">
@@ -799,7 +836,7 @@ export default function PersonDetailPage() {
                     </Button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <label htmlFor="company" className="text-sm font-medium">Company</label>
                       <Input
@@ -827,7 +864,7 @@ export default function PersonDetailPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="grid gap-2">
                       <label htmlFor="city" className="text-sm font-medium">City</label>
                       <Input
@@ -863,8 +900,6 @@ export default function PersonDetailPage() {
                     />
                   </div>
 
-
-
                   <div className="grid gap-2">
                     <label htmlFor="notes" className="text-sm font-medium">Notes</label>
                     <Textarea
@@ -873,188 +908,6 @@ export default function PersonDetailPage() {
                       onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                       rows={4}
                     />
-                  </div>
-
-                  {/* Profile Picture */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">Profile Picture</label>
-                    
-                    {/* Current Profile Picture Display */}
-                    {formData.profile_picture && (
-                      <div className="flex items-center space-x-4 mb-4">
-                        <Image
-                          src={formData.profile_picture}
-                          alt="Current profile picture"
-                          width={64}
-                          height={64}
-                          className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                          onError={() => {
-                            // Handle error by hiding the image
-                          }}
-                        />
-                        <div className="text-sm text-muted-foreground">
-                          Current profile picture
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* File Upload */}
-                    <div className="space-y-2">
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          setSelectedProfilePicture(e.target.files?.[0] || null)
-                        }}
-                        className="cursor-pointer"
-                      />
-                      {selectedProfilePicture ? (
-                        <div className="flex items-center space-x-2">
-                          <Button 
-                            type="button" 
-                            size="sm" 
-                            onClick={handleProfilePictureUpload}
-                            disabled={saving}
-                          >
-                            {saving ? 'Uploading...' : 'Upload Profile Picture'}
-                          </Button>
-                          <span className="text-sm text-muted-foreground">
-                            {selectedProfilePicture.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">
-                          No file selected
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* URL Input (fallback) */}
-                    <div className="mt-2">
-                      <label htmlFor="profilePictureUrl" className="text-sm font-medium text-muted-foreground">
-                        Or enter URL manually:
-                      </label>
-                      <Input
-                        id="profilePictureUrl"
-                        value={formData.profile_picture}
-                        onChange={(e) => setFormData(prev => ({ ...prev, profile_picture: e.target.value }))}
-                        placeholder="Enter profile picture URL"
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Birthday */}
-                  <div className="grid gap-2">
-                    <label htmlFor="birthday" className="text-sm font-medium">Birthday</label>
-                    <Input
-                      id="birthday"
-                      type="date"
-                      value={formData.birthday}
-                      onChange={(e) => setFormData(prev => ({ ...prev, birthday: e.target.value }))}
-                    />
-                  </div>
-
-                  {/* Mailing Address */}
-                  <div className="grid gap-2">
-                    <label htmlFor="mailingAddress" className="text-sm font-medium">Mailing Address</label>
-                    <Textarea
-                      id="mailingAddress"
-                      value={formData.mailing_address}
-                      onChange={(e) => setFormData(prev => ({ ...prev, mailing_address: e.target.value }))}
-                      placeholder="Enter mailing address"
-                      rows={3}
-                    />
-                  </div>
-
-                  {/* Best to Reach By */}
-                  <div className="grid gap-2">
-                    <label htmlFor="bestToReachBy" className="text-sm font-medium">Best to Reach By</label>
-                    <Select value={formData.best_to_reach_by} onValueChange={(value) => setFormData(prev => ({ ...prev, best_to_reach_by: value }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select preferred contact method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bestToReachOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Relationship */}
-                  <div className="grid gap-2">
-                    <label htmlFor="relationship" className="text-sm font-medium">Relationship</label>
-                    <Input
-                      id="relationship"
-                      value={formData.relationship_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, relationship_id: e.target.value }))}
-                      placeholder="Enter relationship or link to another contact"
-                    />
-                  </div>
-
-                  {/* Lists */}
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">Lists</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {listOptions.map((option) => (
-                        <label key={option.value} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={formData.lists.includes(option.value)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormData(prev => ({ ...prev, lists: [...prev.lists, option.value] }))
-                              } else {
-                                setFormData(prev => ({ ...prev, lists: prev.lists.filter(list => list !== option.value) }))
-                              }
-                            }}
-                            className="rounded"
-                          />
-                          <span className="text-sm">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Properties Section */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-medium">Properties</h4>
-                    
-                    <div className="grid gap-2">
-                      <label htmlFor="lookingFor" className="text-sm font-medium">Looking For</label>
-                      <Textarea
-                        id="lookingFor"
-                        value={formData.looking_for}
-                        onChange={(e) => setFormData(prev => ({ ...prev, looking_for: e.target.value }))}
-                        placeholder="Describe what properties they're looking for"
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <label htmlFor="selling" className="text-sm font-medium">Selling</label>
-                      <Textarea
-                        id="selling"
-                        value={formData.selling}
-                        onChange={(e) => setFormData(prev => ({ ...prev, selling: e.target.value }))}
-                        placeholder="Describe properties they're selling"
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <label htmlFor="closed" className="text-sm font-medium">Closed</label>
-                      <Textarea
-                        id="closed"
-                        value={formData.closed}
-                        onChange={(e) => setFormData(prev => ({ ...prev, closed: e.target.value }))}
-                        placeholder="Describe closed transactions"
-                        rows={3}
-                      />
-                    </div>
                   </div>
                 </div>
                 <div className="flex justify-end space-x-2">
@@ -1067,14 +920,24 @@ export default function PersonDetailPage() {
                 </div>
               </DialogContent>
             </Dialog>
-            
-
-            
+            {/* Remove as Lead Button - Only show for assigned leads (not staging) */}
+            {person.client_type === 'lead' && person.lead_status !== 'staging' && (
+              <Button 
+                variant="outline" 
+                onClick={() => setShowRemoveLeadDialog(true)}
+                className="text-destructive border-destructive w-full sm:w-auto"
+              >
+                <Target className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Remove as Lead</span>
+                <span className="sm:hidden">Remove Lead</span>
+              </Button>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="destructive" onClick={handleDelete}>
+                <Button variant="destructive" onClick={handleDelete} className="w-full sm:w-auto">
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
+                  <span className="hidden sm:inline">Delete</span>
+                  <span className="sm:hidden">Delete Contact</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -1085,16 +948,31 @@ export default function PersonDetailPage() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="notes">Notes ({notes.length})</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks ({tasks.length})</TabsTrigger>
-            <TabsTrigger value="files">Files ({uploadedFiles.length})</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5 lg:grid-cols-5 md:grid-cols-5 sm:grid-cols-3">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Overview</span>
+              <span className="sm:hidden">Overview</span>
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Activity</span>
+              <span className="sm:hidden">Activity</span>
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Notes ({notes.length})</span>
+              <span className="sm:hidden">Notes ({notes.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Tasks ({tasks.length})</span>
+              <span className="sm:hidden">Tasks ({tasks.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="files" className="text-xs sm:text-sm">
+              <span className="hidden sm:inline">Files ({uploadedFiles.length})</span>
+              <span className="sm:hidden">Files ({uploadedFiles.length})</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
               {/* Contact Information */}
               <Card>
                 <CardHeader>
@@ -1108,6 +986,12 @@ export default function PersonDetailPage() {
                     <Badge variant="outline">
                       {person.client_type || 'Contact'}
                     </Badge>
+                    {person.client_type === 'lead' && person.lead_status && (
+                      <Badge variant="secondary">
+                        <Target className="mr-1 h-3 w-3" />
+                        {leadStatusOptions.find(option => option.value === person.lead_status)?.label || person.lead_status}
+                      </Badge>
+                    )}
                     {person.company && (
                       <Badge variant="secondary">
                         <Building className="mr-1 h-3 w-3" />
