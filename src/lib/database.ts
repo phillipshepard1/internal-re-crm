@@ -313,6 +313,131 @@ export async function createPerson(personData: Partial<Person>) {
   return data
 }
 
+// Check if a person exists by email
+export async function checkPersonExistsByEmail(email: string, userId?: string, userRole?: string): Promise<Person | null> {
+  if (!email || !email.trim()) {
+    return null
+  }
+
+  let query = supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .contains('email', [email.trim().toLowerCase()])
+  
+  // If user is an agent, only check contacts assigned to them
+  if (userRole === 'agent' && userId) {
+    query = query.eq('assigned_to', userId)
+  }
+  
+  const { data, error } = await query
+  
+  if (error) {
+    console.error('Error checking for existing person:', error)
+    return null
+  }
+  
+  // Return the first match (should be only one if email is unique)
+  return data && data.length > 0 ? data[0] : null
+}
+
+// Check if a person exists by email (for import purposes - checks all contacts regardless of assignment)
+export async function checkPersonExistsByEmailForImport(email: string): Promise<Person | null> {
+  if (!email || !email.trim()) {
+    return null
+  }
+
+  const emailToCheck = email.trim().toLowerCase()
+  console.log('Checking for email:', emailToCheck)
+  
+  // Get all contacts and filter in JavaScript since Supabase array contains might not work as expected
+  const { data, error } = await supabase
+    .from('people')
+    .select(`
+      *,
+      assigned_user:assigned_to (
+        id,
+        email,
+        first_name,
+        last_name
+      )
+    `)
+    .limit(1000) // Limit to prevent performance issues
+  
+  if (error) {
+    console.error('Error checking for existing person:', error)
+    return null
+  }
+  
+  // Debug: log some sample emails from the database
+  if (data && data.length > 0) {
+    console.log('Sample emails from database:', data.slice(0, 3).map(p => ({
+      name: `${p.first_name} ${p.last_name}`,
+      emails: p.email
+    })))
+  }
+  
+  // Filter contacts that have the email in their email array
+  const matchingContacts = data?.filter(person => 
+    person.email && 
+    Array.isArray(person.email) && 
+    person.email.some(e => e && e.toLowerCase() === emailToCheck)
+  ) || []
+  
+  console.log(`Found ${matchingContacts.length} contacts for email ${emailToCheck}`)
+  if (matchingContacts.length > 0) {
+    console.log('Existing contact:', {
+      id: matchingContacts[0].id,
+      name: `${matchingContacts[0].first_name} ${matchingContacts[0].last_name}`,
+      emails: matchingContacts[0].email
+    })
+  }
+  
+  // Return the first match (should be only one if email is unique)
+  return matchingContacts.length > 0 ? matchingContacts[0] : null
+}
+
+// Check multiple emails for existing contacts (for import purposes)
+export async function checkMultipleEmailsExistForImport(emails: string[]): Promise<Map<string, Person>> {
+  const existingContacts = new Map<string, Person>()
+  
+  // Check each email individually since Supabase doesn't support OR queries with contains
+  for (const email of emails) {
+    if (email && email.trim()) {
+      const existing = await checkPersonExistsByEmailForImport(email.trim())
+      if (existing) {
+        existingContacts.set(email.trim().toLowerCase(), existing)
+      }
+    }
+  }
+  
+  return existingContacts
+}
+
+// Check multiple emails for existing contacts
+export async function checkMultipleEmailsExist(emails: string[], userId?: string, userRole?: string): Promise<Map<string, Person>> {
+  const existingContacts = new Map<string, Person>()
+  
+  // Check each email individually since Supabase doesn't support OR queries with contains
+  for (const email of emails) {
+    if (email && email.trim()) {
+      const existing = await checkPersonExistsByEmail(email.trim(), userId, userRole)
+      if (existing) {
+        existingContacts.set(email.trim().toLowerCase(), existing)
+      }
+    }
+  }
+  
+  return existingContacts
+}
+
 export async function updatePerson(id: string, updates: Partial<Person>) {
   const { data, error } = await supabase
     .from('people')

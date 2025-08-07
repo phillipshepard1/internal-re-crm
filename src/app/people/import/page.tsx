@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
-import { createPerson } from '@/lib/database'
+import { createPerson, checkMultipleEmailsExistForImport } from '@/lib/database'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface ParsedPerson {
@@ -33,6 +33,17 @@ interface ValidationError {
   errors: string[]
 }
 
+interface DuplicateContact {
+  row: number
+  email: string
+  existingContact: {
+    id: string
+    first_name: string
+    last_name: string
+    email: string[]
+  }
+}
+
 export default function ImportPeoplePage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -42,10 +53,12 @@ export default function ImportPeoplePage() {
   const [file, setFile] = useState<File | null>(null)
   const [parsedData, setParsedData] = useState<ParsedPerson[]>([])
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
+  const [duplicateContacts, setDuplicateContacts] = useState<DuplicateContact[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedCount, setUploadedCount] = useState(0)
   const [showAllRecords, setShowAllRecords] = useState(false)
+  const [showDuplicates, setShowDuplicates] = useState(false)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -57,6 +70,11 @@ export default function ImportPeoplePage() {
       
       if (isCSV) {
         setFile(selectedFile)
+        setParsedData([])
+        setValidationErrors([])
+        setDuplicateContacts([])
+        setShowDuplicates(false)
+        setShowAllRecords(false)
         parseCSV(selectedFile)
       } else {
         toast({
@@ -70,7 +88,7 @@ export default function ImportPeoplePage() {
 
   const parseCSV = (file: File) => {
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const text = e.target?.result as string
         console.log('CSV content:', text.substring(0, 500)) // Debug log
@@ -191,6 +209,20 @@ export default function ImportPeoplePage() {
 
       setParsedData(parsed)
       setValidationErrors(errors)
+      
+      // Check for duplicates after parsing
+      if (parsed.length > 0) {
+        const duplicates = await checkForDuplicates(parsed)
+        setDuplicateContacts(duplicates)
+        
+        if (duplicates.length > 0) {
+          toast({
+            title: 'Duplicates Found',
+            description: `Found ${duplicates.length} contacts that already exist. They will be skipped during import.`,
+            variant: 'default'
+          })
+        }
+      }
       } catch (error) {
         console.error('Error parsing CSV:', error)
         toast({
@@ -230,6 +262,36 @@ export default function ImportPeoplePage() {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   }
 
+  const checkForDuplicates = async (parsedPeople: ParsedPerson[]) => {
+    if (!user) return []
+
+    const emails = parsedPeople.map(person => person.email).filter(email => email && email.trim())
+    console.log('Checking for duplicates with emails:', emails)
+    const existingContacts = await checkMultipleEmailsExistForImport(emails)
+    console.log('Found existing contacts:', Array.from(existingContacts.keys()))
+    
+    const duplicates: DuplicateContact[] = []
+    
+    parsedPeople.forEach((person, index) => {
+      if (person.email && existingContacts.has(person.email.trim().toLowerCase())) {
+        const existingContact = existingContacts.get(person.email.trim().toLowerCase())!
+        duplicates.push({
+          row: index + 2, // +2 because index starts at 0 and we have a header row
+          email: person.email,
+          existingContact: {
+            id: existingContact.id,
+            first_name: existingContact.first_name,
+            last_name: existingContact.last_name,
+            email: existingContact.email
+          }
+        })
+      }
+    })
+    
+    console.log('Duplicate contacts found:', duplicates.length)
+    return duplicates
+  }
+
   const handleImport = async () => {
     if (!user) {
       toast({
@@ -245,12 +307,16 @@ export default function ImportPeoplePage() {
     setUploadedCount(0)
 
     try {
-      const totalToUpload = parsedData.length
+      // Filter out duplicates from the import
+      const emailsToSkip = new Set(duplicateContacts.map(d => d.email.toLowerCase()))
+      const dataToImport = parsedData.filter(person => !emailsToSkip.has(person.email.toLowerCase()))
+      
+      const totalToUpload = dataToImport.length
       let successCount = 0
       const failedRows: number[] = []
 
-      for (let i = 0; i < parsedData.length; i++) {
-        const person = parsedData[i]
+      for (let i = 0; i < dataToImport.length; i++) {
+        const person = dataToImport[i]
         
         try {
           await createPerson({
@@ -271,16 +337,32 @@ export default function ImportPeoplePage() {
         }
       }
 
+      const skippedCount = duplicateContacts.length
+      const totalProcessed = totalToUpload + skippedCount
+      
       if (successCount === totalToUpload) {
+        let message = `Successfully imported ${successCount} contacts`
+        if (skippedCount > 0) {
+          message += `. Skipped ${skippedCount} duplicate contacts.`
+        }
+        
         toast({
           title: 'Import successful',
-          description: `Successfully imported ${successCount} contacts`,
+          description: message,
         })
         router.push('/people')
       } else {
+        let message = `Imported ${successCount} out of ${totalToUpload} contacts`
+        if (skippedCount > 0) {
+          message += `. Skipped ${skippedCount} duplicate contacts.`
+        }
+        if (failedRows.length > 0) {
+          message += ` Failed rows: ${failedRows.join(', ')}`
+        }
+        
         toast({
           title: 'Import partially successful',
-          description: `Imported ${successCount} out of ${totalToUpload} contacts. Failed rows: ${failedRows.join(', ')}`,
+          description: message,
           variant: 'destructive'
         })
       }
@@ -298,15 +380,17 @@ export default function ImportPeoplePage() {
 
   return (
     <div className="container mx-auto p-4 max-w-6xl">
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push('/people')}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <h1 className="text-2xl font-bold">Import People from CSV</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push('/people')}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-xl sm:text-2xl font-bold">Import People from CSV</h1>
+        </div>
       </div>
 
       <div className="grid gap-6">
@@ -327,7 +411,7 @@ export default function ImportPeoplePage() {
 
             <div>
               <Label htmlFor="csv-file">Select CSV File</Label>
-              <div className="mt-2 flex gap-4">
+              <div className="mt-2 flex flex-col sm:flex-row gap-4">
                 <Input
                   ref={fileInputRef}
                   id="csv-file"
@@ -340,6 +424,7 @@ export default function ImportPeoplePage() {
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
+                  className="sm:w-auto w-full"
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Choose File
@@ -348,7 +433,7 @@ export default function ImportPeoplePage() {
               {file && (
                 <p className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  {file.name}
+                  <span className="break-all">{file.name}</span>
                 </p>
               )}
             </div>
@@ -371,15 +456,118 @@ export default function ImportPeoplePage() {
           </Alert>
         )}
 
-        {parsedData.length > 0 && (
+        {duplicateContacts.length > 0 && (
           <Card className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">
-                Preview ({parsedData.length} valid records)
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+              <h2 className="text-lg font-semibold text-amber-600">
+                Duplicate Contacts Found ({duplicateContacts.length})
               </h2>
               <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDuplicates(!showDuplicates)}
+                className="sm:w-auto w-full"
+              >
+                {showDuplicates ? 'Hide' : 'Show'} Duplicates
+              </Button>
+            </div>
+            
+            <Alert className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                The following contacts already exist in your CRM and will be skipped during import.
+                You can still proceed with the import for the remaining contacts.
+              </AlertDescription>
+            </Alert>
+
+            {showDuplicates && (
+              <div className="border rounded-md overflow-hidden">
+                {/* Desktop Table View */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>CSV Row</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Existing Contact</TableHead>
+                        <TableHead>Existing Emails</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {duplicateContacts.map((duplicate) => (
+                        <TableRow key={duplicate.row}>
+                          <TableCell className="font-medium">
+                            Row {duplicate.row}
+                          </TableCell>
+                          <TableCell>{duplicate.email}</TableCell>
+                          <TableCell>
+                            {duplicate.existingContact.first_name} {duplicate.existingContact.last_name}
+                          </TableCell>
+                          <TableCell>
+                            {duplicate.existingContact.email.join(', ')}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="md:hidden">
+                  <div className="space-y-3 p-4">
+                    {duplicateContacts.map((duplicate) => (
+                      <div key={duplicate.row} className="border rounded-lg p-4 space-y-2">
+                        <div className="font-medium text-sm">
+                          Row {duplicate.row}
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Email:</span>
+                            <span className="break-all">{duplicate.email}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Existing Contact:</span>
+                            <span>{duplicate.existingContact.first_name} {duplicate.existingContact.last_name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Existing Emails:</span>
+                            <span className="break-all">{duplicate.existingContact.email.join(', ')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {parsedData.length > 0 && (
+          <Card className="p-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Preview ({parsedData.length - duplicateContacts.length} contacts to import)
+                  {duplicateContacts.length > 0 && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      ({duplicateContacts.length} duplicates will be skipped)
+                    </span>
+                  )}
+                </h2>
+                {(parsedData.length - duplicateContacts.length) === 0 && duplicateContacts.length > 0 && (
+                  <Alert className="mt-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      All contacts in this CSV already exist in your CRM. No new contacts will be imported.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+              <Button
                 onClick={handleImport}
-                disabled={isUploading || parsedData.length === 0}
+                disabled={isUploading || (parsedData.length - duplicateContacts.length) === 0 || validationErrors.length > 0}
+                className="sm:w-auto w-full"
               >
                 {isUploading ? (
                   <>
@@ -389,7 +577,7 @@ export default function ImportPeoplePage() {
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-2" />
-                    Import {parsedData.length} Contacts
+                    Import {parsedData.length - duplicateContacts.length} Contacts
                   </>
                 )}
               </Button>
@@ -399,64 +587,168 @@ export default function ImportPeoplePage() {
               <div className="mb-4 space-y-2">
                 <Progress value={uploadProgress} />
                 <p className="text-sm text-muted-foreground text-center">
-                  Uploaded {uploadedCount} of {parsedData.length} contacts
+                  Uploaded {uploadedCount} of {parsedData.length - duplicateContacts.length} contacts
+                  {duplicateContacts.length > 0 && (
+                    <span className="block text-xs">
+                      ({duplicateContacts.length} duplicates skipped)
+                    </span>
+                  )}
                 </p>
               </div>
             )}
 
             <div className="border rounded-md overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Location</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(showAllRecords ? parsedData : parsedData.slice(0, 10)).map((person, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        {person.first_name} {person.last_name}
-                      </TableCell>
-                      <TableCell>{person.email}</TableCell>
-                      <TableCell>{person.phone || '-'}</TableCell>
-                      <TableCell>{person.company || '-'}</TableCell>
-                      <TableCell>
-                        {[person.city, person.state].filter(Boolean).join(', ') || '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {parsedData.length > 10 && !showAllRecords && (
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center">
-                        <Button
-                          variant="ghost"
-                          onClick={() => setShowAllRecords(true)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          Show all {parsedData.length} records
-                        </Button>
-                      </TableCell>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Phone</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Location</TableHead>
                     </TableRow>
-                  )}
-                  {parsedData.length > 10 && showAllRecords && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center">
-                        <Button
-                          variant="ghost"
-                          onClick={() => setShowAllRecords(false)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          Show less (first 10 records)
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {(() => {
+                      // Filter out duplicates from the preview
+                      const emailsToSkip = new Set(duplicateContacts.map(d => d.email.toLowerCase()))
+                      const contactsToImport = parsedData.filter(person => !emailsToSkip.has(person.email.toLowerCase()))
+                      const displayData = showAllRecords ? contactsToImport : contactsToImport.slice(0, 10)
+                      
+                      return (
+                        <>
+                          {displayData.map((person, index) => (
+                            <TableRow key={index}>
+                              <TableCell>
+                                {person.first_name} {person.last_name}
+                              </TableCell>
+                              <TableCell>{person.email}</TableCell>
+                              <TableCell>{person.phone || '-'}</TableCell>
+                              <TableCell>{person.company || '-'}</TableCell>
+                              <TableCell>
+                                {[person.city, person.state].filter(Boolean).join(', ') || '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {contactsToImport.length > 10 && !showAllRecords && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => setShowAllRecords(true)}
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  Show all {contactsToImport.length} records
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {contactsToImport.length > 10 && showAllRecords && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => setShowAllRecords(false)}
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  Show less (first 10 records)
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {contactsToImport.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                                No contacts to import (all are duplicates)
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden">
+                {(() => {
+                  // Filter out duplicates from the preview
+                  const emailsToSkip = new Set(duplicateContacts.map(d => d.email.toLowerCase()))
+                  const contactsToImport = parsedData.filter(person => !emailsToSkip.has(person.email.toLowerCase()))
+                  const displayData = showAllRecords ? contactsToImport : contactsToImport.slice(0, 10)
+                  
+                  if (contactsToImport.length === 0) {
+                    return (
+                      <div className="text-center text-muted-foreground py-8 px-4">
+                        No contacts to import (all are duplicates)
+                      </div>
+                    )
+                  }
+                  
+                  return (
+                    <div className="space-y-3 p-4">
+                      {displayData.map((person, index) => (
+                        <div key={index} className="border rounded-lg p-4 space-y-2">
+                          <div className="font-medium text-sm">
+                            {person.first_name} {person.last_name}
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Email:</span>
+                              <span className="break-all">{person.email}</span>
+                            </div>
+                            {person.phone && (
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">Phone:</span>
+                                <span>{person.phone}</span>
+                              </div>
+                            )}
+                            {person.company && (
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">Company:</span>
+                                <span>{person.company}</span>
+                              </div>
+                            )}
+                            {[person.city, person.state].filter(Boolean).length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">Location:</span>
+                                <span>{[person.city, person.state].filter(Boolean).join(', ')}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {contactsToImport.length > 10 && !showAllRecords && (
+                        <div className="text-center pt-4">
+                          <Button
+                            variant="ghost"
+                            onClick={() => setShowAllRecords(true)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            Show all {contactsToImport.length} records
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {contactsToImport.length > 10 && showAllRecords && (
+                        <div className="text-center pt-4">
+                          <Button
+                            variant="ghost"
+                            onClick={() => setShowAllRecords(false)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            Show less (first 10 records)
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
           </Card>
         )}
