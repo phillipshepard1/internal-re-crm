@@ -388,7 +388,7 @@ export async function checkPersonExistsByEmailForImport(email: string): Promise<
   const matchingContacts = data?.filter(person => 
     person.email && 
     Array.isArray(person.email) && 
-    person.email.some(e => e && e.toLowerCase() === emailToCheck)
+    person.email.some((e: string | null) => e && e.toLowerCase() === emailToCheck)
   ) || []
   
   console.log(`Found ${matchingContacts.length} contacts for email ${emailToCheck}`)
