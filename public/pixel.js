@@ -126,6 +126,10 @@
     
     // Handle form submission
     handleFormSubmit: function(event, form) {
+      if (this.config.debug) {
+        console.log('[CRM Pixel] Form submission detected!');
+      }
+      
       try {
         const formData = this.extractFormData(form);
         
@@ -234,25 +238,39 @@
     observeNewForms: function() {
       if (!window.MutationObserver) return;
       
-      const observer = new MutationObserver((mutations) => {
-        mutations.forEach(mutation => {
-          mutation.addedNodes.forEach(node => {
-            if (node.nodeType === 1) { // Element node
-              if (node.tagName === 'FORM') {
-                this.trackForm(node);
-              } else if (node.querySelector) {
-                const forms = node.querySelectorAll('form');
-                forms.forEach(form => this.trackForm(form));
+      // Ensure document.body exists before observing
+      const startObserving = () => {
+        if (!document.body) {
+          setTimeout(startObserving, 100);
+          return;
+        }
+        
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach(mutation => {
+            mutation.addedNodes.forEach(node => {
+              if (node && node.nodeType === 1) { // Element node
+                if (node.tagName === 'FORM') {
+                  this.trackForm(node);
+                } else if (node.querySelector) {
+                  const forms = node.querySelectorAll('form');
+                  forms.forEach(form => this.trackForm(form));
+                }
               }
-            }
+            });
           });
         });
-      });
+        
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+        
+        if (this.config.debug) {
+          console.log('[CRM Pixel] MutationObserver started');
+        }
+      };
       
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
+      startObserving();
     },
     
     // Retry failed requests
