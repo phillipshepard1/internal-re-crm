@@ -14,6 +14,7 @@
         // Form 1: Instant Home Updates
         'email': ['email', 'best_email', 'best email', 'email_address', 'user_email', 'e-mail', 'emailaddress', 'contact_email'],
         'name': ['name', 'full_name', 'fullname', 'first_name', 'fname', 'your_name', 'contact_name'],
+        'last_name': ['last_name', 'lastname', 'lname', 'surname'],
         'phone': ['phone', 'telephone', 'phone_number', 'mobile', 'tel', 'contact_phone', 'cellphone'],
         'areas_of_interest': ['area(s)_of_interest', 'areas_of_interest', 'area(s) of interest', 'areas of interest', 'area_of_interest'],
         'bedrooms': ['how_many_bedrooms?', 'how many bedrooms?', 'bedrooms', 'bedroom', 'beds'],
@@ -37,7 +38,11 @@
         'form[action*="logout"]',
         'form[action*="search"]',
         'form.search-form',
-        '#search-form'
+        '#search-form',
+        'form[action*="facebook.com"]',
+        'form[action*="fb.com"]',
+        'form[style*="display: none"]',
+        'form[style*="display:none"]'
       ]
     },
     
@@ -166,6 +171,13 @@
             break;
           }
         }
+      }
+      
+      // Combine first and last name if both exist
+      if (data.name && data.last_name) {
+        data.name = data.name + ' ' + data.last_name;
+      } else if (!data.name && fields.fname && fields.lname) {
+        data.name = fields.fname + ' ' + fields.lname;
       }
       
       // Add metadata
@@ -325,6 +337,30 @@
       
       console.log('[CRM Pixel] Sending test data:', testData);
       this.sendToCRM(testData);
+    },
+    
+    // Debug function to show all forms on page
+    debugForms: function() {
+      const allForms = document.querySelectorAll('form');
+      console.log(`[CRM Pixel Debug] Found ${allForms.length} total forms on page:`);
+      
+      allForms.forEach((form, index) => {
+        const inputs = form.querySelectorAll('input, select, textarea');
+        const fieldNames = Array.from(inputs).map(input => input.name || input.id || 'unnamed');
+        
+        console.log(`Form ${index + 1}:`, {
+          action: form.action || 'no action',
+          method: form.method || 'no method',
+          id: form.id || 'no id',
+          className: form.className || 'no class',
+          visible: form.style.display !== 'none',
+          fields: fieldNames,
+          excluded: this.config.excludeSelectors.some(selector => form.matches(selector))
+        });
+      });
+      
+      const trackedForms = this.findForms();
+      console.log(`[CRM Pixel Debug] Tracking ${trackedForms.length} forms after exclusions`);
     }
   };
   
