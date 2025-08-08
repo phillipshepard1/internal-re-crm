@@ -72,6 +72,7 @@ export function AgentReports({ users }: AgentReportsProps) {
   const [endDate, setEndDate] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [report, setReport] = useState<AgentReport | null>(null)
+  const [selectedPreset, setSelectedPreset] = useState<string>('last7Days')
 
   // Set default date range to previous week
   useEffect(() => {
@@ -86,6 +87,61 @@ export function AgentReports({ users }: AgentReportsProps) {
     }
   }, [startDate, endDate])
 
+  // Quick date range presets
+  const setDateRange = (preset: string) => {
+    setSelectedPreset(preset)
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
+    
+    switch (preset) {
+      case 'today':
+        setStartDate(today)
+        setEndDate(today)
+        break
+      case 'yesterday':
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+        const yesterdayStr = yesterday.toISOString().split('T')[0]
+        setStartDate(yesterdayStr)
+        setEndDate(yesterdayStr)
+        break
+      case 'thisWeek':
+        const startOfWeek = new Date(now)
+        startOfWeek.setDate(now.getDate() - now.getDay())
+        setStartDate(startOfWeek.toISOString().split('T')[0])
+        setEndDate(today)
+        break
+      case 'lastWeek':
+        const lastWeekStart = new Date(now)
+        lastWeekStart.setDate(now.getDate() - now.getDay() - 7)
+        const lastWeekEnd = new Date(lastWeekStart)
+        lastWeekEnd.setDate(lastWeekStart.getDate() + 6)
+        setStartDate(lastWeekStart.toISOString().split('T')[0])
+        setEndDate(lastWeekEnd.toISOString().split('T')[0])
+        break
+      case 'thisMonth':
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+        setStartDate(startOfMonth.toISOString().split('T')[0])
+        setEndDate(today)
+        break
+      case 'lastMonth':
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+        setStartDate(lastMonth.toISOString().split('T')[0])
+        setEndDate(lastMonthEnd.toISOString().split('T')[0])
+        break
+      case 'last7Days':
+        const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        setStartDate(last7Days.toISOString().split('T')[0])
+        setEndDate(today)
+        break
+      case 'last30Days':
+        const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        setStartDate(last30Days.toISOString().split('T')[0])
+        setEndDate(today)
+        break
+    }
+  }
+
   // Filter users to show only agents
   const agents = users.filter(user => user.role === 'agent')
 
@@ -94,10 +150,9 @@ export function AgentReports({ users }: AgentReportsProps) {
       return
     }
 
-    // Validate date format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-      alert('Please enter dates in YYYY-MM-DD format')
+    // Validate that start date is not after end date
+    if (new Date(startDate) > new Date(endDate)) {
+      alert('Start date cannot be after end date')
       return
     }
 
@@ -187,6 +242,69 @@ export function AgentReports({ users }: AgentReportsProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Quick Date Range Presets */}
+          <div className="space-y-2">
+            <Label>Quick Date Range</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                variant={selectedPreset === 'today' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('today')}
+              >
+                Today
+              </Button>
+              <Button 
+                variant={selectedPreset === 'yesterday' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('yesterday')}
+              >
+                Yesterday
+              </Button>
+              <Button 
+                variant={selectedPreset === 'last7Days' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('last7Days')}
+              >
+                Last 7 Days
+              </Button>
+              <Button 
+                variant={selectedPreset === 'thisWeek' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('thisWeek')}
+              >
+                This Week
+              </Button>
+              <Button 
+                variant={selectedPreset === 'lastWeek' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('lastWeek')}
+              >
+                Last Week
+              </Button>
+              <Button 
+                variant={selectedPreset === 'thisMonth' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('thisMonth')}
+              >
+                This Month
+              </Button>
+              <Button 
+                variant={selectedPreset === 'lastMonth' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('lastMonth')}
+              >
+                Last Month
+              </Button>
+              <Button 
+                variant={selectedPreset === 'last30Days' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateRange('last30Days')}
+              >
+                Last 30 Days
+              </Button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="agent">Select Agent</Label>
@@ -211,11 +329,14 @@ export function AgentReports({ users }: AgentReportsProps) {
               <div className="relative">
                 <Input
                   id="startDate"
-                  type="text"
-                  placeholder="YYYY-MM-DD"
+                  type="date"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="pr-10"
+                  onChange={(e) => {
+                    setStartDate(e.target.value)
+                    setSelectedPreset('') // Clear preset when manually changing date
+                  }}
+                  max={endDate || undefined}
+                  className="[&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer pr-10"
                 />
                 <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               </div>
@@ -226,11 +347,14 @@ export function AgentReports({ users }: AgentReportsProps) {
               <div className="relative">
                 <Input
                   id="endDate"
-                  type="text"
-                  placeholder="YYYY-MM-DD"
+                  type="date"
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="pr-10"
+                  onChange={(e) => {
+                    setEndDate(e.target.value)
+                    setSelectedPreset('') // Clear preset when manually changing date
+                  }}
+                  min={startDate || undefined}
+                  className="[&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer pr-10"
                 />
                 <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               </div>

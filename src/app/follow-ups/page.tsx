@@ -217,29 +217,11 @@ export default function FollowUpsPage() {
     loadLeadTags()
   }, [])
 
-  // Check for missed follow-ups on component mount
-  useEffect(() => {
-    async function checkMissedFollowUps() {
-      try {
-        // Call the database function to check and create missed follow-ups
-        const { data, error } = await supabase.rpc('check_and_create_missed_followups')
-        
-        if (error) {
-          console.error('Error checking missed follow-ups:', error)
-        } else if (data && data > 0) {
-          console.log(`Created ${data} missed follow-ups for current week`)
-          // Refetch follow-ups if any were created
-          refetch()
-        }
-      } catch (error) {
-        console.error('Error in checkMissedFollowUps:', error)
-      }
-    }
-    
-    if (user?.id && userRole) {
-      checkMissedFollowUps()
-    }
-  }, [user?.id, userRole])
+  // Removed automatic follow-up creation on page mount
+  // Follow-ups are created when:
+  // 1. Admin assigns a lead to an agent (initial follow-up)
+  // 2. Agent completes a follow-up (next one scheduled based on frequency)
+  // 3. User manually schedules a follow-up
 
   const openInteractionModal = (fu: FollowUpWithPerson) => {
     setActiveFollowUp(fu)
@@ -631,23 +613,41 @@ export default function FollowUpsPage() {
       </div>
         
       {viewMode === 'list' ? (
-        <WeeklyListView 
-          followUps={filteredFollowUps}
-          currentWeek={currentWeek}
-          onWeekChange={setCurrentWeek}
-          onFollowUpClick={openInteractionModal}
-          onMarkCompleted={openCompletionModal}
-          onOpenNotes={openNotesModal}
-          onOpenInteraction={handleDirectAction}
-          onOpenFrequency={openFrequencyModal}
-          onOpenTag={openTagModal}
-          onDeleteFollowUp={openDeleteModal}
-          filter={filter}
-          setFilter={setFilter}
-          loading={loading}
-          error={error}
-          localError={localError}
-        />
+        filter === 'overdue' ? (
+          <MissedFollowUpsList 
+            followUps={filteredFollowUps}
+            onFollowUpClick={openInteractionModal}
+            onMarkCompleted={openCompletionModal}
+            onOpenNotes={openNotesModal}
+            onOpenInteraction={handleDirectAction}
+            onOpenFrequency={openFrequencyModal}
+            onOpenTag={openTagModal}
+            onDeleteFollowUp={openDeleteModal}
+            filter={filter}
+            setFilter={setFilter}
+            loading={loading}
+            error={error}
+            localError={localError}
+          />
+        ) : (
+          <WeeklyListView 
+            followUps={filteredFollowUps}
+            currentWeek={currentWeek}
+            onWeekChange={setCurrentWeek}
+            onFollowUpClick={openInteractionModal}
+            onMarkCompleted={openCompletionModal}
+            onOpenNotes={openNotesModal}
+            onOpenInteraction={handleDirectAction}
+            onOpenFrequency={openFrequencyModal}
+            onOpenTag={openTagModal}
+            onDeleteFollowUp={openDeleteModal}
+            filter={filter}
+            setFilter={setFilter}
+            loading={loading}
+            error={error}
+            localError={localError}
+          />
+        )
       ) : (
         <WeekView 
           followUps={filteredFollowUps}
@@ -1620,5 +1620,493 @@ function WeekView({ followUps, currentWeek, onWeekChange, onFollowUpClick }: Wee
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// Missed Follow-ups List Component - Simple running list without week filtering
+interface MissedFollowUpsListProps {
+  followUps: FollowUpWithPerson[]
+  onFollowUpClick: (followUp: FollowUpWithPerson) => void
+  onMarkCompleted: (followUp: FollowUpWithPerson) => void
+  onOpenNotes: (person: Person) => void
+  onOpenInteraction: (followUp: FollowUpWithPerson, type: 'call' | 'text') => void
+  onOpenFrequency: (person: Person) => void
+  onOpenTag: (person: Person) => void
+  onDeleteFollowUp: (followUp: FollowUpWithPerson) => void
+  filter: 'upcoming' | 'overdue'
+  setFilter: (filter: 'upcoming' | 'overdue') => void
+  loading: boolean
+  error: string | null
+  localError: string | null
+}
+
+function MissedFollowUpsList({ 
+  followUps, 
+  onFollowUpClick, 
+  onMarkCompleted,
+  onOpenNotes,
+  onOpenInteraction,
+  onOpenFrequency,
+  onOpenTag,
+  onDeleteFollowUp,
+  filter, 
+  setFilter, 
+  loading, 
+  error, 
+  localError 
+}: MissedFollowUpsListProps) {
+  
+  // Sort follow-ups by how overdue they are (most overdue first)
+  const sortedFollowUps = [...followUps].sort((a, b) => {
+    return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
+  })
+
+  // Group follow-ups by how overdue they are
+  const groupedFollowUps = {
+    today: sortedFollowUps.filter(fu => {
+      const today = new Date()
+      const fuDate = new Date(fu.scheduled_date)
+      return fuDate.toDateString() === today.toDateString()
+    }),
+    yesterday: sortedFollowUps.filter(fu => {
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const fuDate = new Date(fu.scheduled_date)
+      return fuDate.toDateString() === yesterday.toDateString()
+    }),
+    thisWeek: sortedFollowUps.filter(fu => {
+      const now = new Date()
+      const fuDate = new Date(fu.scheduled_date)
+      const weekAgo = new Date()
+      weekAgo.setDate(weekAgo.getDate() - 7)
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      
+      return fuDate < yesterday && fuDate >= weekAgo
+    }),
+    older: sortedFollowUps.filter(fu => {
+      const fuDate = new Date(fu.scheduled_date)
+      const weekAgo = new Date()
+      weekAgo.setDate(weekAgo.getDate() - 7)
+      
+      return fuDate < weekAgo
+    })
+  }
+
+  const getDaysOverdue = (date: string) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const fuDate = new Date(date)
+    fuDate.setHours(0, 0, 0, 0)
+    const diffTime = today.getTime() - fuDate.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <CardTitle className="text-xl sm:text-2xl">Missed Follow-ups</CardTitle>
+              <CardDescription className="text-sm sm:text-lg">
+                All overdue follow-ups that need your attention
+              </CardDescription>
+            </div>
+            
+            {/* Filter Tabs */}
+            <div className="flex gap-2">
+              <Button 
+                variant={filter === 'upcoming' ? 'default' : 'outline'} 
+                onClick={() => setFilter('upcoming')}
+                className="flex items-center gap-2"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Upcoming/Due
+              </Button>
+              <Button 
+                variant={filter === 'overdue' ? 'default' : 'outline'} 
+                onClick={() => setFilter('overdue')}
+                className="flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4" />
+                Missed/Overdue ({sortedFollowUps.length})
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {/* Error Display */}
+      {(error || localError) && (
+        <Alert variant="destructive">
+          <AlertDescription>{error || localError}</AlertDescription>
+        </Alert>
+      )}
+      
+      {/* Loading State */}
+      {loading ? (
+        <Card>
+          <CardContent className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">Loading missed follow-ups...</p>
+          </CardContent>
+        </Card>
+      ) : sortedFollowUps.length === 0 ? (
+        /* Empty State */
+        <Card>
+          <CardContent className="p-12 text-center">
+            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">All caught up!</h3>
+            <p className="text-muted-foreground mb-4">
+              You don't have any missed follow-ups. Great job staying on top of your contacts!
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        /* Missed Follow-ups List */
+        <div className="space-y-4">
+          {/* Today's Overdue */}
+          {groupedFollowUps.today.length > 0 && (
+            <Card className="border-orange-200 dark:border-orange-900">
+              <CardHeader className="pb-3 bg-orange-50 dark:bg-orange-950/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="default" className="bg-orange-500">Today</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {groupedFollowUps.today.length} overdue
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {groupedFollowUps.today.map((followUp) => (
+                    <FollowUpCard 
+                      key={followUp.id}
+                      followUp={followUp}
+                      onFollowUpClick={onFollowUpClick}
+                      onMarkCompleted={onMarkCompleted}
+                      onOpenNotes={onOpenNotes}
+                      onOpenInteraction={onOpenInteraction}
+                      onOpenFrequency={onOpenFrequency}
+                      onOpenTag={onOpenTag}
+                      onDeleteFollowUp={onDeleteFollowUp}
+                      daysOverdue={0}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Yesterday's Overdue */}
+          {groupedFollowUps.yesterday.length > 0 && (
+            <Card className="border-orange-300 dark:border-orange-800">
+              <CardHeader className="pb-3 bg-orange-100 dark:bg-orange-950/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="default" className="bg-orange-600">Yesterday</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {groupedFollowUps.yesterday.length} overdue
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {groupedFollowUps.yesterday.map((followUp) => (
+                    <FollowUpCard 
+                      key={followUp.id}
+                      followUp={followUp}
+                      onFollowUpClick={onFollowUpClick}
+                      onMarkCompleted={onMarkCompleted}
+                      onOpenNotes={onOpenNotes}
+                      onOpenInteraction={onOpenInteraction}
+                      onOpenFrequency={onOpenFrequency}
+                      onOpenTag={onOpenTag}
+                      onDeleteFollowUp={onDeleteFollowUp}
+                      daysOverdue={1}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* This Week's Overdue */}
+          {groupedFollowUps.thisWeek.length > 0 && (
+            <Card className="border-red-200 dark:border-red-900">
+              <CardHeader className="pb-3 bg-red-50 dark:bg-red-950/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="destructive">This Week</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {groupedFollowUps.thisWeek.length} overdue (2-7 days)
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {groupedFollowUps.thisWeek.map((followUp) => (
+                    <FollowUpCard 
+                      key={followUp.id}
+                      followUp={followUp}
+                      onFollowUpClick={onFollowUpClick}
+                      onMarkCompleted={onMarkCompleted}
+                      onOpenNotes={onOpenNotes}
+                      onOpenInteraction={onOpenInteraction}
+                      onOpenFrequency={onOpenFrequency}
+                      onOpenTag={onOpenTag}
+                      onDeleteFollowUp={onDeleteFollowUp}
+                      daysOverdue={getDaysOverdue(followUp.scheduled_date)}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Older Overdue */}
+          {groupedFollowUps.older.length > 0 && (
+            <Card className="border-red-400 dark:border-red-800">
+              <CardHeader className="pb-3 bg-red-100 dark:bg-red-950/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="destructive" className="bg-red-600">Older</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {groupedFollowUps.older.length} overdue (7+ days)
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {groupedFollowUps.older.map((followUp) => (
+                    <FollowUpCard 
+                      key={followUp.id}
+                      followUp={followUp}
+                      onFollowUpClick={onFollowUpClick}
+                      onMarkCompleted={onMarkCompleted}
+                      onOpenNotes={onOpenNotes}
+                      onOpenInteraction={onOpenInteraction}
+                      onOpenFrequency={onOpenFrequency}
+                      onOpenTag={onOpenTag}
+                      onDeleteFollowUp={onDeleteFollowUp}
+                      daysOverdue={getDaysOverdue(followUp.scheduled_date)}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Reusable Follow-up Card Component
+interface FollowUpCardProps {
+  followUp: FollowUpWithPerson
+  onFollowUpClick: (followUp: FollowUpWithPerson) => void
+  onMarkCompleted: (followUp: FollowUpWithPerson) => void
+  onOpenNotes: (person: Person) => void
+  onOpenInteraction: (followUp: FollowUpWithPerson, type: 'call' | 'text') => void
+  onOpenFrequency: (person: Person) => void
+  onOpenTag: (person: Person) => void
+  onDeleteFollowUp: (followUp: FollowUpWithPerson) => void
+  daysOverdue: number
+}
+
+function FollowUpCard({
+  followUp,
+  onFollowUpClick,
+  onMarkCompleted,
+  onOpenNotes,
+  onOpenInteraction,
+  onOpenFrequency,
+  onOpenTag,
+  onDeleteFollowUp,
+  daysOverdue
+}: FollowUpCardProps) {
+  return (
+    <div className="p-4 border rounded-lg transition-all hover:shadow-md hover:border-primary/50 border-border hover:bg-muted/30">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center space-x-3 min-w-0 flex-1">
+          <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium truncate">
+              {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown Person'}
+            </div>
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+              {followUp.people?.company && (
+                <span className="truncate">{followUp.people.company}</span>
+              )}
+              {followUp.people?.follow_up_frequency && (
+                <>
+                  <span>•</span>
+                  <Badge variant="outline" className="text-xs flex-shrink-0">
+                    {getFrequencyDisplayName(followUp.people.follow_up_frequency)}
+                  </Badge>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        <Badge 
+          variant="destructive" 
+          className="text-xs flex-shrink-0"
+        >
+          {daysOverdue === 0 ? 'Due Today' : 
+           daysOverdue === 1 ? '1 day overdue' : 
+           `${daysOverdue} days overdue`}
+        </Badge>
+      </div>
+      
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          <span>
+            Was due: {new Date(followUp.scheduled_date).toLocaleDateString('en-US', { 
+              weekday: 'short',
+              month: 'short', 
+              day: 'numeric'
+            })}
+          </span>
+        </div>
+      </div>
+      
+      {/* Contact Information */}
+      {(followUp.people?.phone && followUp.people.phone.length > 0) || 
+       (followUp.people?.email && followUp.people.email.length > 0) ? (
+        <div className="mb-3 text-xs text-muted-foreground bg-muted/20 p-2 rounded overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            {followUp.people.phone && followUp.people.phone.length > 0 && (
+              <div className="flex items-center gap-1 min-w-0">
+                <Phone className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate max-w-[120px]">{followUp.people.phone[0]}</span>
+              </div>
+            )}
+            {followUp.people.email && followUp.people.email.length > 0 && (
+              <div className="flex items-center gap-1 min-w-0">
+                <MessageSquare className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate max-w-[120px]">{followUp.people.email[0]}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+      
+      {followUp.notes && (
+        <div className="mb-3 text-sm text-muted-foreground line-clamp-2 bg-muted/30 p-2 rounded">
+          {followUp.notes}
+        </div>
+      )}
+      
+      {/* Action Buttons */}
+      <div className="flex flex-col space-y-2 pt-2 border-t border-border/50">
+        {/* Primary Actions Row */}
+        <div className="flex flex-wrap items-center justify-between gap-1">
+          <div className="flex items-center flex-wrap gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onOpenInteraction(followUp, 'call')}
+              className="flex items-center gap-1 h-8 px-2"
+            >
+              <Phone className="h-3 w-3" />
+              <span className="hidden sm:inline">Call</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onOpenInteraction(followUp, 'text')}
+              className="flex items-center gap-1 h-8 px-2"
+            >
+              <MessageSquare className="h-3 w-3" />
+              <span className="hidden sm:inline">Text</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onFollowUpClick(followUp)}
+              className="flex items-center gap-1 h-8 px-2 text-xs"
+            >
+              <FileText className="h-3 w-3" />
+              <span className="hidden sm:inline">Note</span>
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => onMarkCompleted(followUp)}
+            className="flex items-center gap-1 h-8 px-2 bg-green-600 hover:bg-green-700"
+          >
+            <Check className="h-3 w-3" />
+            <span className="hidden sm:inline">Done</span>
+          </Button>
+        </div>
+        
+        {/* Secondary Actions Row */}
+        <div className="flex flex-wrap items-center justify-between gap-1">
+          <div className="flex items-center flex-wrap gap-1">
+            {followUp.people && (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onOpenNotes(followUp.people!)}
+                  className="flex items-center gap-1 h-7 px-2 text-xs"
+                >
+                  <FileText className="h-3 w-3" />
+                  <span className="hidden sm:inline">Notes</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onOpenFrequency(followUp.people!)}
+                  className="flex items-center gap-1 h-7 px-2 text-xs"
+                >
+                  <Settings className="h-3 w-3" />
+                  <span className="hidden sm:inline">Freq</span>
+                </Button>
+                {followUp.people.lead_tag && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onOpenTag(followUp.people!)}
+                    className="flex items-center gap-1 h-7 px-2 text-xs"
+                  >
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs"
+                      style={{
+                        borderColor: followUp.people.lead_tag.color || '#6b7280',
+                        color: followUp.people.lead_tag.color || '#6b7280'
+                      }}
+                    >
+                      {followUp.people.lead_tag.name}
+                    </Badge>
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onDeleteFollowUp(followUp)}
+            className="flex items-center gap-1 h-7 px-2 text-xs text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-3 w-3" />
+            <span className="hidden sm:inline">Delete</span>
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 } 

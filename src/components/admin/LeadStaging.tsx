@@ -782,7 +782,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
         open: true,
         title: 'Error',
         message: 'Failed to remove duplicates. Please try again.',
-        type: 'error'
+        type: 'error'         
       })
     } finally {
       setRemovingDuplicates(false)

@@ -12,10 +12,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { AlertModal } from '@/components/ui/alert-modal'
 import { useAuth } from '@/contexts/AuthContext'
 import { getLeadsWithTags, getLeadsByTag, getLeadStatsWithTags, getLeadTags, updateLeadTagForLead, updateLeadStatus } from '@/lib/database'
 import type { Person, LeadTag } from '@/lib/supabase'
-import { formatPhoneNumberForDisplay } from '@/lib/utils'
+import { formatPhoneNumberForDisplay, formatPhoneNumber, unformatPhoneNumber } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
 import { useDataLoader } from '@/hooks/useDataLoader'
@@ -48,6 +51,31 @@ export default function MyLeadsPage() {
   const [openTagDialog, setOpenTagDialog] = useState<string | null>(null)
   const [openStatusDialog, setOpenStatusDialog] = useState<string | null>(null)
   const itemsPerPage = 10
+  
+  // Manual lead creation state
+  const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false)
+  const [creatingLead, setCreatingLead] = useState(false)
+  const [newLeadData, setNewLeadData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    source: 'manual',
+    notes: ''
+  })
+  
+  // Alert modal state
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'warning' | 'info'
+  }>({
+    open: false,
+    title: '',
+    message: '',
+    type: 'info'
+  })
 
   // Define loadStats function
   const loadStats = async () => {
@@ -288,6 +316,82 @@ export default function MyLeadsPage() {
     setSelectedStatus(currentStatus)
   }
 
+  // Manual lead creation handler
+  const handleCreateLead = async () => {
+    if (!newLeadData.firstName || !newLeadData.lastName) {
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'First name and last name are required',
+        type: 'error'
+      })
+      return
+    }
+
+    try {
+      setCreatingLead(true)
+      
+      const response = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newLeadData,
+          phone: unformatPhoneNumber(newLeadData.phone),
+          assignedTo: user?.id, // Directly assign to the current user
+          skipReports: true // Flag to skip admin reports
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // Reset form
+        setNewLeadData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          source: 'manual',
+          notes: ''
+        })
+        setCreateLeadDialogOpen(false)
+        
+        // Refetch leads
+        refetchAllLeads()
+        refetchHotLeads()
+        refetchWarmLeads()
+        refetchColdLeads()
+        refetchDeadLeads()
+        loadStats()
+        
+        // Show success message
+        setAlertModal({
+          open: true,
+          title: 'Success',
+          message: `Lead ${newLeadData.firstName} ${newLeadData.lastName} has been created and assigned to you`,
+          type: 'success'
+        })
+      } else {
+        setAlertModal({
+          open: true,
+          title: 'Error',
+          message: result.error || 'Failed to create lead',
+          type: 'error'
+        })
+      }
+    } catch (error) {
+      console.error('Error creating lead:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to create lead. Please try again.',
+        type: 'error'
+      })
+    } finally {
+      setCreatingLead(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       staging: { variant: 'secondary' as const, icon: AlertCircle, label: 'Staging' },
@@ -367,6 +471,13 @@ export default function MyLeadsPage() {
               }
             </p>
           </div>
+          <Button
+            onClick={() => setCreateLeadDialogOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add Lead
+          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -693,6 +804,111 @@ export default function MyLeadsPage() {
             </Card>
           </TabsContent>
         </Tabs>
+        
+        {/* Create Lead Dialog */}
+        <Dialog open={createLeadDialogOpen} onOpenChange={setCreateLeadDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add New Lead</DialogTitle>
+              <DialogDescription>
+                Add a new lead directly to your assigned leads. This lead will not appear in admin reports.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    value={newLeadData.firstName}
+                    onChange={(e) => setNewLeadData(prev => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="John"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    value={newLeadData.lastName}
+                    onChange={(e) => setNewLeadData(prev => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newLeadData.email}
+                  onChange={(e) => setNewLeadData(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="john.doe@example.com"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={newLeadData.phone}
+                  onChange={(e) => {
+                    const formatted = formatPhoneNumber(e.target.value)
+                    setNewLeadData(prev => ({ ...prev, phone: formatted }))
+                  }}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={newLeadData.notes}
+                  onChange={(e) => setNewLeadData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Add any relevant notes about this lead..."
+                  rows={3}
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCreateLeadDialogOpen(false)
+                    setNewLeadData({
+                      firstName: '',
+                      lastName: '',
+                      email: '',
+                      phone: '',
+                      source: 'manual',
+                      notes: ''
+                    })
+                  }}
+                  disabled={creatingLead}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateLead}
+                  disabled={creatingLead || !newLeadData.firstName || !newLeadData.lastName}
+                >
+                  {creatingLead ? 'Creating...' : 'Create Lead'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Alert Modal */}
+        <AlertModal
+          open={alertModal.open}
+          onOpenChange={(open) => setAlertModal(prev => ({ ...prev, open }))}
+          title={alertModal.title}
+          message={alertModal.message}
+          type={alertModal.type}
+        />
       </div>
     </TooltipProvider>
   )
