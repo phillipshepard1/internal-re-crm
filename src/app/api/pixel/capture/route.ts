@@ -15,7 +15,14 @@ export async function POST(request: NextRequest) {
     if (!apiKey) {
       return NextResponse.json(
         { error: 'Missing API key' },
-        { status: 401 }
+        { 
+          status: 401,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+          }
+        }
       )
     }
 
@@ -29,7 +36,14 @@ export async function POST(request: NextRequest) {
     if (keyError || !apiKeyData || !apiKeyData.is_active) {
       return NextResponse.json(
         { error: 'Invalid or inactive API key' },
-        { status: 401 }
+        { 
+          status: 401,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+          }
+        }
       )
     }
 
@@ -101,6 +115,12 @@ export async function POST(request: NextRequest) {
           message: 'Existing lead updated',
           lead_id: existingLead.id,
           is_duplicate: true
+        }, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+          }
         })
       }
     }
@@ -140,7 +160,14 @@ export async function POST(request: NextRequest) {
       console.error('Error creating lead:', createError)
       return NextResponse.json(
         { error: 'Failed to create lead' },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+          }
+        }
       )
     }
 
@@ -171,13 +198,26 @@ export async function POST(request: NextRequest) {
       message: 'Lead captured successfully',
       lead_id: createdLead.id,
       assigned: createdLead.lead_status === 'assigned'
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+      }
     })
 
   } catch (error) {
     console.error('Error in pixel capture:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
+        }
+      }
     )
   }
 }
