@@ -1219,6 +1219,56 @@ export default function PersonDetailPage() {
               </CardContent>
             </Card>
 
+            {/* Lead Source and Details */}
+            {(person.lead_source || person.notes || person.pixel_source_url) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <FileText className="mr-2 h-5 w-5" />
+                    Lead Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {person.lead_source && (
+                    <div>
+                      <p className="text-sm font-medium mb-1">Lead Source</p>
+                      <Badge variant="outline">
+                        {person.lead_source.startsWith('pixel_') 
+                          ? `Tracking Pixel - ${person.lead_source.replace('pixel_', '')}`
+                          : person.lead_source.startsWith('n8n_')
+                          ? `N8N Integration - ${person.lead_source.replace('n8n_', '')}`
+                          : person.lead_source
+                        }
+                      </Badge>
+                    </div>
+                  )}
+                  
+                  {person.pixel_source_url && (
+                    <div>
+                      <p className="text-sm font-medium mb-1">Source URL</p>
+                      <a 
+                        href={person.pixel_source_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline break-all"
+                      >
+                        {person.pixel_source_url}
+                      </a>
+                    </div>
+                  )}
+                  
+                  {person.notes && (
+                    <div>
+                      <p className="text-sm font-medium mb-1">Notes / Form Details</p>
+                      <div className="bg-muted p-3 rounded-md">
+                        <p className="text-sm whitespace-pre-wrap">{person.notes}</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Properties Information */}
             {(person.looking_for || person.selling || person.closed || person.address || person.city || person.state || person.zip_code) && (
               <Card>

@@ -81,6 +81,9 @@ export interface Person {
   country?: string
   lead_source?: string
   lead_source_id?: string
+  pixel_source_url?: string
+  pixel_referrer?: string
+  pixel_api_key?: string
   // Lead management
   lead_status?: 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost'
   // New fields for lead tagging and follow-up plans
