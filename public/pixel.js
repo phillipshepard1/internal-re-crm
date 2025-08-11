@@ -176,10 +176,14 @@
       // ALSO directly read from all inputs (in case FormData is incomplete)
       const allInputs = form.querySelectorAll('input, select, textarea');
       allInputs.forEach(input => {
-        if (input.name && input.value) {
-          const keyLower = input.name.toLowerCase();
-          if (!fields[keyLower]) {
-            fields[keyLower] = input.value;
+        if (input.value) {
+          // Use name if available, otherwise use id
+          const fieldKey = input.name || input.id;
+          if (fieldKey) {
+            const keyLower = fieldKey.toLowerCase();
+            if (!fields[keyLower]) {
+              fields[keyLower] = input.value.trim();
+            }
           }
         }
       });
@@ -189,26 +193,26 @@
         console.log('[CRM Pixel] All form fields collected:', fields);
       }
       
-      // Special handling for Squarespace dynamic field names
+      // Special handling for Squarespace dynamic field names (works with both name and id attributes)
       for (let [fieldName, fieldValue] of Object.entries(fields)) {
         // Check for email fields (e.g., email-yui_3_17_2_1_1641123722582_17147-field)
-        if (fieldName.startsWith('email-') && fieldName.endsWith('-field')) {
+        if (fieldName.includes('email-') && fieldName.includes('-field')) {
           data.email = fieldValue;
         }
         // Check for phone fields (e.g., phone-03ad63d0-7f27-4cda-b1ef-09f490a85c80-input-field)
-        else if (fieldName.startsWith('phone-') && fieldName.includes('-field')) {
+        else if (fieldName.includes('phone-') && fieldName.includes('-field')) {
           data.phone = fieldValue;
         }
         // Check for text fields (could be various fields like areas of interest, etc.)
-        else if (fieldName.startsWith('text-') && fieldName.endsWith('-field')) {
+        else if (fieldName.includes('text-') && fieldName.includes('-field')) {
           // Store these in an array for processing
           data.additional_fields = data.additional_fields || [];
           if (fieldValue && fieldValue.trim()) {
-            data.additional_fields.push(fieldValue);
+            data.additional_fields.push(fieldValue.trim());
           }
         }
         // Check for textarea fields (likely message/notes)
-        else if (fieldName.startsWith('textarea-') && fieldName.endsWith('-field')) {
+        else if (fieldName.includes('textarea-') && fieldName.includes('-field')) {
           data.message = fieldValue;
         }
       }
