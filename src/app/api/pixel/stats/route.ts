@@ -77,10 +77,10 @@ export async function GET(request: NextRequest) {
       ? Math.round((assignedLeads / stats.total_leads) * 100) 
       : 0
     
-    // Get recent captures for activity feed - only select columns that exist
+    // Get recent captures for activity feed - include all relevant fields
     const { data: recentCaptures } = await supabase
       .from('people')
-      .select('id, first_name, last_name, email, created_at, lead_source, lead_status')
+      .select('id, first_name, last_name, email, phone, city, state, notes, created_at, lead_source, lead_status, pixel_source_url')
       .like('lead_source', 'pixel_%')
       .order('created_at', { ascending: false })
       .limit(10)

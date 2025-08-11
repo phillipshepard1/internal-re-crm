@@ -20,7 +20,13 @@ import {
   Plus,
   Trash2,
   Eye,
-  EyeOff
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+  Phone,
+  Mail,
+  MapPin,
+  FileText
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -39,6 +45,10 @@ interface RecentLead {
   first_name: string
   last_name: string
   email: string[]
+  phone?: string[]
+  city?: string
+  state?: string
+  notes?: string
   created_at: string
   lead_source?: string
   pixel_source_url?: string
@@ -68,6 +78,7 @@ export function TrackingPixelDashboard() {
   const [selectedApiKey, setSelectedApiKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
   const [apiKeysLoading, setApiKeysLoading] = useState(true)
+  const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set())
 
   // Fetch statistics
   const fetchStats = async () => {
@@ -122,6 +133,18 @@ export function TrackingPixelDashboard() {
     navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const toggleLeadExpansion = (leadId: string) => {
+    setExpandedLeads(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(leadId)) {
+        newSet.delete(leadId)
+      } else {
+        newSet.add(leadId)
+      }
+      return newSet
+    })
   }
 
   const handleCreateApiKey = async () => {
@@ -187,7 +210,7 @@ export function TrackingPixelDashboard() {
   CRMPixel.setConfig({
     apiEndpoint: '${productionUrl}/api/pixel/capture',
     apiKey: '${selectedApiKey}',
-    debug: false // Set to true for testing
+    debug: false
   }).init();
 </script>`
   }
@@ -448,35 +471,94 @@ add_action('wp_footer', 'add_crm_tracking_pixel');`
                     No pixel leads captured yet
                   </div>
                 ) : (
-                  recentLeads.map(lead => (
-                    <div key={lead.id} className="flex items-center justify-between p-4 border rounded">
-                      <div>
-                        <div className="font-medium">
-                          {lead.first_name} {lead.last_name}
+                  recentLeads.map(lead => {
+                    const isExpanded = expandedLeads.has(lead.id)
+                    return (
+                      <div key={lead.id} className="border rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between p-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium">
+                                {lead.first_name} {lead.last_name}
+                              </div>
+                              <Badge variant={lead.lead_status === 'assigned' ? 'default' : 'secondary'}>
+                                {lead.lead_status}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                              {lead.email?.[0] && (
+                                <span className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3" />
+                                  {lead.email[0]}
+                                </span>
+                              )}
+                              {lead.phone?.[0] && (
+                                <span className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  {lead.phone[0]}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                              <span>
+                                From: {lead.pixel_source_url ? 
+                                  (lead.pixel_source_url.startsWith('http') ? 
+                                    new URL(lead.pixel_source_url).hostname : 
+                                    lead.pixel_source_url
+                                  ) : 
+                                  lead.lead_source?.replace('pixel_', '') || 'Unknown'
+                                }
+                              </span>
+                              <span>
+                                {new Date(lead.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleLeadExpansion(lead.id)}
+                          >
+                            {isExpanded ? <ChevronUp /> : <ChevronDown />}
+                          </Button>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          {lead.email?.[0] || 'No email'}
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                          <span>
-                            From: {lead.pixel_source_url ? 
-                              (lead.pixel_source_url.startsWith('http') ? 
-                                new URL(lead.pixel_source_url).hostname : 
-                                lead.pixel_source_url
-                              ) : 
-                              lead.lead_source?.replace('pixel_', '') || 'Unknown'
-                            }
-                          </span>
-                          <span>
-                            {new Date(lead.created_at).toLocaleString()}
-                          </span>
-                        </div>
+                        
+                        {isExpanded && (
+                          <div className="px-4 pb-4 pt-0 border-t bg-muted/30">
+                            <div className="grid grid-cols-2 gap-4 mt-4">
+                              {lead.city && (
+                                <div>
+                                  <div className="text-xs text-muted-foreground mb-1">Location</div>
+                                  <div className="text-sm flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {lead.city}{lead.state ? `, ${lead.state}` : ''}
+                                  </div>
+                                </div>
+                              )}
+                              {lead.notes && (
+                                <div className="col-span-2">
+                                  <div className="text-xs text-muted-foreground mb-1">Notes / Property Details</div>
+                                  <div className="text-sm whitespace-pre-wrap bg-background p-2 rounded">
+                                    {lead.notes}
+                                  </div>
+                                </div>
+                              )}
+                              {lead.pixel_source_url && (
+                                <div className="col-span-2">
+                                  <div className="text-xs text-muted-foreground mb-1">Source URL</div>
+                                  <div className="text-sm text-blue-600 hover:underline">
+                                    <a href={lead.pixel_source_url} target="_blank" rel="noopener noreferrer">
+                                      {lead.pixel_source_url}
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <Badge variant={lead.lead_status === 'assigned' ? 'default' : 'secondary'}>
-                        {lead.lead_status}
-                      </Badge>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </CardContent>
