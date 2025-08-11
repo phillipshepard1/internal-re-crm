@@ -72,13 +72,43 @@ export async function POST(request: NextRequest) {
     if (lead_data.zipcode) addressParts.push(lead_data.zipcode)
     const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : null
     
-    // Combine notes from various fields
+    // Combine notes from various fields based on form type
     const noteParts = []
-    if (lead_data.message) noteParts.push(lead_data.message)
-    if (lead_data.additional_criteria) noteParts.push(`Additional Criteria: ${lead_data.additional_criteria}`)
-    if (lead_data.areas_of_interest) noteParts.push(`Areas of Interest: ${lead_data.areas_of_interest}`)
-    if (propertyDetails.length > 0) noteParts.push(`Property Details: ${propertyDetails.join(', ')}`)
-    if (lead_data.price) noteParts.push(`Price Range: ${lead_data.price}`)
+    
+    // Determine form type from source URL
+    const sourceUrl = lead_data.source_url || ''
+    const isPropertyForm = sourceUrl.includes('instant') || sourceUrl.includes('home-update')
+    const isStarterPackageForm = sourceUrl.includes('nwa-starter') || sourceUrl.includes('starter-package')
+    
+    // Add form-specific fields
+    if (isPropertyForm) {
+      // Property search form fields
+      if (lead_data.areas_of_interest) noteParts.push(`Areas of Interest: ${lead_data.areas_of_interest}`)
+      if (propertyDetails.length > 0) noteParts.push(`Property Requirements: ${propertyDetails.join(', ')}`)
+      if (lead_data.price) noteParts.push(`Price Range: ${lead_data.price}`)
+      if (lead_data.additional_criteria) noteParts.push(`Additional Criteria: ${lead_data.additional_criteria}`)
+    } else if (isStarterPackageForm) {
+      // NWA Starter Package form - address is already handled above
+      noteParts.push(`Form Type: NWA Starter Package Request`)
+      if (fullAddress) noteParts.push(`Current Address: ${fullAddress}`)
+    }
+    
+    // Add generic fields
+    if (lead_data.message) noteParts.push(`Message: ${lead_data.message}`)
+    
+    // Add any unmapped fields
+    if (lead_data.field_1 || lead_data.field_2 || lead_data.field_3) {
+      const additionalInfo = []
+      for (let i = 1; i <= 10; i++) {
+        if (lead_data[`field_${i}`]) {
+          additionalInfo.push(lead_data[`field_${i}`])
+        }
+      }
+      if (additionalInfo.length > 0) {
+        noteParts.push(`Additional Information: ${additionalInfo.join(', ')}`)
+      }
+    }
+    
     const combinedNotes = noteParts.join('\n\n')
     
     // Check if lead already exists by email

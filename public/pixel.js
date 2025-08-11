@@ -234,15 +234,33 @@
         data.name = fields.fname + ' ' + fields.lname;
       }
       
-      // Process additional text fields based on order (typical Squarespace form structure)
+      // Process additional text fields based on form URL
       if (data.additional_fields && data.additional_fields.length > 0) {
-        // Common order: areas of interest, bedrooms, bathrooms, square feet, acreage, price
-        const fieldLabels = ['areas_of_interest', 'bedrooms', 'bathrooms', 'square_feet', 'acreage', 'price'];
-        data.additional_fields.forEach((value, index) => {
-          if (index < fieldLabels.length && value) {
-            data[fieldLabels[index]] = value;
-          }
-        });
+        const currentUrl = window.location.pathname.toLowerCase();
+        
+        // Different field mappings for different forms
+        if (currentUrl.includes('instant') || currentUrl.includes('home-update')) {
+          // Form 1: Instant Home Updates
+          const fieldLabels = ['areas_of_interest', 'bedrooms', 'bathrooms', 'square_feet', 'acreage', 'price'];
+          data.additional_fields.forEach((value, index) => {
+            if (index < fieldLabels.length && value) {
+              data[fieldLabels[index]] = value;
+            }
+          });
+        } else if (currentUrl.includes('nwa-starter') || currentUrl.includes('starter-package')) {
+          // Form 2: NWA Starter Package - Address fields
+          const fieldLabels = ['address', 'city', 'state', 'zipcode'];
+          data.additional_fields.forEach((value, index) => {
+            if (index < fieldLabels.length && value) {
+              data[fieldLabels[index]] = value;
+            }
+          });
+        } else {
+          // Generic form - store as generic fields
+          data.additional_fields.forEach((value, index) => {
+            data[`field_${index + 1}`] = value;
+          });
+        }
       }
       
       // Add metadata
