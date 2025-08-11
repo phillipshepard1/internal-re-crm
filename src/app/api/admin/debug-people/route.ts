@@ -11,9 +11,9 @@ export async function GET() {
     // Get all people with their key fields
     const { data: allPeople, error } = await supabase
       .from('people')
-      .select('id, first_name, last_name, email, client_type, lead_status, lead_source, created_at')
+      .select('id, first_name, last_name, email, client_type, lead_status, lead_source, pixel_source_url, created_at')
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(100)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -24,6 +24,9 @@ export async function GET() {
     const allLeads = allPeople?.filter(p => p.client_type === 'lead') || []
     const convertedLeads = allLeads.filter(p => p.lead_status === 'converted')
     const importedLeads = allLeads.filter(p => p.lead_source === 'csv_import')
+    const pixelLeads = allPeople?.filter(p => p.lead_source?.startsWith('pixel_')) || []
+    const stagingLeads = allLeads.filter(p => p.lead_status === 'staging')
+    const unassignedLeads = allLeads.filter(p => p.lead_status === 'unassigned')
 
     return NextResponse.json({
       total: allPeople?.length || 0,
@@ -35,6 +38,19 @@ export async function GET() {
         count: allLeads.length,
         data: allLeads
       },
+      pixelLeads: {
+        count: pixelLeads.length,
+        data: pixelLeads,
+        sources: [...new Set(pixelLeads.map(p => p.pixel_source_url).filter(Boolean))]
+      },
+      stagingLeads: {
+        count: stagingLeads.length,
+        data: stagingLeads
+      },
+      unassignedLeads: {
+        count: unassignedLeads.length,
+        data: unassignedLeads
+      },
       convertedLeads: {
         count: convertedLeads.length,
         data: convertedLeads
@@ -44,6 +60,10 @@ export async function GET() {
         data: importedLeads
       },
       summary: {
+        'Total People': allPeople?.length || 0,
+        'Leads in Staging': stagingLeads.length,
+        'Unassigned Leads': unassignedLeads.length,
+        'Pixel Leads': pixelLeads.length,
         'People tab should show': regularPeople.length,
         'Converted Leads tab should show': convertedLeads.length,
         'Imported Leads tab should show': importedLeads.length
