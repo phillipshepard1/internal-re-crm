@@ -133,6 +133,9 @@ async function checkLeadSourceMatch(from: string, subject: string, body: string)
   }
 }
 
+// TEMPORARILY COMMENTED OUT FOR PIXEL TRACKING TESTING
+// Uncomment this function when N8N workflow testing is complete
+/*
 export async function POST(request: NextRequest) {
   try {
     // Verify webhook authentication
@@ -453,18 +456,30 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+*/
+
+// Temporary response while N8N is disabled for testing
+export async function POST(request: NextRequest) {
+  return NextResponse.json({
+    success: false,
+    message: 'N8N webhook temporarily disabled for pixel tracking testing',
+    status: 'disabled'
+  }, { status: 503 })
+}
 
 export async function GET() {
   return NextResponse.json({
-    message: 'N8N Lead Processing Webhook',
-    description: 'Receives processed lead data from N8N workflows',
+    message: 'N8N Lead Processing Webhook - TEMPORARILY DISABLED',
+    description: 'Currently disabled for pixel tracking testing',
+    status: 'disabled',
     usage: 'POST with authorization header containing N8N_WEBHOOK_TOKEN',
     features: [
       'AI-powered lead detection via N8N',
-      'Structured data extraction',
+      'Structured data extraction', 
       'Attachment handling',
       'Duplicate prevention',
       'Enhanced lead analysis'
-    ]
+    ],
+    note: 'To re-enable, uncomment the POST function in this file'
   })
 } 
