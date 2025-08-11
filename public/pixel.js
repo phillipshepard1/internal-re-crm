@@ -163,7 +163,31 @@
         fields[key.toLowerCase()] = value;
       }
       
-      // Map fields to standard names
+      // Special handling for Squarespace dynamic field names
+      for (let [fieldName, fieldValue] of Object.entries(fields)) {
+        // Check for email fields (e.g., email-yui_3_17_2_1_1641123722582_17147-field)
+        if (fieldName.startsWith('email-') && fieldName.endsWith('-field')) {
+          data.email = fieldValue;
+        }
+        // Check for phone fields (e.g., phone-03ad63d0-7f27-4cda-b1ef-09f490a85c80-input-field)
+        else if (fieldName.startsWith('phone-') && fieldName.includes('-field')) {
+          data.phone = fieldValue;
+        }
+        // Check for text fields (could be various fields like areas of interest, etc.)
+        else if (fieldName.startsWith('text-') && fieldName.endsWith('-field')) {
+          // Store these in an array for processing
+          data.additional_fields = data.additional_fields || [];
+          if (fieldValue && fieldValue.trim()) {
+            data.additional_fields.push(fieldValue);
+          }
+        }
+        // Check for textarea fields (likely message/notes)
+        else if (fieldName.startsWith('textarea-') && fieldName.endsWith('-field')) {
+          data.message = fieldValue;
+        }
+      }
+      
+      // Map fields to standard names using the existing mapping
       for (let [standardName, variations] of Object.entries(this.config.fieldMapping)) {
         for (let variation of variations) {
           if (fields[variation]) {
@@ -178,6 +202,17 @@
         data.name = data.name + ' ' + data.last_name;
       } else if (!data.name && fields.fname && fields.lname) {
         data.name = fields.fname + ' ' + fields.lname;
+      }
+      
+      // Process additional text fields based on order (typical Squarespace form structure)
+      if (data.additional_fields && data.additional_fields.length > 0) {
+        // Common order: areas of interest, bedrooms, bathrooms, square feet, acreage, price
+        const fieldLabels = ['areas_of_interest', 'bedrooms', 'bathrooms', 'square_feet', 'acreage', 'price'];
+        data.additional_fields.forEach((value, index) => {
+          if (index < fieldLabels.length && value) {
+            data[fieldLabels[index]] = value;
+          }
+        });
       }
       
       // Add metadata
