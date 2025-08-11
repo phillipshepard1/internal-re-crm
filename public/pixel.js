@@ -133,6 +133,16 @@
     handleFormSubmit: function(event, form) {
       if (this.config.debug) {
         console.log('[CRM Pixel] Form submission detected!');
+        
+        // Debug: Show all input values at submission time
+        const allInputs = form.querySelectorAll('input, select, textarea');
+        const inputValues = {};
+        allInputs.forEach(input => {
+          if (input.name && input.value) {
+            inputValues[input.name] = input.value;
+          }
+        });
+        console.log('[CRM Pixel] All input values at submission:', inputValues);
       }
       
       try {
@@ -157,15 +167,26 @@
       const formData = new FormData(form);
       const data = {};
       
-      // Get all form fields
+      // Get all form fields from FormData
       const fields = {};
       for (let [key, value] of formData.entries()) {
         fields[key.toLowerCase()] = value;
       }
       
+      // ALSO directly read from all inputs (in case FormData is incomplete)
+      const allInputs = form.querySelectorAll('input, select, textarea');
+      allInputs.forEach(input => {
+        if (input.name && input.value) {
+          const keyLower = input.name.toLowerCase();
+          if (!fields[keyLower]) {
+            fields[keyLower] = input.value;
+          }
+        }
+      });
+      
       // Debug: Show all submitted fields
       if (this.config.debug) {
-        console.log('[CRM Pixel] All form fields submitted:', fields);
+        console.log('[CRM Pixel] All form fields collected:', fields);
       }
       
       // Special handling for Squarespace dynamic field names
