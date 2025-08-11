@@ -163,6 +163,11 @@
         fields[key.toLowerCase()] = value;
       }
       
+      // Debug: Show all submitted fields
+      if (this.config.debug) {
+        console.log('[CRM Pixel] All form fields submitted:', fields);
+      }
+      
       // Special handling for Squarespace dynamic field names
       for (let [fieldName, fieldValue] of Object.entries(fields)) {
         // Check for email fields (e.g., email-yui_3_17_2_1_1641123722582_17147-field)
