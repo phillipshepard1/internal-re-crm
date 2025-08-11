@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
           person_id: existingLead.id,
           type: 'note_added',
           description: `Lead resubmitted form from ${lead_data.source_url || apiKeyInfo?.website}`,
-          created_by: 'pixel_tracking',
+          created_by: null, // System-generated activity
           created_at: new Date().toISOString()
         })
         
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
       person_id: createdLead.id,
       type: 'created',
       description: `Lead captured via pixel tracking from ${lead_data.source_url || apiKeyInfo?.website}`,
-      created_by: 'pixel_tracking',
+      created_by: null, // System-generated activity
       created_at: new Date().toISOString()
     })
 
