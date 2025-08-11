@@ -19,7 +19,7 @@ import { LeadStaging } from '@/components/admin/LeadStaging'
 import { LeadSourceManagement } from '@/components/admin/LeadSourceManagement'
 import { FollowUpFrequencyManagement } from '@/components/admin/FollowUpFrequencyManagement'
 import { AgentReports } from '@/components/admin/AgentReports'
-import { TrackingPixelDashboard } from '@/components/admin/TrackingPixel'
+// import { TrackingPixelDashboard } from '@/components/admin/TrackingPixel'
 import type { RoundRobinConfig, User } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -377,7 +377,7 @@ export default function AdminPage() {
                 {/* <TabsTrigger value="plans" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Follow-up Plans</TabsTrigger> */}
                 <TabsTrigger value="activity" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Activity</TabsTrigger>
                 <TabsTrigger value="reports" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Reports</TabsTrigger>
-                <TabsTrigger value="pixel" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Tracking Pixel</TabsTrigger>
+                {/* <TabsTrigger value="pixel" className="whitespace-nowrap px-3 py-1.5 text-xs sm:text-sm min-w-[100px] sm:min-w-[120px]">Tracking Pixel</TabsTrigger> */}
               </TabsList>
             </div>
             {/* Mobile scroll indicator */}
@@ -612,9 +612,9 @@ export default function AdminPage() {
             <AgentReports users={users} />
           </TabsContent>
 
-          <TabsContent value="pixel" className="space-y-4">
+          {/* <TabsContent value="pixel" className="space-y-4">
             <TrackingPixelDashboard />
-          </TabsContent>
+          </TabsContent> */}
 
         </Tabs>
       </div>

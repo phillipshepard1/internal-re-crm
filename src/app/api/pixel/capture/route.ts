@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
       zip_code: lead_data.zipcode || null,
       lead_source: `pixel_${apiKeyInfo?.name || source || 'unknown'}`,
       client_type: 'lead',
-      lead_status: 'unassigned',
+      lead_status: 'staging',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       // Custom pixel tracking fields
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Lead will be assigned through lead staging system
+    // Lead is now in staging status for admin assignment
     // Create activity log for lead creation
     await supabase.from('activities').insert({
       person_id: createdLead.id,
@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
       status: 'success',
       message: 'Lead captured successfully',
       lead_id: createdLead.id,
-      assigned: createdLead.lead_status === 'assigned'
+      staging: createdLead.lead_status === 'staging'
     }, {
       headers: {
         'Access-Control-Allow-Origin': '*',
