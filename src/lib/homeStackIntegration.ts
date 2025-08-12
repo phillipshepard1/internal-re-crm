@@ -1,6 +1,7 @@
 import { createPerson } from './database'
 import { getNextRoundRobinUser } from './roundRobin'
 import type { Person } from './supabase'
+import { getEmailUsername, splitFullName, isValidEmail } from './utils'
 
 export interface HomeStackConfig {
   apiKey: string
@@ -200,8 +201,8 @@ export class HomeStackIntegration {
       
       return {
         id: lead.id as string,
-        firstName: (lead.first_name as string) || (lead.firstName as string) || (typeof lead.name === 'string' ? lead.name.split(' ')[0] : ''),
-        lastName: (lead.last_name as string) || (lead.lastName as string) || (typeof lead.name === 'string' ? lead.name.split(' ').slice(1).join(' ') : ''),
+        firstName: typeof lead.first_name === 'string' ? lead.first_name : (typeof lead.firstName === 'string' ? lead.firstName : (typeof lead.name === 'string' ? splitFullName(lead.name).firstName : '')),
+        lastName: typeof lead.last_name === 'string' ? lead.last_name : (typeof lead.lastName === 'string' ? lead.lastName : (typeof lead.name === 'string' ? splitFullName(lead.name).lastName : '')),
         email: emails,
         phone: phones,
         message: (lead.message as string) || (lead.notes as string) || (lead.comments as string) || (lead.description as string),
@@ -403,7 +404,7 @@ export class HomeStackIntegration {
       }
 
       const personData: Partial<Person> = {
-        first_name: userData.first_name || userData.email.split('@')[0],
+        first_name: userData.first_name || getEmailUsername(userData.email) || 'Unknown',
         last_name: userData.last_name || '',
         email: [userData.email],
         phone: userData.phone ? [userData.phone] : [],

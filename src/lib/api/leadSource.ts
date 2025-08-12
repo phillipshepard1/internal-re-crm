@@ -1,10 +1,20 @@
 import { assignLeadToRoundRobin, LeadData } from '../roundRobin'
+import { splitFullName } from '../utils'
 
 export interface LeadSourceConfig {
   apiKey: string
   baseUrl: string
   endpoint: string
   headers?: Record<string, string>
+}
+
+// Type guard functions for safe type checking
+function isString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+function isValidObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**
@@ -44,21 +54,43 @@ export async function fetchNewLeads(config: LeadSourceConfig): Promise<LeadData[
  */
 function transformApiResponse(apiResponse: unknown): LeadData[] {
   // This function needs to be customized based on the actual API response structure
-  // For now, providing a generic example
+  // For now, providing a generic example with safe type checking
   
   if (Array.isArray(apiResponse)) {
-    return (apiResponse as unknown[]).map(item => {
-      if (typeof item === 'object' && item !== null) {
+    return apiResponse.map(item => {
+      if (isValidObject(item)) {
         const obj = item as Record<string, unknown>
+        
+        // Safe name extraction using utility function
+        let firstName = ''
+        let lastName = 'Unknown'
+        
+        if (isString(obj.first_name)) {
+          firstName = obj.first_name
+        } else if (isString(obj.firstName)) {
+          firstName = obj.firstName
+        } else if (isString(obj.name)) {
+          const { firstName: fName, lastName: lName } = splitFullName(obj.name)
+          firstName = fName
+          lastName = lName || 'Unknown'
+        }
+        
+        // Override lastName if explicitly provided
+        if (isString(obj.last_name)) {
+          lastName = obj.last_name
+        } else if (isString(obj.lastName)) {
+          lastName = obj.lastName
+        }
+        
         return {
-          first_name: (obj.first_name as string) || (obj.firstName as string) || (typeof obj.name === 'string' ? obj.name.split(' ')[0] : '') || '',
-          last_name: (obj.last_name as string) || (obj.lastName as string) || (typeof obj.name === 'string' ? obj.name.split(' ').slice(1).join(' ') : '') || 'Unknown',
-          email: obj.email ? [obj.email as string] : [],
-          phone: obj.phone ? [obj.phone as string] : [],
-          company: (obj.company as string) || (obj.organization as string) || '',
-          position: (obj.job_title as string) || (obj.title as string) || '',
+          first_name: firstName,
+          last_name: lastName,
+          email: isString(obj.email) ? [obj.email] : [],
+          phone: isString(obj.phone) ? [obj.phone] : [],
+          company: isString(obj.company) ? obj.company : (isString(obj.organization) ? obj.organization : ''),
+          position: isString(obj.job_title) ? obj.job_title : (isString(obj.title) ? obj.title : ''),
           client_type: 'lead',
-          lead_source: (obj.source as string) || 'API',
+          lead_source: isString(obj.source) ? obj.source : 'API',
         }
       }
       return {

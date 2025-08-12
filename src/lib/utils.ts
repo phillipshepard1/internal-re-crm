@@ -124,3 +124,115 @@ export function decodeBase64Safely(base64String: string): Uint8Array {
     throw new Error('Invalid base64 data format')
   }
 }
+
+/**
+ * Safely extract email domain from an email address
+ * @param email - Email address (can be null/undefined)
+ * @returns Domain part of email or null if invalid
+ */
+export function getEmailDomain(email: string | null | undefined): string | null {
+  if (!email || typeof email !== 'string') return null
+  
+  const atIndex = email.indexOf('@')
+  if (atIndex === -1 || atIndex === email.length - 1) return null
+  
+  return email.substring(atIndex + 1)
+}
+
+/**
+ * Safely extract username from an email address
+ * @param email - Email address (can be null/undefined)
+ * @returns Username part of email or null if invalid
+ */
+export function getEmailUsername(email: string | null | undefined): string | null {
+  if (!email || typeof email !== 'string') return null
+  
+  const atIndex = email.indexOf('@')
+  if (atIndex === -1 || atIndex === 0) return null
+  
+  return email.substring(0, atIndex)
+}
+
+/**
+ * Validate if a string is a valid email address
+ * @param email - String to validate
+ * @returns True if valid email format
+ */
+export function isValidEmail(email: string | null | undefined): boolean {
+  if (!email || typeof email !== 'string') return false
+  
+  // Basic email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+/**
+ * Safely split a name into first and last name parts
+ * @param name - Full name string (can be null/undefined)
+ * @returns Object with firstName and lastName
+ */
+export function splitFullName(name: string | null | undefined): { firstName: string; lastName: string } {
+  if (!name || typeof name !== 'string') {
+    return { firstName: '', lastName: '' }
+  }
+  
+  const trimmedName = name.trim()
+  if (!trimmedName) {
+    return { firstName: '', lastName: '' }
+  }
+  
+  const parts = trimmedName.split(/\s+/)
+  const firstName = parts[0] || ''
+  const lastName = parts.slice(1).join(' ') || ''
+  
+  return { firstName, lastName }
+}
+
+/**
+ * Get display name from user object, with fallback to email username
+ * @param user - User object with email and optional name fields
+ * @returns Display name string
+ */
+export function getUserDisplayName(user: { 
+  email?: string | null; 
+  first_name?: string | null; 
+  last_name?: string | null 
+} | null | undefined): string {
+  if (!user) return 'Unknown'
+  
+  // Try full name first
+  if (user.first_name || user.last_name) {
+    const parts = [user.first_name, user.last_name].filter(Boolean)
+    if (parts.length > 0) return parts.join(' ')
+  }
+  
+  // Fall back to email username
+  const username = getEmailUsername(user.email)
+  return username || 'Unknown'
+}
+
+/**
+ * Validate environment variables at runtime
+ * @param variables - Object with variable names as keys
+ * @returns Object with validated variables
+ */
+export function validateEnvVars<T extends Record<string, string | undefined>>(
+  variables: T
+): { [K in keyof T]: string } {
+  const validated: any = {}
+  const missing: string[] = []
+  
+  for (const [key, value] of Object.entries(variables)) {
+    if (!value) {
+      missing.push(key)
+    } else {
+      validated[key] = value
+    }
+  }
+  
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`)
+  }
+  
+  return validated
+}

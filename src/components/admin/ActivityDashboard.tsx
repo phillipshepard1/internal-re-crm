@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import type { User, RoundRobinConfig } from '@/lib/supabase'
+import { getEmailUsername } from '@/lib/utils'
 
 interface ActivityWithDetails {
   id: string
@@ -170,7 +171,7 @@ export function ActivityDashboard({ users }: ActivityDashboardProps) {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {users.find(u => u.id === activity.created_by)?.email.split('@')[0] || 'Unknown'}
+                      {getEmailUsername(users.find(u => u.id === activity.created_by)?.email) || 'Unknown'}
                     </TableCell>
                     <TableCell>
                       {activity.people ? `${activity.people.first_name} ${activity.people.last_name}` : 'N/A'}
@@ -218,7 +219,7 @@ export function ActivityDashboard({ users }: ActivityDashboardProps) {
                 {stats.userStats.map((userStat: any) => (
                   <TableRow key={userStat.userId}>
                     <TableCell className="font-medium">
-                      {userStat.email.split('@')[0]}
+                      {getEmailUsername(userStat.email) || userStat.email}
                     </TableCell>
                     <TableCell>
                       <Badge variant={userStat.role === 'admin' ? 'default' : 'secondary'}>

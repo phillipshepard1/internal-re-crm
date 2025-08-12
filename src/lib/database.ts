@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Person, Note, Task, FollowUp, FollowUpWithPerson, Activity, File, LeadTag, FollowUpPlanTemplate, FollowUpPlanStep } from './supabase'
+import { getEmailDomain, isValidEmail } from './utils'
 
 // Database connection test
 export async function testDatabaseConnection(): Promise<{ connected: boolean; error?: string }> {
@@ -2059,11 +2060,13 @@ export async function detectLeadSourceFromEmail(fromEmail: string): Promise<{ id
       
       // Check domain patterns
       if (source.domain_patterns && source.domain_patterns.length > 0) {
-        const emailDomain = fromEmail.split('@')[1]
-        for (const pattern of source.domain_patterns) {
-          if (emailDomain === pattern || 
-              (pattern.includes('*') && emailDomain.includes(pattern.replace('*', '')))) {
-            return { id: source.id, name: source.name }
+        const emailDomain = getEmailDomain(fromEmail)
+        if (emailDomain) {
+          for (const pattern of source.domain_patterns) {
+            if (emailDomain === pattern || 
+                (pattern.includes('*') && emailDomain.includes(pattern.replace('*', '')))) {
+              return { id: source.id, name: source.name }
+            }
           }
         }
       }
@@ -2078,7 +2081,18 @@ export async function detectLeadSourceFromEmail(fromEmail: string): Promise<{ id
 
 export async function addEmailAsLeadSource(email: string, name?: string): Promise<{ id: string; name: string } | null> {
   try {
-    const emailDomain = email.split('@')[1]
+    // Validate email format first
+    if (!isValidEmail(email)) {
+      console.error('Invalid email format:', email)
+      return null
+    }
+    
+    const emailDomain = getEmailDomain(email)
+    if (!emailDomain) {
+      console.error('Could not extract domain from email:', email)
+      return null
+    }
+    
     const sourceName = name || `${emailDomain} Email`
     
     // Check if this email or domain already exists

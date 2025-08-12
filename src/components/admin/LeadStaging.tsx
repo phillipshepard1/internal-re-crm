@@ -18,7 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { AlertModal } from '@/components/ui/alert-modal'
 import { getStagingLeads, getAssignedLeads, getArchivedLeads } from '@/lib/database'
 import type { Person } from '@/lib/supabase'
-import { formatPhoneNumberForDisplay, formatPhoneNumber, unformatPhoneNumber } from '@/lib/utils'
+import { formatPhoneNumberForDisplay, formatPhoneNumber, unformatPhoneNumber, getUserDisplayName } from '@/lib/utils'
 import { useDataLoader } from '@/hooks/useDataLoader'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -319,7 +319,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
       
       // Show success message
       const selectedAgent = agents.find(agent => agent.id === selectedUserId)
-      const agentName = selectedAgent ? (selectedAgent.first_name || selectedAgent.email.split('@')[0]) : 'Unknown User'
+      const agentName = selectedAgent ? getUserDisplayName(selectedAgent) : 'Unknown User'
       
       setAlertModal({
         open: true,
@@ -1028,7 +1028,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                   <div className="flex items-center">
                                     <User className="mr-2 h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm">
-                                      {lead.assigned_user.first_name || lead.assigned_user.email.split('@')[0]}
+                                      {getUserDisplayName(lead.assigned_user)}
                                     </span>
                                   </div>
                                 ) : (
@@ -1042,7 +1042,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                                   <div className="flex items-center">
                                     <User className="mr-2 h-4 w-4 text-muted-foreground" />
                                     <span className="text-sm">
-                                      {lead.assigned_by_user.first_name || lead.assigned_by_user.email.split('@')[0]}
+                                      {getUserDisplayName(lead.assigned_by_user)}
                                     </span>
                                   </div>
                                 ) : (
@@ -1154,7 +1154,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   <SelectContent>
                     {agents.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        {agent.first_name || agent.email.split('@')[0]} ({agent.role})
+                        {getUserDisplayName(agent)} ({agent.role})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1250,7 +1250,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   <SelectContent>
                     {agents.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        {agent.first_name || agent.email.split('@')[0]} ({agent.role})
+                        {getUserDisplayName(agent)} ({agent.role})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1373,7 +1373,7 @@ export function LeadStaging({ users }: LeadStagingProps) {
                   <SelectContent>
                     {agents.map((agent) => (
                       <SelectItem key={agent.id} value={agent.id}>
-                        {agent.first_name || agent.email.split('@')[0]} ({agent.role})
+                        {getUserDisplayName(agent)} ({agent.role})
                       </SelectItem>
                     ))}
                   </SelectContent>
