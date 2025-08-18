@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { getFollowUps, updateFollowUp, createFollowUp, deleteFollowUp, createActivity, createNote, getPeople, getNotes, updatePerson, getFrequencyDisplayName, getDayOfWeekDisplayName, getLeadTags, updateLeadTagForLead } from '@/lib/database'
 import { createClient } from '@supabase/supabase-js'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -44,7 +45,29 @@ const DAY_OF_WEEK_OPTIONS = [
 ]
 
 function isOverdue(fu: FollowUpWithPerson) {
-  return fu.status !== 'completed' && new Date(fu.scheduled_date) < new Date()
+  // Check if the follow-up is overdue (scheduled for a past date and not completed)
+  const now = new Date()
+  now.setHours(0, 0, 0, 0) // Set to start of today
+  const scheduledDate = new Date(fu.scheduled_date)
+  scheduledDate.setHours(0, 0, 0, 0) // Set to start of scheduled day
+  
+  return fu.status === 'pending' && scheduledDate < now
+}
+
+function getOverdueCategory(fu: FollowUpWithPerson): 'daily' | 'weekly' | 'monthly' | null {
+  if (!isOverdue(fu)) return null
+  
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  const scheduledDate = new Date(fu.scheduled_date)
+  scheduledDate.setHours(0, 0, 0, 0)
+  
+  const diffTime = now.getTime() - scheduledDate.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  
+  if (diffDays <= 1) return 'daily' // Overdue by 1 day or less
+  if (diffDays <= 7) return 'weekly' // Overdue by 2-7 days
+  return 'monthly' // Overdue by more than 7 days
 }
 
 // Helper functions for week-based view
@@ -78,7 +101,7 @@ function isSameDay(date1: Date, date2: Date): boolean {
 function getFollowUpsForDay(followUps: FollowUpWithPerson[], date: Date): FollowUpWithPerson[] {
   return followUps.filter(fu => {
     const followUpDate = new Date(fu.scheduled_date)
-    return isSameDay(followUpDate, date) && fu.status !== 'completed'
+    return isSameDay(followUpDate, date) && fu.status === 'pending'
   }).sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime())
 }
 
@@ -96,6 +119,7 @@ const loadFollowUpsData = async (userId: string, userRole: string) => {
 export default function FollowUpsPage() {
   const { user, userRole } = useAuth()
   const [filter, setFilter] = useState<'upcoming' | 'overdue'>('upcoming')
+  const [overdueFilter, setOverdueFilter] = useState<'all' | 'daily' | 'weekly' | 'monthly'>('all')
   const [viewMode, setViewMode] = useState<'list' | 'week'>('list') // Keep list as default
   const [currentWeek, setCurrentWeek] = useState(() => {
     const now = new Date()
@@ -161,10 +185,12 @@ export default function FollowUpsPage() {
 
   // Use the robust data loader
   const { data: followUps, loading, error, refetch } = useDataLoader(
-    loadFollowUpsData,
+    () => loadFollowUpsData(user?.id || '', userRole || ''),
     {
       cacheKey: 'followups_data',
-      cacheTimeout: 2 * 60 * 1000 // 2 minutes cache
+      cacheTimeout: 2 * 60 * 1000, // 2 minutes cache
+      enabled: !!user && !!userRole, // Only load when both user and role are available
+      dependencies: [user?.id, userRole] // Refetch when user or role changes
     }
   )
 
@@ -176,19 +202,45 @@ export default function FollowUpsPage() {
       console.log('Follow-ups data:', followUpsArray)
       console.log('User role:', userRole)
       console.log('User ID:', user?.id)
-      // Check if any follow-ups have lead tags
-      // const followUpsWithTags = followUpsArray.filter((fu: FollowUpWithPerson) => fu.people?.lead_tag)
-      // console.log('Follow-ups with lead tags:', followUpsWithTags)
+      console.log('Current filter:', filter)
+      
+      // Log overdue follow-ups
+      const overdueCount = followUpsArray.filter((fu: FollowUpWithPerson) => isOverdue(fu)).length
+      console.log('Total follow-ups:', followUpsArray.length)
+      console.log('Overdue follow-ups:', overdueCount)
+      
+      // Log first few follow-ups with their status
+      followUpsArray.slice(0, 3).forEach((fu: FollowUpWithPerson) => {
+        console.log('Follow-up:', {
+          person: fu.people ? `${fu.people.first_name} ${fu.people.last_name}` : 'Unknown',
+          status: fu.status,
+          scheduledDate: fu.scheduled_date,
+          isOverdue: isOverdue(fu)
+        })
+      })
     }
-  }, [followUpsArray, userRole, user?.id])
+  }, [followUpsArray, userRole, user?.id, filter])
+
+  // Calculate overdue counts for display (from all follow-ups)
+  const overdueCounts = {
+    all: followUpsArray.filter((fu: FollowUpWithPerson) => isOverdue(fu)).length,
+    daily: followUpsArray.filter((fu: FollowUpWithPerson) => getOverdueCategory(fu) === 'daily').length,
+    weekly: followUpsArray.filter((fu: FollowUpWithPerson) => getOverdueCategory(fu) === 'weekly').length,
+    monthly: followUpsArray.filter((fu: FollowUpWithPerson) => getOverdueCategory(fu) === 'monthly').length
+  }
 
   const filteredFollowUps = followUpsArray.filter((fu: FollowUpWithPerson) => {
     if (filter === 'upcoming') {
-      // Show all pending follow-ups (including rescheduled ones from missed weeks)
-      return fu.status !== 'completed'
+      // Show all pending follow-ups
+      return fu.status === 'pending'
     } else {
-      // Show overdue follow-ups
-      return isOverdue(fu)
+      // Show overdue follow-ups based on the overdue filter
+      if (!isOverdue(fu)) return false
+      
+      if (overdueFilter === 'all') return true
+      
+      const category = getOverdueCategory(fu)
+      return category === overdueFilter
     }
   })
 
@@ -625,6 +677,9 @@ export default function FollowUpsPage() {
             onDeleteFollowUp={openDeleteModal}
             filter={filter}
             setFilter={setFilter}
+            overdueFilter={overdueFilter}
+            setOverdueFilter={setOverdueFilter}
+            overdueCounts={overdueCounts}
             loading={loading}
             error={error}
             localError={localError}
@@ -1100,55 +1155,57 @@ function WeeklyListView({
       {/* Week Navigation Header */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle className="text-xl sm:text-2xl">Weekly Follow-ups</CardTitle>
-              <CardDescription className="text-sm sm:text-lg">
-                <span className="hidden sm:inline">{currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString('en-US', { 
-                  month: 'long', 
-                  day: 'numeric', 
-                  year: 'numeric' 
-                })}</span>
-                <span className="sm:hidden">Week of {currentWeek.toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric' 
-                })}</span>
-              </CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="text-xl sm:text-2xl">Weekly Follow-ups</CardTitle>
+                <CardDescription className="text-sm sm:text-lg">
+                  <span className="hidden sm:inline">{currentWeek.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} - Week of {currentWeek.toLocaleDateString('en-US', { 
+                    month: 'long', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                  })}</span>
+                  <span className="sm:hidden">Week of {currentWeek.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric' 
+                  })}</span>
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button variant="outline" size="sm" onClick={goToPreviousWeek} className="px-2 sm:px-3">
+                  <span className="hidden sm:inline">← Previous Week</span>
+                  <span className="sm:hidden">← Prev</span>
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToCurrentWeek} className="px-2 sm:px-3">
+                  <span className="hidden sm:inline">This Week</span>
+                  <span className="sm:hidden">Current</span>
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToNextWeek} className="px-2 sm:px-3">
+                  <span className="hidden sm:inline">Next Week →</span>
+                  <span className="sm:hidden">Next →</span>
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-1 sm:gap-2">
-              <Button variant="outline" size="sm" onClick={goToPreviousWeek} className="px-2 sm:px-3">
-                <span className="hidden sm:inline">← Previous Week</span>
-                <span className="sm:hidden">← Prev</span>
+            
+            {/* Filter Tabs - Consistent positioning */}
+            <div className="flex gap-2">
+              <Button 
+                variant={filter === 'upcoming' ? 'default' : 'outline'} 
+                onClick={() => setFilter('upcoming')}
+                className="flex items-center gap-2"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Upcoming/Due
               </Button>
-              <Button variant="outline" size="sm" onClick={goToCurrentWeek} className="px-2 sm:px-3">
-                <span className="hidden sm:inline">This Week</span>
-                <span className="sm:hidden">Current</span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={goToNextWeek} className="px-2 sm:px-3">
-                <span className="hidden sm:inline">Next Week →</span>
-                <span className="sm:hidden">Next →</span>
+              <Button 
+                variant={filter === 'overdue' ? 'default' : 'outline'} 
+                onClick={() => setFilter('overdue')}
+                className="flex items-center gap-2"
+              >
+                <AlertCircle className="h-4 w-4" />
+                Missed/Overdue
               </Button>
             </div>
-          </div>
-          
-          {/* Filter Tabs */}
-          <div className="flex gap-2 mt-4">
-            <Button 
-              variant={filter === 'upcoming' ? 'default' : 'outline'} 
-              onClick={() => setFilter('upcoming')}
-              className="flex items-center gap-2"
-            >
-              <CheckCircle className="h-4 w-4" />
-              Upcoming/Due
-            </Button>
-            <Button 
-              variant={filter === 'overdue' ? 'default' : 'outline'} 
-              onClick={() => setFilter('overdue')}
-              className="flex items-center gap-2"
-            >
-              <AlertCircle className="h-4 w-4" />
-              Missed/Overdue
-            </Button>
           </div>
         </CardHeader>
       </Card>
@@ -1228,9 +1285,16 @@ function WeeklyListView({
                           <div className="flex items-center space-x-3 min-w-0 flex-1">
                             <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <div className="font-medium truncate">
-                                {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown Person'}
-                              </div>
+                              {followUp.people ? (
+                                <Link 
+                                  href={`/people/${followUp.people.id}`}
+                                  className="font-medium truncate hover:text-primary hover:underline block"
+                                >
+                                  {followUp.people.first_name} {followUp.people.last_name}
+                                </Link>
+                              ) : (
+                                <div className="font-medium truncate">Unknown Person</div>
+                              )}
                               <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                                 {followUp.people?.company && (
                                   <span className="truncate">{followUp.people.company}</span>
@@ -1552,12 +1616,19 @@ function WeekView({ followUps, currentWeek, onWeekChange, onFollowUpClick }: Wee
                     {dayFollowUps.map((followUp) => (
                       <div
                         key={followUp.id}
-                        className="p-2 bg-background border rounded text-sm cursor-pointer hover:bg-muted/50"
-                        onClick={() => onFollowUpClick(followUp)}
+                        className="p-2 bg-background border rounded text-sm hover:bg-muted/50"
                       >
-                        <div className="font-medium">
-                          {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown'}
-                        </div>
+                        {followUp.people ? (
+                          <Link 
+                            href={`/people/${followUp.people.id}`}
+                            className="font-medium hover:text-primary hover:underline block"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {followUp.people.first_name} {followUp.people.last_name}
+                          </Link>
+                        ) : (
+                          <div className="font-medium">Unknown</div>
+                        )}
                         <div className="text-xs text-muted-foreground capitalize">
                           {followUp.type} • {new Date(followUp.scheduled_date).toLocaleTimeString('en-US', { 
                             hour: 'numeric', 
@@ -1602,12 +1673,19 @@ function WeekView({ followUps, currentWeek, onWeekChange, onFollowUpClick }: Wee
                   {dayFollowUps.map((followUp) => (
                     <div
                       key={followUp.id}
-                      className="p-2 bg-background border rounded text-xs cursor-pointer hover:bg-muted/50"
-                      onClick={() => onFollowUpClick(followUp)}
+                      className="p-2 bg-background border rounded text-xs hover:bg-muted/50"
                     >
-                      <div className="font-medium truncate">
-                        {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown'}
-                      </div>
+                      {followUp.people ? (
+                        <Link 
+                          href={`/people/${followUp.people.id}`}
+                          className="font-medium truncate hover:text-primary hover:underline block"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {followUp.people.first_name} {followUp.people.last_name}
+                        </Link>
+                      ) : (
+                        <div className="font-medium truncate">Unknown</div>
+                      )}
                       <div className="text-muted-foreground capitalize">
                         {followUp.type}
                       </div>
@@ -1635,6 +1713,9 @@ interface MissedFollowUpsListProps {
   onDeleteFollowUp: (followUp: FollowUpWithPerson) => void
   filter: 'upcoming' | 'overdue'
   setFilter: (filter: 'upcoming' | 'overdue') => void
+  overdueFilter: 'all' | 'daily' | 'weekly' | 'monthly'
+  setOverdueFilter: (filter: 'all' | 'daily' | 'weekly' | 'monthly') => void
+  overdueCounts?: { all: number; daily: number; weekly: number; monthly: number }
   loading: boolean
   error: string | null
   localError: string | null
@@ -1650,7 +1731,10 @@ function MissedFollowUpsList({
   onOpenTag,
   onDeleteFollowUp,
   filter, 
-  setFilter, 
+  setFilter,
+  overdueFilter,
+  setOverdueFilter,
+  overdueCounts: propOverdueCounts,
   loading, 
   error, 
   localError 
@@ -1660,6 +1744,14 @@ function MissedFollowUpsList({
   const sortedFollowUps = [...followUps].sort((a, b) => {
     return new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime()
   })
+
+  // Use provided counts or calculate locally
+  const overdueCounts = propOverdueCounts || {
+    all: sortedFollowUps.length,
+    daily: 0,
+    weekly: 0,
+    monthly: 0
+  }
 
   // Group follow-ups by how overdue they are
   const groupedFollowUps = {
@@ -1708,32 +1800,74 @@ function MissedFollowUpsList({
       {/* Header */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle className="text-xl sm:text-2xl">Missed Follow-ups</CardTitle>
-              <CardDescription className="text-sm sm:text-lg">
-                All overdue follow-ups that need your attention
-              </CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="text-xl sm:text-2xl">Missed Follow-ups</CardTitle>
+                <CardDescription className="text-sm sm:text-lg">
+                  All overdue follow-ups that need your attention
+                </CardDescription>
+              </div>
             </div>
             
-            {/* Filter Tabs */}
-            <div className="flex gap-2">
-              <Button 
-                variant={filter === 'upcoming' ? 'default' : 'outline'} 
-                onClick={() => setFilter('upcoming')}
-                className="flex items-center gap-2"
-              >
-                <CheckCircle className="h-4 w-4" />
-                Upcoming/Due
-              </Button>
-              <Button 
-                variant={filter === 'overdue' ? 'default' : 'outline'} 
-                onClick={() => setFilter('overdue')}
-                className="flex items-center gap-2"
-              >
-                <AlertCircle className="h-4 w-4" />
-                Missed/Overdue ({sortedFollowUps.length})
-              </Button>
+            {/* Filter Tabs - Consistent positioning */}
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-2">
+                <Button 
+                  variant={filter === 'upcoming' ? 'default' : 'outline'} 
+                  onClick={() => setFilter('upcoming')}
+                  className="flex items-center gap-2"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Upcoming/Due
+                </Button>
+                <Button 
+                  variant={filter === 'overdue' ? 'default' : 'outline'} 
+                  onClick={() => setFilter('overdue')}
+                  className="flex items-center gap-2"
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  Missed/Overdue ({overdueCounts.all})
+                </Button>
+              </div>
+              
+              {/* Overdue sub-filters - only show when overdue is selected */}
+              {filter === 'overdue' && (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={overdueFilter === 'all' ? 'default' : 'outline'}
+                    onClick={() => setOverdueFilter('all')}
+                    className="text-sm"
+                  >
+                    All ({overdueCounts.all})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={overdueFilter === 'daily' ? 'default' : 'outline'}
+                    onClick={() => setOverdueFilter('daily')}
+                    className="text-sm"
+                  >
+                    Daily ({overdueCounts.daily})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={overdueFilter === 'weekly' ? 'default' : 'outline'}
+                    onClick={() => setOverdueFilter('weekly')}
+                    className="text-sm"
+                  >
+                    Weekly ({overdueCounts.weekly})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={overdueFilter === 'monthly' ? 'default' : 'outline'}
+                    onClick={() => setOverdueFilter('monthly')}
+                    className="text-sm"
+                  >
+                    Monthly ({overdueCounts.monthly})
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -1939,9 +2073,16 @@ function FollowUpCard({
         <div className="flex items-center space-x-3 min-w-0 flex-1">
           <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium truncate">
-              {followUp.people ? `${followUp.people.first_name} ${followUp.people.last_name}` : 'Unknown Person'}
-            </div>
+            {followUp.people ? (
+              <Link 
+                href={`/people/${followUp.people.id}`}
+                className="font-medium truncate hover:text-primary hover:underline block"
+              >
+                {followUp.people.first_name} {followUp.people.last_name}
+              </Link>
+            ) : (
+              <div className="font-medium truncate">Unknown Person</div>
+            )}
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               {followUp.people?.company && (
                 <span className="truncate">{followUp.people.company}</span>
