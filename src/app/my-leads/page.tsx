@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Search, Eye, Mail, Phone, Calendar, Clock, User, Target, TrendingUp, AlertCircle, CheckCircle, XCircle, Tag } from 'lucide-react'
+import { Plus, Search, Eye, Mail, Phone, Calendar, Clock, User, Target, TrendingUp, AlertCircle, CheckCircle, XCircle, Tag, Edit2, Trash2, Filter, Save, X } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,8 @@ import { Label } from '@/components/ui/label'
 import { AlertModal } from '@/components/ui/alert-modal'
 import { useAuth } from '@/contexts/AuthContext'
 import { getLeadsWithTags, getLeadsByTag, getLeadStatsWithTags, getLeadTags, updateLeadTagForLead, updateLeadStatus } from '@/lib/database'
-import type { Person, LeadTag } from '@/lib/supabase'
+import { getCustomTabs, createCustomTab, updateCustomTab, deleteCustomTab } from '@/lib/customTabs'
+import type { Person, LeadTag, CustomLeadTab } from '@/lib/supabase'
 import { formatPhoneNumberForDisplay, formatPhoneNumber, unformatPhoneNumber } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
 import { DataTablePagination } from '@/components/ui/data-table-pagination'
@@ -48,6 +49,25 @@ export default function MyLeadsPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('')
   const [currentPage, setCurrentPage] = useState(1)
   const [activeTab, setActiveTab] = useState('all')
+
+  // Custom tabs state - now from database
+  const [customTabs, setCustomTabs] = useState<CustomLeadTab[]>([])
+  const [loadingCustomTabs, setLoadingCustomTabs] = useState(false)
+
+  const [showCreateTabDialog, setShowCreateTabDialog] = useState(false)
+  const [editingTab, setEditingTab] = useState<CustomLeadTab | null>(null)
+  const [savingTab, setSavingTab] = useState(false)
+  const [newTabData, setNewTabData] = useState<{
+    name: string
+    filterType: 'tag' | 'status' | 'source' | 'custom'
+    filterValue: string
+    color: string
+  }>({
+    name: '',
+    filterType: 'tag',
+    filterValue: '',
+    color: '#3B82F6'
+  })
   const [openTagDialog, setOpenTagDialog] = useState<string | null>(null)
   const [openStatusDialog, setOpenStatusDialog] = useState<string | null>(null)
   const itemsPerPage = 10
@@ -191,6 +211,25 @@ export default function MyLeadsPage() {
     }
   }, [userRole])
 
+  // Load custom tabs from database
+  useEffect(() => {
+    async function loadCustomTabs() {
+      if (!user?.id) return
+
+      setLoadingCustomTabs(true)
+      try {
+        const tabs = await getCustomTabs(user.id)
+        setCustomTabs(tabs)
+      } catch (error) {
+        console.error('Error loading custom tabs:', error)
+      } finally {
+        setLoadingCustomTabs(false)
+      }
+    }
+
+    loadCustomTabs()
+  }, [user?.id])
+
   // Reset to page 1 when switching tabs or changing search
   useEffect(() => {
     setCurrentPage(1)
@@ -230,6 +269,30 @@ export default function MyLeadsPage() {
 
   // Get current leads based on active tab
   const getCurrentLeads = () => {
+    // Check if it's a custom tab
+    const customTab = customTabs.find(tab => tab.id === activeTab)
+    if (customTab) {
+      const baseLeads = allLeads || []
+      return baseLeads.filter((lead: Person) => {
+        switch (customTab.filter_type) {
+          case 'tag':
+            return customTab.filter_value === 'none'
+              ? !lead.lead_tag_id
+              : lead.lead_tag_id === customTab.filter_value
+          case 'status':
+            return lead.lead_status === customTab.filter_value
+          case 'source':
+            return lead.lead_source === customTab.filter_value
+          case 'custom':
+            // Custom filter logic - for now, search in notes
+            return lead.notes?.toLowerCase().includes(customTab.filter_value.toLowerCase())
+          default:
+            return true
+        }
+      })
+    }
+
+    // Default tabs
     switch (activeTab) {
       case 'hot':
         return hotLeads || []
@@ -314,6 +377,146 @@ export default function MyLeadsPage() {
   const handleOpenStatusDialog = (leadId: string, currentStatus: string) => {
     setOpenStatusDialog(leadId)
     setSelectedStatus(currentStatus)
+  }
+
+  // Custom tab handlers
+  const handleCreateCustomTab = async () => {
+    if (!newTabData.name.trim() || !user?.id) {
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Tab name is required',
+        type: 'error'
+      })
+      return
+    }
+
+    setSavingTab(true)
+    try {
+      if (editingTab) {
+        // Update existing tab
+        const updatedTab = await updateCustomTab(user.id, editingTab.id, {
+          name: newTabData.name,
+          filter_type: newTabData.filterType,
+          filter_value: newTabData.filterValue,
+          color: newTabData.color
+        })
+
+        if (updatedTab) {
+          setCustomTabs(prev => prev.map(tab =>
+            tab.id === editingTab.id ? updatedTab : tab
+          ))
+          setAlertModal({
+            open: true,
+            title: 'Success',
+            message: 'Tab updated successfully',
+            type: 'success'
+          })
+        } else {
+          throw new Error('Failed to update tab')
+        }
+        setEditingTab(null)
+      } else {
+        // Create new tab
+        const newTab = await createCustomTab(user.id, {
+          name: newTabData.name,
+          filter_type: newTabData.filterType,
+          filter_value: newTabData.filterValue,
+          color: newTabData.color,
+          tab_order: customTabs.length,
+          is_active: true
+        })
+
+        if (newTab) {
+          setCustomTabs(prev => [...prev, newTab])
+          setAlertModal({
+            open: true,
+            title: 'Success',
+            message: 'Tab created successfully',
+            type: 'success'
+          })
+        } else {
+          throw new Error('Failed to create tab')
+        }
+      }
+
+      // Reset form and close dialog
+      setNewTabData({
+        name: '',
+        filterType: 'tag',
+        filterValue: '',
+        color: '#3B82F6'
+      })
+      setShowCreateTabDialog(false)
+    } catch (error) {
+      console.error('Error saving tab:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: editingTab ? 'Failed to update tab' : 'Failed to create tab',
+        type: 'error'
+      })
+    } finally {
+      setSavingTab(false)
+    }
+  }
+
+  const handleEditCustomTab = (tab: CustomLeadTab) => {
+    setEditingTab(tab)
+    setNewTabData({
+      name: tab.name,
+      filterType: tab.filter_type,
+      filterValue: tab.filter_value,
+      color: tab.color || '#3B82F6'
+    })
+    setShowCreateTabDialog(true)
+  }
+
+  const handleDeleteCustomTab = async (tabId: string) => {
+    if (!user?.id) return
+
+    try {
+      const success = await deleteCustomTab(user.id, tabId)
+      if (success) {
+        setCustomTabs(prev => prev.filter(tab => tab.id !== tabId))
+        if (activeTab === tabId) {
+          setActiveTab('all')
+        }
+        setAlertModal({
+          open: true,
+          title: 'Success',
+          message: 'Tab deleted successfully',
+          type: 'success'
+        })
+      } else {
+        throw new Error('Failed to delete tab')
+      }
+    } catch (error) {
+      console.error('Error deleting tab:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to delete tab',
+        type: 'error'
+      })
+    }
+  }
+
+  // Get unique values for filters
+  const getUniqueStatuses = () => {
+    const statuses = new Set<string>()
+    allLeads?.forEach((lead: Person) => {
+      if (lead.lead_status) statuses.add(lead.lead_status)
+    })
+    return Array.from(statuses)
+  }
+
+  const getUniqueSources = () => {
+    const sources = new Set<string>()
+    allLeads?.forEach((lead: Person) => {
+      if (lead.lead_source) sources.add(lead.lead_source)
+    })
+    return Array.from(sources)
   }
 
   // Manual lead creation handler
@@ -568,20 +771,102 @@ export default function MyLeadsPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="all">All ({allLeads?.length || 0})</TabsTrigger>
-            <TabsTrigger value="hot">Hot ({hotLeads?.length || 0})</TabsTrigger>
-            <TabsTrigger value="warm">Warm ({warmLeads?.length || 0})</TabsTrigger>
-            <TabsTrigger value="cold">Cold ({coldLeads?.length || 0})</TabsTrigger>
-            <TabsTrigger value="dead">Dead ({deadLeads?.length || 0})</TabsTrigger>
-          </TabsList>
+          <div className="flex items-center gap-2 flex-wrap">
+            <TabsList className="flex-wrap h-auto">
+              <TabsTrigger value="all">All ({allLeads?.length || 0})</TabsTrigger>
+              <TabsTrigger value="hot">Hot ({hotLeads?.length || 0})</TabsTrigger>
+              <TabsTrigger value="warm">Warm ({warmLeads?.length || 0})</TabsTrigger>
+              <TabsTrigger value="cold">Cold ({coldLeads?.length || 0})</TabsTrigger>
+              <TabsTrigger value="dead">Dead ({deadLeads?.length || 0})</TabsTrigger>
+
+              {/* Custom Tabs */}
+              {customTabs.map(tab => {
+                const tabLeads = getCurrentLeads()
+                const customTabCount = activeTab === tab.id ? filteredLeads.length :
+                  (allLeads || []).filter((lead: Person) => {
+                    switch (tab.filter_type) {
+                      case 'tag':
+                        return tab.filter_value === 'none'
+                          ? !lead.lead_tag_id
+                          : lead.lead_tag_id === tab.filter_value
+                      case 'status':
+                        return lead.lead_status === tab.filter_value
+                      case 'source':
+                        return lead.lead_source === tab.filter_value
+                      case 'custom':
+                        return lead.notes?.toLowerCase().includes(tab.filter_value.toLowerCase())
+                      default:
+                        return true
+                    }
+                  }).length
+
+                return (
+                  <div key={tab.id} className="relative group">
+                    <TabsTrigger
+                      value={tab.id}
+                      style={{
+                        borderColor: activeTab === tab.id ? tab.color : undefined,
+                        borderWidth: activeTab === tab.id ? '2px' : undefined
+                      }}
+                    >
+                      <div
+                        className="w-2 h-2 rounded-full mr-2"
+                        style={{ backgroundColor: tab.color }}
+                      />
+                      {tab.name} ({customTabCount})
+                    </TabsTrigger>
+                    <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-1 z-10">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-5 w-5 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEditCustomTab(tab)
+                        }}
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-5 w-5 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteCustomTab(tab.id)
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </TabsList>
+
+            <Button
+              onClick={() => setShowCreateTabDialog(true)}
+              variant="outline"
+              size="sm"
+              className="h-9"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Tab
+            </Button>
+          </div>
 
           <TabsContent value={activeTab} className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>My Leads - {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</CardTitle>
+                <CardTitle>
+                  My Leads - {customTabs.find(t => t.id === activeTab)?.name ||
+                    (activeTab.charAt(0).toUpperCase() + activeTab.slice(1))}
+                </CardTitle>
                 <CardDescription>
-                  Your leads organized by priority tags
+                  {customTabs.find(t => t.id === activeTab)
+                    ? `Custom filter: ${customTabs.find(t => t.id === activeTab)?.filter_type}`
+                    : 'Your leads organized by priority tags'
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -912,7 +1197,170 @@ export default function MyLeadsPage() {
             </div>
           </DialogContent>
         </Dialog>
-        
+
+        {/* Custom Tab Creation/Edit Dialog */}
+        <Dialog open={showCreateTabDialog} onOpenChange={(open) => {
+          setShowCreateTabDialog(open)
+          if (!open) {
+            setEditingTab(null)
+            setNewTabData({
+              name: '',
+              filterType: 'tag',
+              filterValue: '',
+              color: '#3B82F6'
+            })
+          }
+        }}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>
+                {editingTab ? 'Edit Custom Tab' : 'Create Custom Tab'}
+              </DialogTitle>
+              <DialogDescription>
+                Create a custom tab to filter your leads based on specific criteria.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="tabName">Tab Name *</Label>
+                <Input
+                  id="tabName"
+                  value={newTabData.name}
+                  onChange={(e) => setNewTabData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Follow-up Today"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filterType">Filter Type</Label>
+                <Select
+                  value={newTabData.filterType}
+                  onValueChange={(value: 'tag' | 'status' | 'source' | 'custom') =>
+                    setNewTabData(prev => ({ ...prev, filterType: value, filterValue: '' }))
+                  }
+                >
+                  <SelectTrigger id="filterType">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tag">Lead Tag</SelectItem>
+                    <SelectItem value="status">Lead Status</SelectItem>
+                    <SelectItem value="source">Lead Source</SelectItem>
+                    <SelectItem value="custom">Custom (Notes Contains)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="filterValue">Filter Value</Label>
+                {newTabData.filterType === 'tag' ? (
+                  <Select
+                    value={newTabData.filterValue}
+                    onValueChange={(value) => setNewTabData(prev => ({ ...prev, filterValue: value }))}
+                  >
+                    <SelectTrigger id="filterValue">
+                      <SelectValue placeholder="Select a tag" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Untagged</SelectItem>
+                      {leadTags.map((tag) => (
+                        <SelectItem key={tag.id} value={tag.id}>
+                          {tag.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : newTabData.filterType === 'status' ? (
+                  <Select
+                    value={newTabData.filterValue}
+                    onValueChange={(value) => setNewTabData(prev => ({ ...prev, filterValue: value }))}
+                  >
+                    <SelectTrigger id="filterValue">
+                      <SelectValue placeholder="Select a status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="staging">Staging</SelectItem>
+                      <SelectItem value="assigned">Assigned</SelectItem>
+                      <SelectItem value="contacted">Contacted</SelectItem>
+                      <SelectItem value="qualified">Qualified</SelectItem>
+                      <SelectItem value="converted">Converted</SelectItem>
+                      <SelectItem value="lost">Lost</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : newTabData.filterType === 'source' ? (
+                  <Select
+                    value={newTabData.filterValue}
+                    onValueChange={(value) => setNewTabData(prev => ({ ...prev, filterValue: value }))}
+                  >
+                    <SelectTrigger id="filterValue">
+                      <SelectValue placeholder="Select a source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getUniqueSources().map((source) => (
+                        <SelectItem key={source} value={source}>
+                          {source}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="filterValue"
+                    value={newTabData.filterValue}
+                    onChange={(e) => setNewTabData(prev => ({ ...prev, filterValue: e.target.value }))}
+                    placeholder="Enter text to search in notes"
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tabColor">Tab Color</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="tabColor"
+                    type="color"
+                    value={newTabData.color}
+                    onChange={(e) => setNewTabData(prev => ({ ...prev, color: e.target.value }))}
+                    className="w-20 h-10 cursor-pointer"
+                  />
+                  <Input
+                    value={newTabData.color}
+                    onChange={(e) => setNewTabData(prev => ({ ...prev, color: e.target.value }))}
+                    placeholder="#3B82F6"
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateTabDialog(false)
+                    setEditingTab(null)
+                    setNewTabData({
+                      name: '',
+                      filterType: 'tag',
+                      filterValue: '',
+                      color: '#3B82F6'
+                    })
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateCustomTab}
+                  disabled={!newTabData.name.trim() || savingTab}
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {savingTab ? 'Saving...' : editingTab ? 'Update Tab' : 'Create Tab'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Alert Modal */}
         <AlertModal
           open={alertModal.open}

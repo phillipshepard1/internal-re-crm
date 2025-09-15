@@ -204,4 +204,17 @@ export interface File {
   mime_type: string | null
   uploaded_by: string
   created_at: string
+}
+
+export interface CustomLeadTab {
+  id: string
+  user_id: string
+  name: string
+  filter_type: 'tag' | 'status' | 'source' | 'custom'
+  filter_value: string
+  color: string
+  tab_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
 } 
