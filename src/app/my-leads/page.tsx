@@ -648,13 +648,25 @@ export default function MyLeadsPage() {
                                 {lead.email && lead.email[0] && (
                                   <div className="flex items-center text-sm">
                                     <Mail className="mr-2 h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                    <span className="truncate">{lead.email[0]}</span>
+                                    <a
+                                      href={`mailto:${lead.email[0]}`}
+                                      className="truncate hover:underline text-primary"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {lead.email[0]}
+                                    </a>
                                   </div>
                                 )}
                                 {lead.phone && lead.phone[0] && (
                                   <div className="flex items-center text-sm">
                                     <Phone className="mr-2 h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                    <span className="truncate">{formatPhoneNumberForDisplay(lead.phone[0])}</span>
+                                    <a
+                                      href={`tel:${lead.phone[0]}`}
+                                      className="truncate hover:underline text-primary"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {formatPhoneNumberForDisplay(lead.phone[0])}
+                                    </a>
                                   </div>
                                 )}
                               </div>

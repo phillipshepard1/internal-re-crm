@@ -1362,13 +1362,25 @@ function WeeklyListView({
                               {followUp.people.phone && followUp.people.phone.length > 0 && (
                                 <div className="flex items-center gap-1 min-w-0">
                                   <Phone className="h-3 w-3 flex-shrink-0" />
-                                  <span className="truncate max-w-[120px]">{followUp.people.phone[0]}</span>
+                                  <a
+                                    href={`tel:${followUp.people.phone[0]}`}
+                                    className="truncate max-w-[120px] hover:underline text-primary"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {followUp.people.phone[0]}
+                                  </a>
                                 </div>
                               )}
                               {followUp.people.email && followUp.people.email.length > 0 && (
                                 <div className="flex items-center gap-1 min-w-0">
                                   <MessageSquare className="h-3 w-3 flex-shrink-0" />
-                                  <span className="truncate max-w-[120px]">{followUp.people.email[0]}</span>
+                                  <a
+                                    href={`mailto:${followUp.people.email[0]}`}
+                                    className="truncate max-w-[120px] hover:underline text-primary"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {followUp.people.email[0]}
+                                  </a>
                                 </div>
                               )}
                             </div>
@@ -2129,13 +2141,25 @@ function FollowUpCard({
             {followUp.people.phone && followUp.people.phone.length > 0 && (
               <div className="flex items-center gap-1 min-w-0">
                 <Phone className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate max-w-[120px]">{followUp.people.phone[0]}</span>
+                <a
+                  href={`tel:${followUp.people.phone[0]}`}
+                  className="truncate max-w-[120px] hover:underline text-primary"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {followUp.people.phone[0]}
+                </a>
               </div>
             )}
             {followUp.people.email && followUp.people.email.length > 0 && (
               <div className="flex items-center gap-1 min-w-0">
                 <MessageSquare className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate max-w-[120px]">{followUp.people.email[0]}</span>
+                <a
+                  href={`mailto:${followUp.people.email[0]}`}
+                  className="truncate max-w-[120px] hover:underline text-primary"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {followUp.people.email[0]}
+                </a>
               </div>
             )}
           </div>
