@@ -18,6 +18,7 @@ import { AlertModal } from '@/components/ui/alert-modal'
 import { useAuth } from '@/contexts/AuthContext'
 import { getLeadsWithTags, getLeadsByTag, getLeadStatsWithTags, getLeadTags, updateLeadTagForLead, updateLeadStatus } from '@/lib/database'
 import { getCustomTabs, createCustomTab, updateCustomTab, deleteCustomTab } from '@/lib/customTabs'
+import { setPersonTags } from '@/lib/leadTags'
 import type { Person, LeadTag, CustomLeadTab } from '@/lib/supabase'
 import { formatPhoneNumberForDisplay, formatPhoneNumber, unformatPhoneNumber } from '@/lib/utils'
 import { usePagination } from '@/hooks/usePagination'
@@ -44,7 +45,7 @@ export default function MyLeadsPage() {
   const [leadStats, setLeadStats] = useState<any>(null)
   const [leadTags, setLeadTags] = useState<LeadTag[]>([])
   const [updatingTag, setUpdatingTag] = useState<string | null>(null)
-  const [selectedTagId, setSelectedTagId] = useState<string>('')
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<string>('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -322,16 +323,24 @@ export default function MyLeadsPage() {
     currentPage * itemsPerPage
   )
 
-  const handleUpdateTag = async (leadId: string) => {
-    if (!selectedTagId) return
+  const handleUpdateTags = async (leadId: string) => {
+    if (!user?.id) return
 
     try {
       setUpdatingTag(leadId)
-      const tagId: string | null = selectedTagId === 'none' ? null : selectedTagId
-      await updateLeadTagForLead(leadId, tagId, user?.id || '')
-      setSelectedTagId('')
+      // Use the new multiple tags function
+      await setPersonTags(leadId, selectedTagIds, user.id)
+      setSelectedTagIds([])
       setOpenTagDialog(null)
-      
+
+      // Show success message
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: 'Tags updated successfully',
+        type: 'success'
+      })
+
       // Refetch all data
       refetchAllLeads()
       refetchHotLeads()
@@ -340,15 +349,27 @@ export default function MyLeadsPage() {
       refetchDeadLeads()
       loadStats()
     } catch (error) {
-      // console.error('Error updating tag:', error)
+      console.error('Error updating tags:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Failed to update tags',
+        type: 'error'
+      })
     } finally {
       setUpdatingTag(null)
     }
   }
 
-  const handleOpenTagDialog = (leadId: string, currentTagId: string) => {
+  const handleOpenTagDialog = (leadId: string, lead: Person) => {
     setOpenTagDialog(leadId)
-    setSelectedTagId(currentTagId)
+    // Set current tags from the lead
+    const currentTagIds = lead.lead_tags?.map(tag => tag.id) || []
+    // Also include the single tag if it exists (for backward compatibility)
+    if (lead.lead_tag_id && !currentTagIds.includes(lead.lead_tag_id)) {
+      currentTagIds.push(lead.lead_tag_id)
+    }
+    setSelectedTagIds(currentTagIds)
   }
 
   const handleUpdateStatus = async (leadId: string) => {
@@ -616,8 +637,16 @@ export default function MyLeadsPage() {
     )
   }
 
-  const getTagBadge = (tag: LeadTag | null) => {
-    if (!tag) {
+  const getTagBadges = (lead: Person) => {
+    // Get tags from both new array and old single tag field
+    const tags: LeadTag[] = lead.lead_tags || []
+
+    // Include the old single tag if it exists and isn't already in the array
+    if (lead.lead_tag && !tags.find(t => t.id === lead.lead_tag?.id)) {
+      tags.push(lead.lead_tag)
+    }
+
+    if (tags.length === 0) {
       return (
         <Badge variant="outline">
           <Tag className="mr-1 h-3 w-3" />
@@ -627,17 +656,22 @@ export default function MyLeadsPage() {
     }
 
     return (
-      <Badge 
-        variant="outline" 
-        style={{ 
-          borderColor: tag.color, 
-          color: tag.color,
-          backgroundColor: `${tag.color}10`
-        }}
-      >
-        <Tag className="mr-1 h-3 w-3" />
-        {tag.name}
-      </Badge>
+      <div className="flex flex-wrap gap-1">
+        {tags.map(tag => (
+          <Badge
+            key={tag.id}
+            variant="outline"
+            style={{
+              borderColor: tag.color,
+              color: tag.color,
+              backgroundColor: `${tag.color}10`
+            }}
+          >
+            <Tag className="mr-1 h-3 w-3" />
+            {tag.name}
+          </Badge>
+        ))}
+      </div>
     )
   }
 
@@ -676,16 +710,17 @@ export default function MyLeadsPage() {
           </div>
           <Button
             onClick={() => setCreateLeadDialogOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 w-full sm:w-auto"
           >
             <Plus className="h-4 w-4" />
-            Add Lead
+            <span className="hidden sm:inline">Add Lead</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
 
         {/* Stats Cards */}
         {leadStats && (
-          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+          <div className="grid gap-2 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
@@ -771,84 +806,167 @@ export default function MyLeadsPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <TabsList className="flex-wrap h-auto">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <TabsList className="flex flex-wrap gap-1 h-auto w-full sm:w-auto p-1 bg-muted/50">
               <TabsTrigger value="all">All ({allLeads?.length || 0})</TabsTrigger>
               <TabsTrigger value="hot">Hot ({hotLeads?.length || 0})</TabsTrigger>
               <TabsTrigger value="warm">Warm ({warmLeads?.length || 0})</TabsTrigger>
               <TabsTrigger value="cold">Cold ({coldLeads?.length || 0})</TabsTrigger>
               <TabsTrigger value="dead">Dead ({deadLeads?.length || 0})</TabsTrigger>
 
-              {/* Custom Tabs */}
-              {customTabs.map(tab => {
-                const tabLeads = getCurrentLeads()
-                const customTabCount = activeTab === tab.id ? filteredLeads.length :
-                  (allLeads || []).filter((lead: Person) => {
-                    switch (tab.filter_type) {
-                      case 'tag':
-                        return tab.filter_value === 'none'
-                          ? !lead.lead_tag_id
-                          : lead.lead_tag_id === tab.filter_value
-                      case 'status':
-                        return lead.lead_status === tab.filter_value
-                      case 'source':
-                        return lead.lead_source === tab.filter_value
-                      case 'custom':
-                        return lead.notes?.toLowerCase().includes(tab.filter_value.toLowerCase())
-                      default:
-                        return true
-                    }
-                  }).length
+              {/* Custom Tabs - Desktop */}
+              <div className="hidden sm:contents">
+                {customTabs.map(tab => {
+                  const tabLeads = getCurrentLeads()
+                  const customTabCount = activeTab === tab.id ? filteredLeads.length :
+                    (allLeads || []).filter((lead: Person) => {
+                      switch (tab.filter_type) {
+                        case 'tag':
+                          return tab.filter_value === 'none'
+                            ? !lead.lead_tag_id
+                            : lead.lead_tag_id === tab.filter_value
+                        case 'status':
+                          return lead.lead_status === tab.filter_value
+                        case 'source':
+                          return lead.lead_source === tab.filter_value
+                        case 'custom':
+                          return lead.notes?.toLowerCase().includes(tab.filter_value.toLowerCase())
+                        default:
+                          return true
+                      }
+                    }).length
 
-                return (
-                  <div key={tab.id} className="relative group">
-                    <TabsTrigger
-                      value={tab.id}
+                  return (
+                    <div key={tab.id} className="relative group inline-flex">
+                      <TabsTrigger
+                        value={tab.id}
+                        style={{
+                          borderColor: activeTab === tab.id ? tab.color : undefined,
+                          borderWidth: activeTab === tab.id ? '2px' : undefined
+                        }}
+                        className="pr-4"
+                      >
+                        <div className="flex items-center">
+                          <div
+                            className="w-2 h-2 rounded-full mr-2"
+                            style={{ backgroundColor: tab.color }}
+                          />
+                          <span className="text-sm">
+                            {tab.name} ({customTabCount})
+                          </span>
+                        </div>
+                      </TabsTrigger>
+                      <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-1 z-10">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-5 w-5 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditCustomTab(tab)
+                          }}
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-5 w-5 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteCustomTab(tab.id)
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </TabsList>
+
+            {/* Custom Tabs - Mobile Card Layout */}
+            {customTabs.length > 0 && (
+              <div className="sm:hidden w-full space-y-2">
+                {customTabs.map(tab => {
+                  const customTabCount = activeTab === tab.id ? filteredLeads.length :
+                    (allLeads || []).filter((lead: Person) => {
+                      switch (tab.filter_type) {
+                        case 'tag':
+                          return tab.filter_value === 'none'
+                            ? !lead.lead_tag_id
+                            : lead.lead_tag_id === tab.filter_value
+                        case 'status':
+                          return lead.lead_status === tab.filter_value
+                        case 'source':
+                          return lead.lead_source === tab.filter_value
+                        case 'custom':
+                          return lead.notes?.toLowerCase().includes(tab.filter_value.toLowerCase())
+                        default:
+                          return true
+                      }
+                    }).length
+
+                  return (
+                    <div
+                      key={tab.id}
+                      className={`flex items-center justify-between p-2 rounded-md border cursor-pointer ${
+                        activeTab === tab.id ? 'bg-accent' : 'bg-background hover:bg-accent/50'
+                      }`}
                       style={{
                         borderColor: activeTab === tab.id ? tab.color : undefined,
                         borderWidth: activeTab === tab.id ? '2px' : undefined
                       }}
+                      onClick={() => setActiveTab(tab.id)}
                     >
-                      <div
-                        className="w-2 h-2 rounded-full mr-2"
-                        style={{ backgroundColor: tab.color }}
-                      />
-                      {tab.name} ({customTabCount})
-                    </TabsTrigger>
-                    <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-1 z-10">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-5 w-5 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleEditCustomTab(tab)
-                        }}
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-5 w-5 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteCustomTab(tab.id)
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
+                      <div className="flex items-center flex-1 min-w-0">
+                        <div
+                          className="w-3 h-3 rounded-full mr-3 flex-shrink-0"
+                          style={{ backgroundColor: tab.color }}
+                        />
+                        <span className="font-medium text-sm truncate">
+                          {tab.name}
+                        </span>
+                        <span className="ml-2 text-sm text-muted-foreground">
+                          ({customTabCount})
+                        </span>
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditCustomTab(tab)
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteCustomTab(tab.id)
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </TabsList>
+                  )
+                })}
+              </div>
+            )}
 
             <Button
               onClick={() => setShowCreateTabDialog(true)}
               variant="outline"
               size="sm"
-              className="h-9"
+              className="h-9 w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-1" />
               Add Tab
@@ -885,7 +1003,94 @@ export default function MyLeadsPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto border rounded-lg">
+                    {/* Mobile View - Cards */}
+                    <div className="block md:hidden space-y-4">
+                      {paginatedLeads.map((lead: Person) => (
+                        <Card key={lead.id} className="p-4">
+                          <div className="space-y-3">
+                            {/* Header with Name and Status */}
+                            <div className="flex justify-between items-start">
+                              <Link
+                                href={`/people/${lead.id}`}
+                                className="font-medium text-lg hover:underline text-primary"
+                              >
+                                {lead.first_name} {lead.last_name}
+                              </Link>
+                              {getStatusBadge(lead.lead_status || 'assigned')}
+                            </div>
+
+                            {/* Tags */}
+                            <div className="flex flex-wrap gap-1">
+                              {getTagBadges(lead)}
+                            </div>
+
+                            {/* Contact Info - Clickable */}
+                            <div className="space-y-2">
+                              {lead.email && lead.email[0] && (
+                                <a
+                                  href={`mailto:${lead.email[0]}`}
+                                  className="flex items-center text-sm text-primary hover:underline"
+                                >
+                                  <Mail className="mr-2 h-4 w-4" />
+                                  <span className="truncate">{lead.email[0]}</span>
+                                </a>
+                              )}
+                              {lead.phone && lead.phone[0] && (
+                                <a
+                                  href={`tel:${lead.phone[0]}`}
+                                  className="flex items-center text-sm text-primary hover:underline"
+                                >
+                                  <Phone className="mr-2 h-4 w-4" />
+                                  <span>{formatPhoneNumberForDisplay(lead.phone[0])}</span>
+                                </a>
+                              )}
+                            </div>
+
+                            {/* Source and Assignment Info */}
+                            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                              {lead.lead_source && (
+                                <div className="flex items-center">
+                                  {getLeadSourceBadge(lead.lead_source)}
+                                </div>
+                              )}
+                              {lead.assigned_by_user && (
+                                <div className="flex items-center">
+                                  <User className="mr-1 h-3 w-3" />
+                                  <span className="text-xs">
+                                    From: {lead.assigned_by_user.first_name || lead.assigned_by_user.email.split('@')[0]}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-2 pt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => handleOpenTagDialog(lead.id, lead)}
+                              >
+                                <Tag className="mr-2 h-3 w-3" />
+                                Tags
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => handleOpenStatusDialog(lead.id, lead.lead_status || 'assigned')}
+                              >
+                                <TrendingUp className="mr-2 h-3 w-3" />
+                                Status
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Desktop View - Table */}
+                    <div className="hidden md:block overflow-x-auto border rounded-lg">
                       <Table>
                       <TableHeader>
                         <TableRow>
@@ -911,7 +1116,7 @@ export default function MyLeadsPage() {
                               </Link>
                             </TableCell>
                             <TableCell>
-                              {getTagBadge(lead.lead_tag || null)}
+                              {getTagBadges(lead)}
                             </TableCell>
                             <TableCell>
                               {getStatusBadge(lead.lead_status || 'assigned')}
@@ -976,51 +1181,75 @@ export default function MyLeadsPage() {
                                   onOpenChange={(open) => {
                                     if (!open) {
                                       setOpenTagDialog(null)
-                                      setSelectedTagId('')
+                                      setSelectedTagIds([])
                                     }
                                   }}
                                 >
                                   <DialogTrigger asChild>
-                                    <Button 
-                                      variant="outline" 
+                                    <Button
+                                      variant="outline"
                                       size="sm"
-                                      onClick={() => handleOpenTagDialog(lead.id, lead.lead_tag_id || '')}
+                                      onClick={() => handleOpenTagDialog(lead.id, lead)}
                                     >
                                       <Tag className="mr-2 h-3 w-3" />
-                                      Update Tag
+                                      Update Tags
                                     </Button>
                                   </DialogTrigger>
-                                <DialogContent>
+                                <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
                                   <DialogHeader>
-                                    <DialogTitle>Update Lead Tag</DialogTitle>
+                                    <DialogTitle>Update Lead Tags</DialogTitle>
                                     <DialogDescription>
-                                      Current tag: <strong>{lead.lead_tag?.name || 'Untagged'}</strong><br />
-                                      Update the tag for {lead.first_name} {lead.last_name}
+                                      Select multiple tags for {lead.first_name} {lead.last_name}
                                     </DialogDescription>
                                   </DialogHeader>
                                   <div className="space-y-4">
                                     <div className="space-y-2">
-                                      <label className="text-sm font-medium">New Tag</label>
-                                      <Select value={selectedTagId} onValueChange={setSelectedTagId}>
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Choose a tag" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="none">Untagged</SelectItem>
-                                          {leadTags.map((tag) => (
-                                            <SelectItem key={tag.id} value={tag.id}>
-                                              {tag.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                                      <label className="text-sm font-medium">Select Tags</label>
+                                      <div className="space-y-2 max-h-[40vh] sm:max-h-60 overflow-y-auto border rounded-lg p-3">
+                                        {leadTags.map((tag) => (
+                                          <label
+                                            key={tag.id}
+                                            htmlFor={`tag-${tag.id}`}
+                                            className="flex items-center space-x-3 p-2 rounded-md hover:bg-accent cursor-pointer"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              id={`tag-${tag.id}`}
+                                              checked={selectedTagIds.includes(tag.id)}
+                                              onChange={(e) => {
+                                                if (e.target.checked) {
+                                                  setSelectedTagIds([...selectedTagIds, tag.id])
+                                                } else {
+                                                  setSelectedTagIds(selectedTagIds.filter(id => id !== tag.id))
+                                                }
+                                              }}
+                                              className="h-5 w-5 rounded border-gray-300"
+                                            />
+                                            <div className="flex items-center flex-1 min-w-0">
+                                              <div
+                                                className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                                                style={{ backgroundColor: tag.color }}
+                                              />
+                                              <span className="text-sm truncate">{tag.name}</span>
+                                              {tag.description && (
+                                                <span className="text-xs text-muted-foreground ml-2 hidden sm:inline truncate">
+                                                  ({tag.description})
+                                                </span>
+                                              )}
+                                            </div>
+                                          </label>
+                                        ))}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {selectedTagIds.length} tag{selectedTagIds.length !== 1 ? 's' : ''} selected
+                                      </div>
                                     </div>
-                                    <Button 
-                                      onClick={() => handleUpdateTag(lead.id)}
-                                      disabled={!selectedTagId || updatingTag === lead.id}
+                                    <Button
+                                      onClick={() => handleUpdateTags(lead.id)}
+                                      disabled={updatingTag === lead.id}
                                       className="w-full"
                                     >
-                                      {updatingTag === lead.id ? 'Updating...' : 'Update Tag'}
+                                      {updatingTag === lead.id ? 'Updating...' : 'Update Tags'}
                                     </Button>
                                   </div>
                                 </DialogContent>
@@ -1045,7 +1274,7 @@ export default function MyLeadsPage() {
                                     Update Status
                                   </Button>
                                 </DialogTrigger>
-                                <DialogContent>
+                                <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
                                   <DialogHeader>
                                     <DialogTitle>Update Lead Status</DialogTitle>
                                     <DialogDescription>
@@ -1068,7 +1297,7 @@ export default function MyLeadsPage() {
                                         </SelectContent>
                                       </Select>
                                     </div>
-                                    <Button 
+                                    <Button
                                       onClick={() => handleUpdateStatus(lead.id)}
                                       disabled={!selectedStatus || updatingStatus === lead.id}
                                       className="w-full"
@@ -1104,7 +1333,7 @@ export default function MyLeadsPage() {
         
         {/* Create Lead Dialog */}
         <Dialog open={createLeadDialogOpen} onOpenChange={setCreateLeadDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Lead</DialogTitle>
               <DialogDescription>
@@ -1113,7 +1342,7 @@ export default function MyLeadsPage() {
             </DialogHeader>
             
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name *</Label>
                   <Input
@@ -1169,7 +1398,7 @@ export default function MyLeadsPage() {
                 />
               </div>
               
-              <div className="flex justify-end space-x-2">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -1184,12 +1413,14 @@ export default function MyLeadsPage() {
                     })
                   }}
                   disabled={creatingLead}
+                  className="w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateLead}
                   disabled={creatingLead || !newLeadData.firstName || !newLeadData.lastName}
+                  className="w-full sm:w-auto"
                 >
                   {creatingLead ? 'Creating...' : 'Create Lead'}
                 </Button>
@@ -1211,7 +1442,7 @@ export default function MyLeadsPage() {
             })
           }
         }}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingTab ? 'Edit Custom Tab' : 'Create Custom Tab'}
@@ -1316,13 +1547,13 @@ export default function MyLeadsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="tabColor">Tab Color</Label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     id="tabColor"
                     type="color"
                     value={newTabData.color}
                     onChange={(e) => setNewTabData(prev => ({ ...prev, color: e.target.value }))}
-                    className="w-20 h-10 cursor-pointer"
+                    className="w-full sm:w-20 h-12 sm:h-10 cursor-pointer"
                   />
                   <Input
                     value={newTabData.color}
@@ -1333,7 +1564,7 @@ export default function MyLeadsPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -1346,12 +1577,14 @@ export default function MyLeadsPage() {
                       color: '#3B82F6'
                     })
                   }}
+                  className="w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateCustomTab}
                   disabled={!newTabData.name.trim() || savingTab}
+                  className="w-full sm:w-auto"
                 >
                   <Save className="h-4 w-4 mr-2" />
                   {savingTab ? 'Saving...' : editingTab ? 'Update Tab' : 'Create Tab'}

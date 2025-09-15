@@ -91,7 +91,8 @@ export interface Person {
   // Lead management
   lead_status?: 'staging' | 'assigned' | 'contacted' | 'qualified' | 'converted' | 'lost'
   // New fields for lead tagging and follow-up plans
-  lead_tag_id?: string | null
+  lead_tag_id?: string | null // Deprecated - kept for backward compatibility
+  lead_tags?: LeadTag[] // New: array of tags from junction table
   follow_up_plan_id?: string | null
   assigned_by?: string | null
   assigned_at?: string | null
@@ -111,7 +112,7 @@ export interface Person {
     first_name: string | null
     last_name: string | null
   }
-  // Joined tag data
+  // Joined tag data - deprecated
   lead_tag?: LeadTag
   // Joined plan data
   follow_up_plan?: FollowUpPlanTemplate
@@ -217,4 +218,12 @@ export interface CustomLeadTab {
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface PersonLeadTag {
+  id: string
+  person_id: string
+  lead_tag_id: string
+  created_at: string
+  created_by?: string
 } 

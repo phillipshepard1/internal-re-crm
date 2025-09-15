@@ -1781,6 +1781,14 @@ export async function getLeadsWithTags(status?: 'staging' | 'assigned' | 'contac
         color,
         description
       ),
+      person_lead_tags (
+        lead_tags (
+          id,
+          name,
+          color,
+          description
+        )
+      ),
       follow_up_plan:follow_up_plan_id (
         id,
         name,
@@ -1795,21 +1803,31 @@ export async function getLeadsWithTags(status?: 'staging' | 'assigned' | 'contac
     `)
     .eq('client_type', 'lead')
     .order('created_at', { ascending: false })
-  
+
   // Filter by lead status if provided
   if (status) {
     query = query.eq('lead_status', status)
   }
-  
+
   // For "My Leads" page, both agents and admins should only see leads assigned to them
   // and exclude staging leads (they should only be in admin panel)
   if (userId) {
     query = query.eq('assigned_to', userId).neq('lead_status', 'staging')
   }
-  
+
   const { data, error } = await query
   if (error) throw error
-  return data || []
+
+  // Transform the data to include lead_tags array
+  const transformedData = (data || []).map((person: any) => {
+    const tags = person.person_lead_tags?.map((plt: any) => plt.lead_tags).filter(Boolean) || []
+    return {
+      ...person,
+      lead_tags: tags
+    }
+  })
+
+  return transformedData
 }
 
 // Get converted leads only (for Converted Leads tab)
