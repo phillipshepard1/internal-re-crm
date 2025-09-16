@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Search, Eye, Mail, Phone, Calendar, Clock, User, Target, TrendingUp, AlertCircle, CheckCircle, XCircle, Tag, Edit2, Trash2, Filter, Save, X } from 'lucide-react'
+import { Plus, Search, Eye, Mail, Phone, Calendar, Clock, User, Target, TrendingUp, AlertCircle, CheckCircle, XCircle, Tag, Edit2, Trash2, Filter, Save, X, PlusCircle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -72,6 +71,19 @@ export default function MyLeadsPage() {
   const [openTagDialog, setOpenTagDialog] = useState<string | null>(null)
   const [openStatusDialog, setOpenStatusDialog] = useState<string | null>(null)
   const itemsPerPage = 10
+
+  // Custom tag management state
+  const [showCreateTagDialog, setShowCreateTagDialog] = useState(false)
+  const [showDeleteTagDialog, setShowDeleteTagDialog] = useState(false)
+  const [tagToDelete, setTagToDelete] = useState<LeadTag | null>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [creatingTag, setCreatingTag] = useState(false)
+  const [deletingTag, setDeletingTag] = useState(false)
+  const [newTagData, setNewTagData] = useState({
+    name: '',
+    description: '',
+    color: '#3B82F6'
+  })
   
   // Manual lead creation state
   const [createLeadDialogOpen, setCreateLeadDialogOpen] = useState(false)
@@ -293,6 +305,14 @@ export default function MyLeadsPage() {
       })
     }
 
+    // Check if it's a custom tag filter
+    if (activeTab.startsWith('tag-')) {
+      const tagId = activeTab.replace('tag-', '')
+      return (allLeads || []).filter((lead: Person) => {
+        return lead.lead_tags?.some(t => t.id === tagId) || lead.lead_tag_id === tagId
+      })
+    }
+
     // Default tabs
     switch (activeTab) {
       case 'hot':
@@ -303,6 +323,12 @@ export default function MyLeadsPage() {
         return coldLeads || []
       case 'dead':
         return deadLeads || []
+      case 'contacted':
+        // Filter leads that have been contacted
+        return (allLeads || []).filter((lead: Person) => lead.lead_status === 'contacted')
+      case 'converted':
+        // Filter leads that have been converted
+        return (allLeads || []).filter((lead: Person) => lead.lead_status === 'converted')
       default:
         return allLeads || []
     }
@@ -398,6 +424,142 @@ export default function MyLeadsPage() {
   const handleOpenStatusDialog = (leadId: string, currentStatus: string) => {
     setOpenStatusDialog(leadId)
     setSelectedStatus(currentStatus)
+  }
+
+  // Custom tag handlers
+  const handleCreateTag = async () => {
+    if (!newTagData.name.trim()) {
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Tag name is required',
+        type: 'error'
+      })
+      return
+    }
+
+    setCreatingTag(true)
+    try {
+      const response = await fetch('/api/lead-tags', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: newTagData.name,
+          description: newTagData.description || null,
+          color: newTagData.color,
+          is_active: true
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create tag')
+      }
+
+      // Add to local state
+      setLeadTags(prev => [...prev, data])
+
+      // Refetch tags
+      refetchTags()
+
+      // Reset form and close dialog
+      setNewTagData({
+        name: '',
+        description: '',
+        color: '#3B82F6'
+      })
+      setShowCreateTagDialog(false)
+
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: `Tag "${data.name}" created successfully`,
+        type: 'success'
+      })
+    } catch (error: any) {
+      console.error('Error creating tag:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: error.message || 'Failed to create tag',
+        type: 'error'
+      })
+    } finally {
+      setCreatingTag(false)
+    }
+  }
+
+  const handleDeleteTag = async () => {
+    if (!tagToDelete || deleteConfirmText !== 'DELETE') {
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: 'Please type DELETE to confirm',
+        type: 'error'
+      })
+      return
+    }
+
+    setDeletingTag(true)
+    try {
+      const response = await fetch(`/api/lead-tags?id=${tagToDelete.id}`, {
+        method: 'DELETE'
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete tag')
+      }
+
+      // Remove from local state
+      setLeadTags(prev => prev.filter(tag => tag.id !== tagToDelete.id))
+
+      // If the deleted tag was the active filter, reset to 'all'
+      if (activeTab === `tag-${tagToDelete.id}`) {
+        setActiveTab('all')
+      }
+
+      // Refetch all data since this affects leads
+      refetchTags()
+      refetchAllLeads()
+      refetchHotLeads()
+      refetchWarmLeads()
+      refetchColdLeads()
+      refetchDeadLeads()
+      loadStats()
+
+      // Reset and close
+      setTagToDelete(null)
+      setDeleteConfirmText('')
+      setShowDeleteTagDialog(false)
+
+      setAlertModal({
+        open: true,
+        title: 'Success',
+        message: `Tag "${tagToDelete.name}" deleted successfully`,
+        type: 'success'
+      })
+    } catch (error: any) {
+      console.error('Error deleting tag:', error)
+      setAlertModal({
+        open: true,
+        title: 'Error',
+        message: error.message || 'Failed to delete tag. It may be in use.',
+        type: 'error'
+      })
+    } finally {
+      setDeletingTag(false)
+    }
+  }
+
+  const handleOpenDeleteDialog = (tag: LeadTag) => {
+    setTagToDelete(tag)
+    setDeleteConfirmText('')
+    setShowDeleteTagDialog(true)
   }
 
   // Custom tab handlers
@@ -637,7 +799,7 @@ export default function MyLeadsPage() {
     )
   }
 
-  const getTagBadges = (lead: Person) => {
+  const getTagBadges = (lead: Person, maxVisible: number = 1) => {
     // Get tags from both new array and old single tag field
     const tags: LeadTag[] = lead.lead_tags || []
 
@@ -655,9 +817,12 @@ export default function MyLeadsPage() {
       )
     }
 
+    const visibleTags = tags.slice(0, maxVisible)
+    const remainingCount = tags.length - maxVisible
+
     return (
-      <div className="flex flex-wrap gap-1">
-        {tags.map(tag => (
+      <div className="flex flex-wrap gap-1 items-center">
+        {visibleTags.map(tag => (
           <Badge
             key={tag.id}
             variant="outline"
@@ -671,6 +836,11 @@ export default function MyLeadsPage() {
             {tag.name}
           </Badge>
         ))}
+        {remainingCount > 0 && (
+          <Badge variant="secondary" className="text-xs">
+            +{remainingCount} more
+          </Badge>
+        )}
       </div>
     )
   }
@@ -702,26 +872,39 @@ export default function MyLeadsPage() {
               {userRole === 'admin' ? 'My Assigned Leads' : 'My Leads'}
             </h2>
             <p className="text-muted-foreground">
-              {userRole === 'admin' 
+              {userRole === 'admin'
                 ? 'Manage leads assigned to you (excludes staging leads) with tag-based organization'
                 : 'Manage your assigned leads with tag-based organization'
               }
             </p>
           </div>
-          <Button
-            onClick={() => setCreateLeadDialogOpen(true)}
-            className="flex items-center gap-2 w-full sm:w-auto"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add Lead</span>
-            <span className="sm:hidden">Add</span>
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              onClick={() => setShowCreateTagDialog(true)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <PlusCircle className="h-4 w-4" />
+              <span>Add Custom Tag</span>
+            </Button>
+            <Button
+              onClick={() => setCreateLeadDialogOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add Lead</span>
+              <span className="sm:hidden">Add</span>
+            </Button>
+          </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Now Clickable for Filtering */}
         {leadStats && (
-          <div className="grid gap-2 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
-            <Card>
+          <div className="grid gap-2 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 auto-rows-auto">
+            <Card
+              className={`cursor-pointer transition-all hover:shadow-lg ${activeTab === 'all' ? 'ring-2 ring-primary' : ''}`}
+              onClick={() => setActiveTab('all')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
                 <Target className="h-4 w-4 text-muted-foreground" />
@@ -730,7 +913,10 @@ export default function MyLeadsPage() {
                 <div className="text-xl sm:text-2xl font-bold">{leadStats.total}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`cursor-pointer transition-all hover:shadow-lg ${activeTab === 'hot' ? 'ring-2 ring-red-500' : ''}`}
+              onClick={() => setActiveTab('hot')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Hot</CardTitle>
                 <Badge variant="outline" style={{ borderColor: '#EF4444', color: '#EF4444' }}>H</Badge>
@@ -739,7 +925,10 @@ export default function MyLeadsPage() {
                 <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.hot}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`cursor-pointer transition-all hover:shadow-lg ${activeTab === 'warm' ? 'ring-2 ring-orange-500' : ''}`}
+              onClick={() => setActiveTab('warm')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Warm</CardTitle>
                 <Badge variant="outline" style={{ borderColor: '#F59E0B', color: '#F59E0B' }}>W</Badge>
@@ -748,7 +937,10 @@ export default function MyLeadsPage() {
                 <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.warm}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`cursor-pointer transition-all hover:shadow-lg ${activeTab === 'cold' ? 'ring-2 ring-gray-500' : ''}`}
+              onClick={() => setActiveTab('cold')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Cold</CardTitle>
                 <Badge variant="outline" style={{ borderColor: '#6B7280', color: '#6B7280' }}>C</Badge>
@@ -757,7 +949,10 @@ export default function MyLeadsPage() {
                 <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.cold}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`cursor-pointer transition-all hover:shadow-lg ${activeTab === 'dead' ? 'ring-2 ring-gray-700' : ''}`}
+              onClick={() => setActiveTab('dead')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Dead</CardTitle>
                 <Badge variant="outline" style={{ borderColor: '#374151', color: '#374151' }}>D</Badge>
@@ -766,7 +961,10 @@ export default function MyLeadsPage() {
                 <div className="text-xl sm:text-2xl font-bold">{leadStats.tags.dead}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`cursor-pointer transition-all hover:shadow-lg ${activeTab === 'contacted' ? 'ring-2 ring-blue-500' : ''}`}
+              onClick={() => setActiveTab('contacted')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Contacted</CardTitle>
                 <Phone className="h-4 w-4 text-muted-foreground" />
@@ -775,7 +973,10 @@ export default function MyLeadsPage() {
                 <div className="text-xl sm:text-2xl font-bold">{leadStats.contacted}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card
+              className={`cursor-pointer transition-all hover:shadow-lg ${activeTab === 'converted' ? 'ring-2 ring-green-500' : ''}`}
+              onClick={() => setActiveTab('converted')}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Converted</CardTitle>
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
@@ -784,6 +985,51 @@ export default function MyLeadsPage() {
                 <div className="text-xl sm:text-2xl font-bold">{leadStats.converted}</div>
               </CardContent>
             </Card>
+
+            {/* Custom Tag Filter Boxes */}
+            {leadTags.filter(tag => !['Hot', 'Warm', 'Cold', 'Dead'].includes(tag.name)).map(tag => {
+              const tagCount = (allLeads || []).filter((lead: Person) => {
+                return lead.lead_tags?.some(t => t.id === tag.id) || lead.lead_tag_id === tag.id
+              }).length
+
+              return (
+                <Card
+                  key={tag.id}
+                  className={`cursor-pointer transition-all hover:shadow-lg relative group ${
+                    activeTab === `tag-${tag.id}` ? 'ring-2' : ''
+                  }`}
+                  style={{
+                    borderColor: activeTab === `tag-${tag.id}` ? tag.color : undefined
+                  }}
+                  onClick={() => setActiveTab(`tag-${tag.id}`)}
+                >
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium truncate pr-8">{tag.name}</CardTitle>
+                    <Badge variant="outline" style={{ borderColor: tag.color, color: tag.color }}>
+                      <Tag className="h-3 w-3" />
+                    </Badge>
+                    {/* Delete button - only visible on hover */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleOpenDeleteDialog(tag)
+                      }}
+                    >
+                      <X className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-xl sm:text-2xl font-bold">{tagCount}</div>
+                    {tag.description && (
+                      <p className="text-xs text-muted-foreground truncate mt-1">{tag.description}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
 
@@ -804,187 +1050,59 @@ export default function MyLeadsPage() {
           </CardHeader>
         </Card>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <TabsList className="flex flex-wrap gap-1 h-auto w-full sm:w-auto p-1 bg-muted/50">
-              <TabsTrigger value="all">All ({allLeads?.length || 0})</TabsTrigger>
-              <TabsTrigger value="hot">Hot ({hotLeads?.length || 0})</TabsTrigger>
-              <TabsTrigger value="warm">Warm ({warmLeads?.length || 0})</TabsTrigger>
-              <TabsTrigger value="cold">Cold ({coldLeads?.length || 0})</TabsTrigger>
-              <TabsTrigger value="dead">Dead ({deadLeads?.length || 0})</TabsTrigger>
-
-              {/* Custom Tabs - Desktop */}
-              <div className="hidden sm:contents">
-                {customTabs.map(tab => {
-                  const tabLeads = getCurrentLeads()
-                  const customTabCount = activeTab === tab.id ? filteredLeads.length :
-                    (allLeads || []).filter((lead: Person) => {
-                      switch (tab.filter_type) {
-                        case 'tag':
-                          return tab.filter_value === 'none'
-                            ? !lead.lead_tag_id
-                            : lead.lead_tag_id === tab.filter_value
-                        case 'status':
-                          return lead.lead_status === tab.filter_value
-                        case 'source':
-                          return lead.lead_source === tab.filter_value
-                        case 'custom':
-                          return lead.notes?.toLowerCase().includes(tab.filter_value.toLowerCase())
-                        default:
-                          return true
-                      }
-                    }).length
-
-                  return (
-                    <div key={tab.id} className="relative group inline-flex">
-                      <TabsTrigger
-                        value={tab.id}
-                        style={{
-                          borderColor: activeTab === tab.id ? tab.color : undefined,
-                          borderWidth: activeTab === tab.id ? '2px' : undefined
-                        }}
-                        className="pr-4"
-                      >
-                        <div className="flex items-center">
-                          <div
-                            className="w-2 h-2 rounded-full mr-2"
-                            style={{ backgroundColor: tab.color }}
-                          />
-                          <span className="text-sm">
-                            {tab.name} ({customTabCount})
-                          </span>
-                        </div>
-                      </TabsTrigger>
-                      <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-1 z-10">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-5 w-5 p-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditCustomTab(tab)
-                          }}
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-5 w-5 p-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteCustomTab(tab.id)
-                          }}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </TabsList>
-
-            {/* Custom Tabs - Mobile Card Layout */}
-            {customTabs.length > 0 && (
-              <div className="sm:hidden w-full space-y-2">
-                {customTabs.map(tab => {
-                  const customTabCount = activeTab === tab.id ? filteredLeads.length :
-                    (allLeads || []).filter((lead: Person) => {
-                      switch (tab.filter_type) {
-                        case 'tag':
-                          return tab.filter_value === 'none'
-                            ? !lead.lead_tag_id
-                            : lead.lead_tag_id === tab.filter_value
-                        case 'status':
-                          return lead.lead_status === tab.filter_value
-                        case 'source':
-                          return lead.lead_source === tab.filter_value
-                        case 'custom':
-                          return lead.notes?.toLowerCase().includes(tab.filter_value.toLowerCase())
-                        default:
-                          return true
-                      }
-                    }).length
-
-                  return (
-                    <div
-                      key={tab.id}
-                      className={`flex items-center justify-between p-2 rounded-md border cursor-pointer ${
-                        activeTab === tab.id ? 'bg-accent' : 'bg-background hover:bg-accent/50'
-                      }`}
-                      style={{
-                        borderColor: activeTab === tab.id ? tab.color : undefined,
-                        borderWidth: activeTab === tab.id ? '2px' : undefined
-                      }}
-                      onClick={() => setActiveTab(tab.id)}
-                    >
-                      <div className="flex items-center flex-1 min-w-0">
-                        <div
-                          className="w-3 h-3 rounded-full mr-3 flex-shrink-0"
-                          style={{ backgroundColor: tab.color }}
-                        />
-                        <span className="font-medium text-sm truncate">
-                          {tab.name}
-                        </span>
-                        <span className="ml-2 text-sm text-muted-foreground">
-                          ({customTabCount})
-                        </span>
-                      </div>
-                      <div className="flex gap-1 ml-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditCustomTab(tab)
-                          }}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteCustomTab(tab.id)
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            <Button
-              onClick={() => setShowCreateTabDialog(true)}
-              variant="outline"
-              size="sm"
-              className="h-9 w-full sm:w-auto"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Tab
-            </Button>
-          </div>
-
-          <TabsContent value={activeTab} className="space-y-4">
+        {/* Main Content */}
+        <div className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>
-                  My Leads - {customTabs.find(t => t.id === activeTab)?.name ||
-                    (activeTab.charAt(0).toUpperCase() + activeTab.slice(1))}
+                  My Leads - {(() => {
+                    const customTab = customTabs.find(t => t.id === activeTab)
+                    if (customTab) return customTab.name
+
+                    // Check if it's a custom tag filter
+                    if (activeTab.startsWith('tag-')) {
+                      const tagId = activeTab.replace('tag-', '')
+                      const tag = leadTags.find(t => t.id === tagId)
+                      return tag ? `${tag.name} Tagged` : 'Custom Tag'
+                    }
+
+                    const tabNames: { [key: string]: string } = {
+                      'all': 'All Leads',
+                      'hot': 'Hot Leads',
+                      'warm': 'Warm Leads',
+                      'cold': 'Cold Leads',
+                      'dead': 'Dead Leads',
+                      'contacted': 'Contacted Leads',
+                      'converted': 'Converted Leads'
+                    }
+                    return tabNames[activeTab] || 'All Leads'
+                  })()}
                 </CardTitle>
                 <CardDescription>
-                  {customTabs.find(t => t.id === activeTab)
-                    ? `Custom filter: ${customTabs.find(t => t.id === activeTab)?.filter_type}`
-                    : 'Your leads organized by priority tags'
-                  }
+                  {(() => {
+                    const customTab = customTabs.find(t => t.id === activeTab)
+                    if (customTab) {
+                      return `Custom filter: ${customTab.filter_type}`
+                    }
+
+                    // Check if it's a custom tag filter
+                    if (activeTab.startsWith('tag-')) {
+                      const tagId = activeTab.replace('tag-', '')
+                      const tag = leadTags.find(t => t.id === tagId)
+                      return tag?.description || 'Leads with this custom tag'
+                    }
+
+                    const descriptions: { [key: string]: string } = {
+                      'all': 'All your assigned leads in one view',
+                      'hot': 'High-priority leads requiring immediate attention',
+                      'warm': 'Leads showing interest and engagement',
+                      'cold': 'Leads needing nurturing',
+                      'dead': 'Inactive or unresponsive leads',
+                      'contacted': 'Leads that have been contacted',
+                      'converted': 'Successfully converted leads'
+                    }
+                    return descriptions[activeTab] || 'Your leads organized by priority'
+                  })()}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1021,7 +1139,7 @@ export default function MyLeadsPage() {
 
                             {/* Tags */}
                             <div className="flex flex-wrap gap-1">
-                              {getTagBadges(lead)}
+                              {getTagBadges(lead, 3)}
                             </div>
 
                             {/* Contact Info - Clickable */}
@@ -1116,7 +1234,7 @@ export default function MyLeadsPage() {
                               </Link>
                             </TableCell>
                             <TableCell>
-                              {getTagBadges(lead)}
+                              {getTagBadges(lead, 1)}
                             </TableCell>
                             <TableCell>
                               {getStatusBadge(lead.lead_status || 'assigned')}
@@ -1328,8 +1446,7 @@ export default function MyLeadsPage() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+        </div>
         
         {/* Create Lead Dialog */}
         <Dialog open={createLeadDialogOpen} onOpenChange={setCreateLeadDialogOpen}>
@@ -1588,6 +1705,163 @@ export default function MyLeadsPage() {
                 >
                   <Save className="h-4 w-4 mr-2" />
                   {savingTab ? 'Saving...' : editingTab ? 'Update Tab' : 'Create Tab'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Tag Dialog */}
+        <Dialog open={showCreateTagDialog} onOpenChange={(open) => {
+          setShowCreateTagDialog(open)
+          if (!open) {
+            setNewTagData({
+              name: '',
+              description: '',
+              color: '#3B82F6'
+            })
+          }
+        }}>
+          <DialogContent className="sm:max-w-[500px] max-w-[95vw] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create Custom Tag</DialogTitle>
+              <DialogDescription>
+                Create a new tag to categorize and filter your leads
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="tagName">Tag Name *</Label>
+                <Input
+                  id="tagName"
+                  value={newTagData.name}
+                  onChange={(e) => setNewTagData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., VIP, Follow-up Required"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tagDescription">Description</Label>
+                <Textarea
+                  id="tagDescription"
+                  value={newTagData.description}
+                  onChange={(e) => setNewTagData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Optional description for this tag"
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tagColor">Tag Color</Label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    id="tagColor"
+                    type="color"
+                    value={newTagData.color}
+                    onChange={(e) => setNewTagData(prev => ({ ...prev, color: e.target.value }))}
+                    className="w-full sm:w-20 h-12 sm:h-10 cursor-pointer"
+                  />
+                  <Input
+                    value={newTagData.color}
+                    onChange={(e) => setNewTagData(prev => ({ ...prev, color: e.target.value }))}
+                    placeholder="#3B82F6"
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateTagDialog(false)
+                    setNewTagData({
+                      name: '',
+                      description: '',
+                      color: '#3B82F6'
+                    })
+                  }}
+                  disabled={creatingTag}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateTag}
+                  disabled={!newTagData.name.trim() || creatingTag}
+                  className="w-full sm:w-auto"
+                >
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  {creatingTag ? 'Creating...' : 'Create Tag'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Tag Confirmation Dialog */}
+        <Dialog open={showDeleteTagDialog} onOpenChange={(open) => {
+          setShowDeleteTagDialog(open)
+          if (!open) {
+            setTagToDelete(null)
+            setDeleteConfirmText('')
+          }
+        }}>
+          <DialogContent className="sm:max-w-[500px] max-w-[95vw]">
+            <DialogHeader>
+              <DialogTitle>Delete Tag: {tagToDelete?.name}</DialogTitle>
+              <DialogDescription className="space-y-2">
+                <span className="text-destructive font-semibold">
+                  ⚠️ This action is permanent and cannot be undone.
+                </span>
+                <br />
+                <span>
+                  This will remove the tag "{tagToDelete?.name}" from the system and from all associated leads.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <Alert className="border-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  To confirm deletion, please type <strong>DELETE</strong> in the field below.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label htmlFor="deleteConfirm">Confirmation</Label>
+                <Input
+                  id="deleteConfirm"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="Type DELETE to confirm"
+                  className={deleteConfirmText === 'DELETE' ? 'border-green-500' : ''}
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteTagDialog(false)
+                    setTagToDelete(null)
+                    setDeleteConfirmText('')
+                  }}
+                  disabled={deletingTag}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteTag}
+                  disabled={deleteConfirmText !== 'DELETE' || deletingTag}
+                  className="w-full sm:w-auto"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {deletingTag ? 'Deleting...' : 'Delete Tag Permanently'}
                 </Button>
               </div>
             </div>

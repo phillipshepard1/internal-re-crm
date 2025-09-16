@@ -196,6 +196,15 @@ export async function getPersonById(id: string, userId?: string, userRole?: stri
         color,
         description
       ),
+      person_lead_tags (
+        lead_tags (
+          id,
+          name,
+          color,
+          description,
+          is_active
+        )
+      ),
       follow_up_plan:follow_up_plan_id (
         id,
         name,
@@ -217,6 +226,13 @@ export async function getPersonById(id: string, userId?: string, userRole?: stri
   
   const { data, error } = await query.single()
   if (error) throw error
+
+  // Process the lead_tags from the junction table
+  if (data && data.person_lead_tags) {
+    data.lead_tags = data.person_lead_tags.map((plt: any) => plt.lead_tags).filter(Boolean)
+    delete data.person_lead_tags // Clean up the intermediate structure
+  }
+
   return data
 }
 
@@ -1938,11 +1954,12 @@ export async function getLeadsByTag(tagName: string, userId?: string, userRole?:
     .eq('name', tagName)
     .eq('is_active', true)
     .single()
-  
+
   if (tagError || !tagData) {
     return []
   }
-  
+
+  // Get people with this tag (either as primary tag or in person_lead_tags)
   let query = supabase
     .from('people')
     .select(`
@@ -1959,6 +1976,14 @@ export async function getLeadsByTag(tagName: string, userId?: string, userRole?:
         color,
         description
       ),
+      person_lead_tags (
+        lead_tags (
+          id,
+          name,
+          color,
+          description
+        )
+      ),
       follow_up_plan:follow_up_plan_id (
         id,
         name,
@@ -1972,18 +1997,35 @@ export async function getLeadsByTag(tagName: string, userId?: string, userRole?:
       )
     `)
     .eq('client_type', 'lead')
-    .eq('lead_tag_id', tagData.id)
     .order('created_at', { ascending: false })
-  
+
   // For "My Leads" page, both agents and admins should only see leads assigned to them
-  // and exclude staging leads (they should only be in admin panel)
+  // and exclude staging leads
   if (userId) {
     query = query.eq('assigned_to', userId).neq('lead_status', 'staging')
   }
-  
+
   const { data, error } = await query
   if (error) throw error
-  return data || []
+
+  // Filter and transform the data
+  const filteredData = (data || [])
+    .map((person: any) => {
+      // Transform person_lead_tags to lead_tags array
+      const tags = person.person_lead_tags?.map((plt: any) => plt.lead_tags).filter(Boolean) || []
+      return {
+        ...person,
+        lead_tags: tags
+      }
+    })
+    .filter((person: any) => {
+      // Check if person has this tag either as primary or in the tags array
+      const hasAsPrimary = person.lead_tag_id === tagData.id
+      const hasInArray = person.lead_tags.some((tag: any) => tag.id === tagData.id)
+      return hasAsPrimary || hasInArray
+    })
+
+  return filteredData
 }
 
 // Enhanced lead stats with tags

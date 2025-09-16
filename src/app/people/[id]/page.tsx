@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
-import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare, Target } from 'lucide-react'
+import { ArrowLeft, Edit, Phone, Mail, Calendar, MapPin, Building, User, Plus, Trash2, FileText, CheckSquare, Activity, Upload, MessageSquare, Target, Tag } from 'lucide-react'
 import { getPersonById, updatePerson, deletePerson, getNotes, createNote, getTasks, createTask, getActivities, getFiles, getLeadTags, updateLeadTagForLead, applyFollowUpFrequencyToLead } from '@/lib/database'
+import { setPersonTags } from '@/lib/leadTags'
 import { supabase } from '@/lib/supabase'
 import type { Person, Note, Task, Activity as ActivityType, File, FollowUpPlanTemplate, LeadTag } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -100,6 +101,7 @@ export default function PersonDetailPage() {
   const [selectedFrequency, setSelectedFrequency] = useState<'twice_week' | 'weekly' | 'biweekly' | 'monthly'>('weekly')
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1)
   const [selectedTagId, setSelectedTagId] = useState('')
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [updatingFrequency, setUpdatingFrequency] = useState(false)
   const [updatingTag, setUpdatingTag] = useState(false)
   const [showRemoveLeadDialog, setShowRemoveLeadDialog] = useState(false)
@@ -541,28 +543,35 @@ export default function PersonDetailPage() {
 
     try {
       setUpdatingTag(true)
-      const tagId = selectedTagId === 'none' ? null : selectedTagId
-      await updateLeadTagForLead(person.id, tagId, user.id)
-      
+
+      // Use the new multiple tags function
+      await setPersonTags(person.id, selectedTagIds, user.id)
+
+      // Also update the single tag field for backward compatibility (use first selected tag)
+      const primaryTagId = selectedTagIds.length > 0 ? selectedTagIds[0] : null
+      if (primaryTagId !== person.lead_tag_id) {
+        await updateLeadTagForLead(person.id, primaryTagId, user.id)
+      }
+
       setAlertModal({
         open: true,
         title: 'Success',
-        message: 'Lead tag updated successfully',
+        message: 'Lead tags updated successfully',
         type: 'success'
       })
-      
+
       setShowTagDialog(false)
-      setSelectedTagId('')
-      
-      // Reload person data to get updated tag
+      setSelectedTagIds([])
+
+      // Reload person data to get updated tags
       const updatedPerson = await getPersonById(person.id, user.id, userRole || undefined)
       setPerson(updatedPerson)
-      
+
     } catch (error) {
       setAlertModal({
         open: true,
         title: 'Error',
-        message: 'Failed to update lead tag',
+        message: 'Failed to update lead tags',
         type: 'error'
       })
     } finally {
@@ -577,7 +586,13 @@ export default function PersonDetailPage() {
   }
 
   const openTagDialog = () => {
-    setSelectedTagId(person?.lead_tag_id || '')
+    // Initialize selected tags from person's current tags
+    const currentTagIds = person?.lead_tags?.map(tag => tag.id) || []
+    // Also include the single tag if it exists (for backward compatibility)
+    if (person?.lead_tag_id && !currentTagIds.includes(person.lead_tag_id)) {
+      currentTagIds.push(person.lead_tag_id)
+    }
+    setSelectedTagIds(currentTagIds)
     setShowTagDialog(true)
   }
 
@@ -1094,26 +1109,43 @@ export default function PersonDetailPage() {
                       </Badge>
                     </div>
 
-                    {/* Lead Tag */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Tag:</span>
-                      <div className="flex items-center space-x-2">
-                        {person.lead_tag ? (
-                          <Badge 
-                            variant="outline" 
-                            style={{ 
-                              borderColor: person.lead_tag.color, 
-                              color: person.lead_tag.color,
-                              backgroundColor: `${person.lead_tag.color}10`
-                            }}
-                          >
-                            {person.lead_tag.name}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">Untagged</Badge>
-                        )}
-                        <Button 
-                          variant="ghost" 
+                    {/* Lead Tags */}
+                    <div className="flex items-start justify-between">
+                      <span className="text-sm font-medium pt-1">Tags:</span>
+                      <div className="flex items-center gap-2 flex-wrap justify-end max-w-xs">
+                        {(() => {
+                          // Get tags from both new array and old single tag field
+                          const tags: LeadTag[] = person.lead_tags || []
+
+                          // Include the old single tag if it exists and isn't already in the array
+                          if (person.lead_tag && !tags.find(t => t.id === person.lead_tag?.id)) {
+                            tags.push(person.lead_tag)
+                          }
+
+                          if (tags.length === 0) {
+                            return <Badge variant="outline">Untagged</Badge>
+                          }
+
+                          return (
+                            <>
+                              {tags.map(tag => (
+                                <Badge
+                                  key={tag.id}
+                                  variant="outline"
+                                  style={{
+                                    borderColor: tag.color,
+                                    color: tag.color,
+                                    backgroundColor: `${tag.color}10`
+                                  }}
+                                >
+                                  {tag.name}
+                                </Badge>
+                              ))}
+                            </>
+                          )
+                        })()}
+                        <Button
+                          variant="ghost"
                           size="sm"
                           onClick={openTagDialog}
                         >
@@ -1792,50 +1824,78 @@ export default function PersonDetailPage() {
       </Dialog>
 
       {/* Lead Tag Dialog */}
-      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
-        <DialogContent>
+      <Dialog open={showTagDialog} onOpenChange={(open) => {
+        setShowTagDialog(open)
+        if (!open) {
+          setSelectedTagIds([])
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Update Lead Tag</DialogTitle>
+            <DialogTitle>Update Lead Tags</DialogTitle>
             <DialogDescription>
-              Change the tag for {person?.first_name} {person?.last_name}
+              Select multiple tags for {person?.first_name} {person?.last_name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="tag">Lead Tag</Label>
-              <Select value={selectedTagId} onValueChange={setSelectedTagId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a tag" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Untagged</SelectItem>
-                  {leadTags.map((tag) => (
-                    <SelectItem key={tag.id} value={tag.id}>
-                      <div className="flex items-center space-x-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        <span>{tag.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Select Tags</Label>
+              <div className="space-y-2 max-h-[40vh] sm:max-h-60 overflow-y-auto border rounded-lg p-3">
+                {leadTags.map((tag) => (
+                  <label
+                    key={tag.id}
+                    htmlFor={`tag-${tag.id}`}
+                    className="flex items-center space-x-3 p-2 rounded-md hover:bg-accent cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      id={`tag-${tag.id}`}
+                      checked={selectedTagIds.includes(tag.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedTagIds([...selectedTagIds, tag.id])
+                        } else {
+                          setSelectedTagIds(selectedTagIds.filter(id => id !== tag.id))
+                        }
+                      }}
+                      className="h-5 w-5 rounded border-gray-300"
+                    />
+                    <div className="flex items-center flex-1 min-w-0">
+                      <div
+                        className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span className="text-sm truncate">{tag.name}</span>
+                      {tag.description && (
+                        <span className="text-xs text-muted-foreground ml-2 hidden sm:inline truncate">
+                          ({tag.description})
+                        </span>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {selectedTagIds.length} tag{selectedTagIds.length !== 1 ? 's' : ''} selected
+              </div>
             </div>
             <div className="flex justify-end space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowTagDialog(false)}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowTagDialog(false)
+                  setSelectedTagIds([])
+                }}
                 disabled={updatingTag}
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={handleUpdateLeadTag}
                 disabled={updatingTag}
               >
-                {updatingTag ? 'Updating...' : 'Update Tag'}
+                <Tag className="mr-2 h-4 w-4" />
+                {updatingTag ? 'Updating...' : 'Update Tags'}
               </Button>
             </div>
           </div>
